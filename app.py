@@ -253,24 +253,55 @@ def get_profile(user_id):
 # ============================================================
 
 def start_server_session():
-    result = supabase.rpc(
-        "start_user_session",
-        {}
-    ).execute()
 
-    st.write("DEBUG — RPC DATA:", result.data)
+    try:
 
-    if not result.data:
-        raise RuntimeError(
-            "start_user_session returned no session token"
+        result = supabase.rpc(
+            "start_user_session",
+            {}
+        ).execute()
+
+        if result is None:
+
+            raise RuntimeError(
+                "start_user_session RPC returned no response."
+            )
+
+        token = getattr(
+            result,
+            "data",
+            None
         )
 
-    token = str(result.data)
+        if not token:
 
-    st.session_state.session_token = token
+            raise RuntimeError(
+                "start_user_session returned no session token."
+            )
 
-    return token
+        if isinstance(token, list):
 
+            if not token:
+
+                raise RuntimeError(
+                    "Empty session token returned."
+                )
+
+            token = token[0]
+
+        token = str(token)
+
+        st.session_state.session_token = token
+
+        return True
+
+    except Exception as e:
+
+        st.error(
+            f"Secure session error: {e}"
+        )
+
+        return False
 
 def check_server_session():
 
