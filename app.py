@@ -2232,47 +2232,47 @@ def admin_dashboard():
 
                 else:
 
-try:
+                    try:
 
-    student_record = {
-        "name": student_name.strip(),
-        "class_name": student_class.strip(),
-        "section": student_section.strip(),
-        "roll_no": student_roll.strip(),
-        "dob": str(student_dob),
-        "admission_no": admission_no.strip(),
-    }
+                        student_record = {
+                            "name": student_name.strip(),
+                            "class_name": student_class.strip(),
+                            "section": student_section.strip(),
+                            "roll_no": student_roll.strip(),
+                            "dob": str(student_dob),
+                            "admission_no": admission_no.strip(),
+                        }
 
-    if student_user_id.strip():
+                        if student_user_id.strip():
 
-        student_record[
-            "user_id"
-        ] = student_user_id.strip()
+                            student_record[
+                                "user_id"
+                            ] = student_user_id.strip()
 
-    # TEMPORARY DEBUG
-    st.write(
-        "DEBUG USER:",
-        supabase.auth.get_user()
-    )
+                        # TEMPORARY DEBUG
+                        st.write(
+                            "DEBUG USER:",
+                            supabase.auth.get_user()
+                        )
 
-    response = (
-        supabase
-        .table("students")
-        .insert(
-            student_record
-        )
-        .execute()
-    )
+                        response = (
+                            supabase
+                            .table("students")
+                            .insert(
+                                student_record
+                            )
+                            .execute()
+                        )
 
-    st.success(
-        "Student added successfully."
-    )
+                        st.success(
+                            "Student added successfully."
+                        )
 
-except Exception as e:
+                    except Exception as e:
 
-    st.error(
-        str(e)
-    )
+                        st.error(
+                            str(e)
+                        )
 
 with student_list:
 
