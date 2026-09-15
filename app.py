@@ -253,42 +253,23 @@ def get_profile(user_id):
 # ============================================================
 
 def start_server_session():
+    result = supabase.rpc(
+        "start_user_session",
+        {}
+    ).execute()
 
-    """
-    Calls SECURITY DEFINER PostgreSQL function:
+    st.write("DEBUG — RPC DATA:", result.data)
 
-        start_user_session()
-
-    The function invalidates the previous session and creates
-    a new server-side session token.
-    """
-
-    try:
-
-        response = supabase.rpc(
-            "start_user_session",
-            {}
-        ).execute()
-
-        token = normalize_rpc_data(
-            response.data
+    if not result.data:
+        raise RuntimeError(
+            "start_user_session returned no session token"
         )
 
-        if token:
+    token = str(result.data)
 
-            st.session_state.session_token = str(token)
+    st.session_state.session_token = token
 
-            return True
-
-    except Exception as e:
-
-        st.error(
-            "Unable to start secure session."
-        )
-
-        st.caption(str(e))
-
-    return False
+    return token
 
 
 def check_server_session():
