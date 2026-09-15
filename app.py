@@ -3055,7 +3055,7 @@ def student_dashboard():
             .execute()
         )
 
-                if student_response is None:
+        if student_response is None:
 
             student = None
 
