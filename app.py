@@ -2617,7 +2617,7 @@ def admin_dashboard():
                             .table("teacher_students")
                             .insert(
                                 {
-                                    "teacher_id":
+                                    "teacher_user_id":
                                         teacher_options[
                                             teacher_label
                                         ]["id"],
