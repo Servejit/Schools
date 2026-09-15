@@ -2333,7 +2333,7 @@ with student_list:
             "Marks Management"
         )
 
-        try:
+            try:
 
             response = (
                 supabase
