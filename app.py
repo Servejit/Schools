@@ -2234,41 +2234,47 @@ def admin_dashboard():
 
                     try:
 
-                        student_record = {
-                            "name": student_name.strip(),
-                            "class_name": student_class.strip(),
-                            "section": student_section.strip(),
-                            "roll_no": student_roll.strip(),
-                            "dob": str(student_dob),
-                            "admission_no": admission_no.strip(),
-                        }
+    student_record = {
+        "name": student_name.strip(),
+        "class_name": student_class.strip(),
+        "section": student_section.strip(),
+        "roll_no": student_roll.strip(),
+        "dob": str(student_dob),
+        "admission_no": admission_no.strip(),
+    }
 
-                        if student_user_id.strip():
+    if student_user_id.strip():
 
-                            student_record[
-                                "user_id"
-                            ] = student_user_id.strip()
-            st.write("DEBUG USER:", supabase.auth.get_user())
-                        response = (
-                            supabase
-                            .table("students")
-                            .insert(
-                                student_record
-                            )
-                            .execute()
-                        )
+        student_record[
+            "user_id"
+        ] = student_user_id.strip()
 
-                        st.success(
-                            "Student added successfully."
-                        )
+    # TEMPORARY DEBUG
+    st.write(
+        "DEBUG USER:",
+        supabase.auth.get_user()
+    )
 
-                    except Exception as e:
+    response = (
+        supabase
+        .table("students")
+        .insert(
+            student_record
+        )
+        .execute()
+    )
 
-                        st.error(
-                            str(e)
-                        )
+    st.success(
+        "Student added successfully."
+    )
 
-        with student_list:
+except Exception as e:
+
+    st.error(
+        str(e)
+    )
+
+with student_list:
 
             st.markdown(
                 "### Students"
