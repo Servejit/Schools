@@ -2274,7 +2274,7 @@ def admin_dashboard():
                             str(e)
                         )
 
-with student_list:
+        with student_list:
 
             st.markdown(
                 "### Students"
