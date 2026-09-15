@@ -2333,7 +2333,7 @@ def admin_dashboard():
             "Marks Management"
         )
 
-            try:
+        try:
 
             response = (
                 supabase
