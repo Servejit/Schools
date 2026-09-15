@@ -2296,9 +2296,15 @@ def admin_dashboard():
                     .execute()
                 )
 
-                students_data = (
-                    response.data or []
-                )
+                if response is None:
+
+                    students_data = []
+
+                else:
+
+                    students_data = (
+                        response.data or []
+                    )
 
                 if students_data:
 
@@ -2323,6 +2329,8 @@ def admin_dashboard():
                 st.error(
                     str(e)
                 )
+
+                
 
     # ========================================================
     # MARKS
