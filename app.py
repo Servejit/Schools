@@ -2248,7 +2248,7 @@ def admin_dashboard():
                             student_record[
                                 "user_id"
                             ] = student_user_id.strip()
-
+            st.write("DEBUG USER:", supabase.auth.get_user())
                         response = (
                             supabase
                             .table("students")
