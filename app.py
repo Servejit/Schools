@@ -2254,7 +2254,8 @@ def admin_dashboard():
                             "DEBUG USER:",
                             supabase.auth.get_user()
                         )
-
+                        st.write("DEBUG AUTH USER:", supabase.auth.get_user())
+                        st.write("DEBUG PROFILE:", st.session_state.get("profile"))
                         response = (
                             supabase
                             .table("students")
