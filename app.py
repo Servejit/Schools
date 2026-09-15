@@ -2232,7 +2232,7 @@ def admin_dashboard():
 
                 else:
 
-                    try:
+try:
 
     student_record = {
         "name": student_name.strip(),
