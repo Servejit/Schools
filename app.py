@@ -237,7 +237,17 @@ def get_profile(user_id):
             .execute()
         )
 
-        return response.data
+        if response is None:
+
+            return None
+
+        profile_data = getattr(
+            response,
+            "data",
+            None
+        )
+
+        return profile_data
 
     except Exception as e:
 
@@ -246,6 +256,7 @@ def get_profile(user_id):
         )
 
         return None
+
 
 
 # ============================================================
