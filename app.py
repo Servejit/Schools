@@ -3055,7 +3055,17 @@ def student_dashboard():
             .execute()
         )
 
-        student = student_response.data
+                if student_response is None:
+
+            student = None
+
+        else:
+
+            student = getattr(
+                student_response,
+                "data",
+                None
+            )
 
     except Exception as e:
 
