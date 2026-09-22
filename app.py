@@ -1412,11 +1412,62 @@ def students():
             )
         ]
 
-    st.caption(
-        f"Showing {len(student_data)} student(s)"
-    )
+    # -----------------------------------------------------
+    # STUDENT SELECTION
+    # -----------------------------------------------------
+    # Teachers should not see every student card on the dashboard.
+    # They select one or more students from a dropdown (multiselect
+    # displays checkbox options) and can also Select All.
+    if role == "Teacher":
 
-    for student in student_data:
+        student_labels = {}
+        for student in student_data:
+            label = (
+                f"{student.get('name') or 'Student'}"
+                f" — Admission: {student.get('admission_no') or '-'}"
+            )
+            student_labels[label] = student
+
+        if not student_labels:
+            st.info("No students found in your assigned class.")
+            return
+
+        select_all = st.checkbox(
+            "☑️ Select All Students",
+            key="teacher_select_all_students"
+        )
+
+        selected_labels = st.multiselect(
+            "🎓 Select Students",
+            list(student_labels.keys()),
+            default=(list(student_labels.keys()) if select_all else []),
+            placeholder="Select one or more students",
+            key="teacher_selected_students"
+        )
+
+        selected_students = [
+            student_labels[label]
+            for label in selected_labels
+            if label in student_labels
+        ]
+
+        st.caption(
+            f"Selected {len(selected_students)} of {len(student_data)} student(s)."
+        )
+
+        if not selected_students:
+            st.info("Select student(s) from the dropdown above to view or modify their details.")
+            return
+
+        display_students = selected_students
+
+    else:
+        st.caption(
+            f"Showing {len(student_data)} student(s)"
+        )
+        display_students = student_data
+
+    for student in display_students:
 
         student_id = student["id"]
 
@@ -1526,6 +1577,11 @@ def students():
                             st.error("Delete failed.")
                             st.code(str(e))
 
+            # -------------------------------------------------
+            # MODIFY
+            # -------------------------------------------------
+
+            with st.expander("✏️ Modify Student"):
             # -------------------------------------------------
             # MODIFY
             # -------------------------------------------------
@@ -1855,6 +1911,20 @@ def classes_subjects():
     if not school_id:
         return
 
+    # Teachers can see only classes where they are the Class Teacher.
+    if role == "Teacher":
+        try:
+            class_data = [
+                x for x in class_data
+                if str(x.get("class_teacher_id")) == str(st.session_state.user.id)
+            ]
+        except Exception:
+            class_data = []
+
+        if not class_data:
+            st.info("No class has been assigned to you as Class Teacher yet.")
+            return
+
     st.divider()
 
     st.subheader("📚 Classes")
@@ -1912,104 +1982,105 @@ def classes_subjects():
             if not teacher_data:
                 st.info("Create an active Teacher account first.")
 
-    with st.expander(        "➕ Add New Class",
-        expanded=True    ):
-
-        c1, c2, c3 = st.columns(3)
-
-        with c1:
-
-            new_class = st.text_input(
-                "Class Name",
-                placeholder="Example: Class 10",
-                key="new_class_name"
-            )
-
-        with c2:
-
-            new_section = st.text_input(
-                "Section",
-                placeholder="Example: A",
-                key="new_class_section"
-            )
-
-        with c3:
-
-            new_academic_year = st.text_input(
-                "Academic Year",
-                placeholder="Example: 2026-27",
-                key="new_academic_year"
-            )
-
-        if st.button(
-            "➕ Add Class",
-            use_container_width=True,
-            key="add_class_button"
-        ):
-
-            if not new_class.strip():
-
-                st.warning("Class name is required.")
-
-            else:
-
-                try:
-
-                    existing = (
-                        sb.table("classes")
-                        .select("id")
-                        .eq("school_id", school_id)
-                        .eq(
-                            "class_name",
-                            new_class.strip()
-                        )
-                        .eq(
-                            "section",
-                            new_section.strip()
-                        )
-                        .eq(
-                            "academic_year",
-                            new_academic_year.strip()
-                        )
-                        .execute()
-                        .data or []
-                    )
-
-                    if existing:
-
-                        st.error(
-                            "This class already exists for this academic year."
-                        )
-
-                    else:
-
-                        (
+    if role in ["SuperAdmin", "Admin"]:
+        with st.expander(        "➕ Add New Class",
+            expanded=True    ):
+    
+            c1, c2, c3 = st.columns(3)
+    
+            with c1:
+    
+                new_class = st.text_input(
+                    "Class Name",
+                    placeholder="Example: Class 10",
+                    key="new_class_name"
+                )
+    
+            with c2:
+    
+                new_section = st.text_input(
+                    "Section",
+                    placeholder="Example: A",
+                    key="new_class_section"
+                )
+    
+            with c3:
+    
+                new_academic_year = st.text_input(
+                    "Academic Year",
+                    placeholder="Example: 2026-27",
+                    key="new_academic_year"
+                )
+    
+            if st.button(
+                "➕ Add Class",
+                use_container_width=True,
+                key="add_class_button"
+            ):
+    
+                if not new_class.strip():
+    
+                    st.warning("Class name is required.")
+    
+                else:
+    
+                    try:
+    
+                        existing = (
                             sb.table("classes")
-                            .insert({
-                                "school_id": school_id,
-                                "class_name":
-                                    new_class.strip(),
-                                "section":
-                                    new_section.strip(),
-                                "academic_year":
-                                    new_academic_year.strip(),
-                                "active": True
-                            })
+                            .select("id")
+                            .eq("school_id", school_id)
+                            .eq(
+                                "class_name",
+                                new_class.strip()
+                            )
+                            .eq(
+                                "section",
+                                new_section.strip()
+                            )
+                            .eq(
+                                "academic_year",
+                                new_academic_year.strip()
+                            )
                             .execute()
+                            .data or []
                         )
-
-                        st.success(
-                            "Class added successfully."
-                        )
-
-                        st.rerun()
-
-                except Exception as e:
-
-                    st.error("Could not add class.")
-                    st.code(str(e))
-
-    if st.session_state.pop("saved_class_changes", False):
+    
+                        if existing:
+    
+                            st.error(
+                                "This class already exists for this academic year."
+                            )
+    
+                        else:
+    
+                            (
+                                sb.table("classes")
+                                .insert({
+                                    "school_id": school_id,
+                                    "class_name":
+                                        new_class.strip(),
+                                    "section":
+                                        new_section.strip(),
+                                    "academic_year":
+                                        new_academic_year.strip(),
+                                    "active": True
+                                })
+                                .execute()
+                            )
+    
+                            st.success(
+                                "Class added successfully."
+                            )
+    
+                            st.rerun()
+    
+                    except Exception as e:
+    
+                        st.error("Could not add class.")
+                        st.code(str(e))
+    
+        if st.session_state.pop("saved_class_changes", False):
         st.success("✅ Class teacher / class changes saved successfully.")
 
     st.divider()
@@ -2330,18 +2401,19 @@ def classes_subjects():
 
                 with s3:
 
-                    if st.button(
-                        "✏️ Edit",
-                        key=f"edit_subject_button_{subject_id}"
-                    ):
+                    if role in ["SuperAdmin", "Admin"]:
+                        if st.button(
+                            "✏️ Edit",
+                            key=f"edit_subject_button_{subject_id}"
+                        ):
 
-                        st.session_state[
-                            f"editing_subject_{subject_id}"
-                        ] = True
+                            st.session_state[
+                                f"editing_subject_{subject_id}"
+                            ] = True
 
-                        st.rerun()
+                            st.rerun()
 
-                if st.session_state.get(
+                if role in ["SuperAdmin", "Admin"] and st.session_state.get(
                     f"editing_subject_{subject_id}",
                     False
                 ):
@@ -5086,7 +5158,6 @@ def dashboard():
             "Teacher Menu",
             [
                 "🎓 Students",
-                "📚 Classes & Subjects",
                 "📝 Marks",
                 "📅 Attendance",
                 "🖨️ Print Templates",
@@ -5098,9 +5169,6 @@ def dashboard():
 
         if menu == "🎓 Students":
             students()
-
-        elif menu == "📚 Classes & Subjects":
-            classes_subjects()
 
         elif menu == "📝 Marks":
             bulk_marks()
