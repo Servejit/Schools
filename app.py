@@ -5114,6 +5114,7 @@ def dashboard():
             "Management",
             [
                 "🎓 Students",
+                "📚 Classes & Subjects",
                 "📝 Marks",
                 "📅 Attendance",
                 "🖨️ Print Templates",
@@ -5125,6 +5126,9 @@ def dashboard():
 
         if menu == "🎓 Students":
             students()
+
+        elif menu == "📚 Classes & Subjects":
+            classes_subjects()
 
         elif menu == "📝 Marks":
             bulk_marks()
