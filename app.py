@@ -7395,6 +7395,46 @@ def dashboard():
     profile = st.session_state.profile
     role = profile.get("role")
 
+    # -----------------------------------------------------
+    # TEACHER CLASS CONTEXT
+    # -----------------------------------------------------
+    # Keep the Class Teacher's assigned class name(s) visible
+    # at every Teacher working place because all Teacher modules
+    # are rendered from this dashboard.
+    if role == "Teacher":
+        try:
+            teacher_working_classes = (
+                sb.table("classes")
+                .select("class_name,section,academic_year")
+                .eq("school_id", profile.get("school_id"))
+                .eq("class_teacher_id", st.session_state.user.id)
+                .eq("active", True)
+                .order("class_name")
+                .order("section")
+                .execute()
+                .data or []
+            )
+        except Exception:
+            teacher_working_classes = []
+
+        if teacher_working_classes:
+            class_names = [
+                (
+                    f"{x.get('class_name') or '-'}"
+                    f" - Section {x.get('section') or '-'}"
+                )
+                for x in teacher_working_classes
+            ]
+            st.info(
+                "🏫 **My Class Teacher Class(es):** "
+                + "  |  ".join(class_names)
+            )
+        else:
+            st.warning(
+                "🏫 **My Class Teacher Class(es):** "
+                "No class assigned yet."
+            )
+
     top1, top2 = st.columns([5, 1])
     with top1:
 
