@@ -3288,6 +3288,1572 @@ def attendance():
             st.code(str(e))
 
 
+def print_templates():
+
+    st.header("🖨️ A4 Print Templates")
+
+    role = st.session_state.profile.get("role")
+
+    if role not in [
+        "SuperAdmin",
+        "Admin"
+    ]:
+
+        st.error(
+            "You do not have permission to manage print templates."
+        )
+
+        return
+
+    school_id = get_selected_school("template_school")
+
+    if not school_id:
+        return
+
+    try:
+
+        school_info = (
+            sb.table("schools")
+            .select("id,name,code,address")
+            .eq("id", school_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+
+    except Exception as e:
+
+        st.error(
+            "Could not load school information."
+        )
+
+        st.code(str(e))
+        return
+
+    school_name = (
+        school_info.get("name")
+        if school_info
+        else "School"
+    )
+
+    school_code = (
+        school_info.get("code")
+        if school_info
+        else str(school_id)
+    )
+
+    st.info(
+        f"🏫 Templates for: **{school_name} "
+        f"({school_code})**"
+    )
+
+    st.markdown(
+        """
+        ### A4 School Paper Designs
+
+        Each school can keep its own A4 designs.
+
+        Supported files: **PDF, PNG, JPG, JPEG**
+        """
+    )
+
+    st.divider()
+
+    with st.expander(
+        "➕ Upload New A4 Template",
+        expanded=True
+    ):
+
+        template_name = st.text_input(
+            "Template Name",
+            placeholder="Example: Annual Report Card 2026-27",
+            key="template_name"
+        )
+
+        template_type = st.selectbox(
+            "Template Type",
+            [
+                "Report Card",
+                "Certificate",
+                "Fee Receipt",
+                "Attendance",
+                "Other"
+            ],
+            key="template_type"
+        )
+
+        orientation = st.radio(
+            "A4 Orientation",
+            ["Portrait", "Landscape"],
+            horizontal=True,
+            key="template_orientation"
+        )
+
+        uploaded_file = st.file_uploader(
+            "Upload A4 Design",
+            type=["pdf", "png", "jpg", "jpeg"],
+            key="template_file"
+        )
+
+        if uploaded_file:
+
+            st.write(
+                f"📄 **{uploaded_file.name}**"
+            )
+
+            st.caption(
+                f"File size: "
+                f"{uploaded_file.size / 1024:.1f} KB"
+            )
+
+            extension = (
+                uploaded_file.name
+                .split(".")[-1]
+                .lower()
+            )
+
+            if extension in [
+                "png",
+                "jpg",
+                "jpeg"
+            ]:
+
+                st.image(
+                    uploaded_file,
+                    caption="Template Preview",
+                    use_container_width=True
+                )
+
+        if st.button(
+            "⬆️ Upload & Save Template",
+            type="primary",
+            use_container_width=True,
+            key="upload_template_button"
+        ):
+
+            if not template_name.strip():
+
+                st.warning(
+                    "Enter a template name."
+                )
+                return
+
+            if not uploaded_file:
+
+                st.warning(
+                    "Select a PDF or image file first."
+                )
+                return
+
+            try:
+
+                original_name = uploaded_file.name
+
+                extension = (
+                    original_name
+                    .split(".")[-1]
+                    .lower()
+                )
+
+                unique_name = (
+                    f"{uuid.uuid4().hex}.{extension}"
+                )
+
+                storage_path = (
+                    f"{school_id}/"
+                    f"templates/"
+                    f"{unique_name}"
+                )
+
+                file_bytes = uploaded_file.getvalue()
+
+                content_type_map = {
+                    "pdf": "application/pdf",
+                    "png": "image/png",
+                    "jpg": "image/jpeg",
+                    "jpeg": "image/jpeg"
+                }
+
+                (
+                    sb.storage
+                    .from_("school-assets")
+                    .upload(
+                        storage_path,
+                        file_bytes,
+                        file_options={
+                            "content-type":
+                                content_type_map.get(
+                                    extension,
+                                    "application/octet-stream"
+                                ),
+                            "upsert": "false"
+                        }
+                    )
+                )
+
+                config = {
+                    "template_type": template_type,
+                    "original_file_name": original_name
+                }
+
+                (
+                    sb.table("print_templates")
+                    .insert({
+                        "school_id": school_id,
+                        "name": template_name.strip(),
+                        "template_name": template_name.strip(),
+                        "page_size": "A4",
+                        "orientation": orientation,
+                        "storage_path": storage_path,
+                        "file_path": storage_path,
+                        "file_type": extension,
+                        "config_json": json.dumps(config),
+                        "active": True
+                    })
+                    .execute()
+                )
+
+                st.success(
+                    "✅ A4 template uploaded successfully."
+                )
+
+                st.rerun()
+
+            except Exception as e:
+
+                st.error(
+                    "Could not upload the template."
+                )
+
+                st.code(str(e))
+
+    st.divider()
+
+    st.subheader("📋 Existing A4 Templates")
+
+    try:
+
+        template_data = (
+            sb.table("print_templates")
+            .select(
+                "id,school_id,name,template_name,"
+                "page_size,orientation,storage_path,"
+                "config_json,active,created_at,"
+                "updated_at,file_path,file_type"
+            )
+            .eq("school_id", school_id)
+            .order("created_at", desc=True)
+            .execute()
+            .data or []
+        )
+
+    except Exception as e:
+
+        st.error("Could not load templates.")
+        st.code(str(e))
+        return
+
+    if not template_data:
+
+        st.info(
+            "No A4 templates uploaded for this school yet."
+        )
+
+        return
+
+    for template in template_data:
+
+        template_id = template["id"]
+
+        template_name_value = (
+            template.get("template_name")
+            or template.get("name")
+            or "Unnamed Template"
+        )
+
+        orientation_value = (
+            template.get("orientation")
+            or "Portrait"
+        )
+
+        page_size_value = (
+            template.get("page_size")
+            or "A4"
+        )
+
+        file_path = (
+            template.get("file_path")
+            or template.get("storage_path")
+            or ""
+        )
+
+        file_type = (
+            template.get("file_type")
+            or ""
+        )
+
+        active = template.get("active", True)
+
+        try:
+
+            config = (
+                json.loads(
+                    template["config_json"]
+                )
+                if template.get("config_json")
+                else {}
+            )
+
+        except Exception:
+
+            config = {}
+
+        original_file_name = (
+            config.get("original_file_name")
+            or (
+                f"{template_name_value}.{file_type}"
+                if file_type
+                else template_name_value
+            )
+        )
+
+        template_type_value = (
+            config.get("template_type")
+            or "Other"
+        )
+
+        with st.container(border=True):
+
+            c1, c2, c3 = st.columns([4, 3, 1])
+
+            with c1:
+
+                st.markdown(
+                    f"### 📄 {template_name_value}"
+                )
+
+                st.caption(
+                    f"Type: {template_type_value}"
+                )
+
+                st.caption(
+                    f"File: {original_file_name}"
+                )
+
+            with c2:
+
+                st.write(
+                    f"**{page_size_value} "
+                    f"{orientation_value}**"
+                )
+
+                if active:
+                    st.success("ACTIVE")
+                else:
+                    st.error("INACTIVE")
+
+            with c3:
+
+                if st.button(
+                    "🗑️ Delete",
+                    key=f"delete_template_{template_id}"
+                ):
+
+                    try:
+
+                        if file_path:
+
+                            (
+                                sb.storage
+                                .from_("school-assets")
+                                .remove([file_path])
+                            )
+
+                        (
+                            sb.table("print_templates")
+                            .delete()
+                            .eq("id", template_id)
+                            .execute()
+                        )
+
+                        st.rerun()
+
+                    except Exception as e:
+
+                        st.error(
+                            "Could not delete template."
+                        )
+
+                        st.code(str(e))
+
+            if file_path:
+
+                try:
+
+                    template_bytes = (
+                        sb.storage
+                        .from_("school-assets")
+                        .download(file_path)
+                    )
+
+                    mime_map = {
+                        "pdf": "application/pdf",
+                        "png": "image/png",
+                        "jpg": "image/jpeg",
+                        "jpeg": "image/jpeg"
+                    }
+
+                    st.download_button(
+                        "⬇️ Download Template",
+                        data=template_bytes,
+                        file_name=original_file_name,
+                        mime=mime_map.get(
+                            file_type.lower(),
+                            "application/octet-stream"
+                        ),
+                        key=f"download_template_{template_id}",
+                        use_container_width=True
+                    )
+
+                except Exception:
+
+                    st.error(
+                        "Could not prepare template download."
+                    )
+
+            # Immediate status update
+            new_active = st.checkbox(
+                "Template Active",
+                value=active,                key=f"template_active_{template_id}"
+            )
+
+            if new_active != active:
+
+                try:
+                    (
+                        sb.table("print_templates")
+                        .update({
+                            "active": new_active,                            "updated_at":
+                                datetime.datetime.now(
+                                    datetime.timezone.utc
+                                ).isoformat()
+                        })
+                        .eq("id", template_id)
+                        .execute()
+                    )
+
+                    st.success(
+                        "Template status updated."
+                    )
+
+                    st.rerun()
+
+                except Exception as e:
+
+                    st.error(
+                        "Could not update template."
+                    )
+
+                    st.code(str(e))
+
+
+# =========================================================
+# ATTENDANCE
+# =========================================================
+
+def attendance():
+    st.header("📅 Attendance")
+
+    role = st.session_state.profile.get("role")
+
+    if role not in ["SuperAdmin", "Admin", "Teacher"]:
+        st.error("You do not have permission to manage attendance.")
+        return
+
+    school_id = get_selected_school("attendance_school")
+    if not school_id:
+        return
+
+    selected_date = st.date_input(
+        "Attendance Date",
+        value=datetime.date.today(),
+        key="attendance_date"
+    )
+
+    try:
+        students_data = (
+            sb.table("students")
+            .select("id,name,class_name,section,admission_no,active")
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .order("name")
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error("Could not load students.")
+        st.code(str(e))
+        return
+
+    if not students_data:
+        st.info("No active students found.")
+        return
+
+    class_options = ["All Classes"] + sorted({
+        str(x.get("class_name") or "")
+        for x in students_data
+        if str(x.get("class_name") or "")
+    })
+
+    selected_class = st.selectbox(
+        "Class",
+        class_options,
+        key="attendance_class"
+    )
+
+    if selected_class != "All Classes":
+        students_data = [
+            x for x in students_data
+            if str(x.get("class_name") or "") == selected_class
+        ]
+
+    try:
+        existing = (
+            sb.table("attendance")
+            .select("id,student_id,attendance_date,present")
+            .eq("school_id", school_id)
+            .eq("attendance_date", str(selected_date))
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error(
+            "Attendance table could not be loaded. "
+            "Create the attendance table in Supabase first."
+        )
+        st.code(str(e))
+        return
+
+    existing_by_student = {
+        str(x["student_id"]): x for x in existing
+    }
+
+    entries = []
+
+    for student in students_data:
+        sid = str(student["id"])
+        old = existing_by_student.get(sid, {})
+        old_present = old.get("present", True)
+
+        status = st.selectbox(
+            student.get("name") or "Student",
+            ["Present", "Absent"],
+            index=0 if bool(old_present) else 1,
+            key=f"attendance_{sid}_{selected_date}"
+        )
+
+        entries.append((sid, status == "Present", old.get("id")))
+
+    if st.button(
+        "💾 Save Attendance",
+        type="primary",
+        use_container_width=True,
+        key="save_attendance_button"
+    ):
+        try:
+            for sid, status, old_id in entries:
+                if old_id:
+                    (
+                        sb.table("attendance")
+                        .update({"present": status})
+                        .eq("id", old_id)
+                        .execute()
+                    )
+                else:
+                    (
+                        sb.table("attendance")
+                        .insert({
+                            "school_id": school_id,
+                            "student_id": sid,
+                            "attendance_date": str(selected_date),
+                            "present": status
+                        })
+                        .execute()
+                    )
+
+            st.success("Attendance saved successfully.")
+            st.rerun()
+
+        except Exception as e:
+            st.error("Could not save attendance.")
+            st.code(str(e))
+
+
+# =========================================================
+# REPORT CARD HELPERS
+# =========================================================
+
+def get_template_config(template):
+
+    try:
+        value = template.get("config_json")
+
+        if isinstance(value, dict):
+            return dict(value)
+
+        if isinstance(value, str) and value.strip():
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+
+    except Exception:
+        pass
+
+    return {}
+
+
+def grade_from_percentage(percentage):
+    try:
+        p = float(percentage)
+    except Exception:
+        p = 0
+
+    if p >= 91: return "A1"
+    if p >= 81: return "A2"
+    if p >= 71: return "B1"
+    if p >= 61: return "B2"
+    if p >= 51: return "C1"
+    if p >= 41: return "C2"
+    if p >= 33: return "D"
+    return "E"
+
+
+def download_storage_file(path):
+    if not path:
+        return None
+
+    path = str(path).strip()
+
+    if path.startswith("http://") or path.startswith("https://"):
+        try:
+            response = requests.get(path, timeout=20)
+            if response.ok:
+                return response.content
+        except Exception:
+            pass
+
+    for bucket in ["school-assets", "student-photos"]:
+        try:
+            data = sb.storage.from_(bucket).download(path)
+            if data:
+                return data
+        except Exception:
+            pass
+
+    return None
+
+
+def attendance_summary(student_id, school_id):
+    try:
+        rows = (
+            sb.table("attendance")
+            .select("id,attendance_date,present")
+            .eq("school_id", school_id)
+            .eq("student_id", student_id)
+            .execute()
+            .data or []
+        )
+    except Exception:
+        return 0, 0
+
+    total_days = len(rows)
+    present_days = sum(
+        1 for row in rows
+        if bool(row.get("present"))
+    )
+    return total_days, present_days
+
+
+def school_logo_from_template(template):
+    config = get_template_config(template)
+
+    for key in [
+        "school_logo_path",
+        "logo_path",
+        "school_logo",
+        "logo"
+    ]:
+        value = config.get(key)
+        if value:
+            return str(value).strip()
+
+    return None
+
+
+def school_logo_size_from_template(template):
+    config = get_template_config(template)
+
+    try:
+        size = int(config.get("school_logo_size", 52))
+    except Exception:
+        size = 52
+
+    return max(20, min(30, size))
+
+
+def pdf_page_size(orientation):
+
+    if orientation == "Landscape":
+        return landscape(A4)
+
+    return A4
+
+
+def draw_wrapped_text(
+    pdf,
+    text,
+    x,
+    y,
+    width,
+    font="Helvetica",
+    size=10,
+    leading=13
+):
+
+    if not text:
+        return y
+
+    lines = simpleSplit(
+        str(text),
+        font,
+        size,
+        width
+    )
+
+    pdf.setFont(font, size)
+
+    for line in lines:
+
+        pdf.drawString(
+            x,
+            y,
+            line
+        )
+
+        y -= leading
+
+    return y
+
+
+def create_report_overlay(
+    student,
+    school_info,
+    subjects,
+    marks_rows,
+    exam_name,
+    orientation,
+    total_attendance=0,
+    present_days=0,
+    school_logo_path=None,
+    school_logo_size=52
+):
+
+    width, height = pdf_page_size(
+        orientation
+    )
+
+    buffer = io.BytesIO()
+
+    pdf = canvas.Canvas(
+        buffer,
+        pagesize=(width, height)
+    )
+
+    # -----------------------------------------------------
+    # Standard A4 positions
+    # -----------------------------------------------------
+
+    portrait = orientation != "Landscape"
+
+    if portrait:
+
+        left = 45
+        right = width - 45
+
+        photo_x = width - 125
+        photo_y = height - 175
+        photo_w = 75
+        photo_h = 95
+
+        info_y = height - 75
+
+        table_x = 45
+        table_y = height - 250
+        table_width = width - 90
+
+        remarks_y = 120
+
+        teacher_x = 100
+        principal_x = width - 180
+
+    else:
+
+        left = 45
+        right = width - 45
+
+        photo_x = width - 145
+        photo_y = height - 145
+        photo_w = 85
+        photo_h = 105
+
+        info_y = height - 65
+
+        table_x = 45
+        table_y = height - 190
+        table_width = width - 90
+
+        remarks_y = 75
+
+        teacher_x = width * 0.25
+        principal_x = width * 0.70
+
+    # -----------------------------------------------------
+    # School information
+    # -----------------------------------------------------
+
+    school_name = (
+        school_info.get("name")
+        or "School"
+    )
+
+    school_address = (
+        school_info.get("address")
+        or ""
+    )
+
+    pdf.setFont(
+        "Helvetica-Bold",
+        19
+    )
+
+    pdf.drawCentredString(
+        width / 2,
+        height - 32,
+        school_name
+    )
+
+    if school_address:
+
+        pdf.setFont(
+            "Helvetica",
+            8
+        )
+
+        pdf.drawCentredString(
+            width / 2,
+            height - 49,
+            school_address
+        )
+
+    # School logo on the LEFT side
+    if school_logo_path:
+        try:
+            logo_bytes = download_storage_file(
+                school_logo_path
+            )
+
+            if logo_bytes:
+                logo_image = Image.open(
+                    io.BytesIO(logo_bytes)
+                ).convert("RGBA")
+
+                from PIL import ImageOps
+
+                # Use a larger logo while keeping it centered on
+                # the School Name row. The size can be adjusted in the UI.
+                logo_size = max(
+                    38,
+                    min(60, int(school_logo_size or 50))
+                )
+
+                logo_image.thumbnail(
+                    (logo_size - 4, logo_size - 4),
+                    Image.Resampling.LANCZOS
+                )
+
+                logo_buffer = io.BytesIO()
+                logo_image.save(
+                    logo_buffer,
+                    format="PNG"
+                )
+                logo_buffer.seek(0)
+
+                # Left margin matches the report content margin.
+                # Vertically center the larger logo on the School Name row.
+                logo_box_x = left
+                logo_box_w = logo_size
+                logo_box_h = logo_size
+                logo_center_y = height - 32
+                logo_box_y = (
+                    logo_center_y
+                    - (logo_box_h / 2)
+                )
+
+                pdf.setStrokeColorRGB(
+                    0.75, 0.75, 0.75
+                )
+                pdf.rect(
+                    logo_box_x,
+                    logo_box_y,
+                    logo_box_w,
+                    logo_box_h,
+                    stroke=1,
+                    fill=0
+                )
+
+                pdf.drawImage(
+                    ImageReader(logo_buffer),
+                    logo_box_x + 2,
+                    logo_box_y + 2,
+                    width=logo_box_w - 4,
+                    height=logo_box_h - 4,
+                    preserveAspectRatio=True,
+                    anchor="c",
+                    mask="auto"
+                )
+
+        except Exception:
+            # Never let a missing logo prevent report generation.
+            pass
+
+    pdf.setFont(
+        "Helvetica-Bold",
+        13
+    )
+
+    pdf.drawCentredString(
+        width / 2,
+        height - 68,
+        "REPORT CARD"
+    )
+
+    pdf.setFont(
+        "Helvetica",
+        9
+    )
+
+    pdf.drawCentredString(
+        width / 2,
+        height - 82,
+        str(exam_name)    )
+
+    # -----------------------------------------------------
+    # Student details
+    # -----------------------------------------------------
+
+    detail_y = info_y - 35
+    details = [
+
+        (
+            "Student Name",
+            student.get("name") or "-"        ),
+
+        (
+            "Father Name",
+            student.get("father_name")
+            or student.get("parent_name")
+            or "-"
+        ),
+
+        (
+            "Class",
+            student.get("class_name") or "-"
+        ),
+
+        (
+            "Section",
+            student.get("section") or "-"
+        ),
+
+        (
+            "Admission No.",
+            student.get("admission_no") or "-"
+        ),
+
+        (
+            "Date of Birth",
+            student.get("date_of_birth") or "-"
+        )
+    ]
+
+    pdf.setFont(
+        "Helvetica",
+        9
+    )
+
+    col1_x = left
+    col2_x = left + 255
+
+    for index, item in enumerate(details):
+
+        col = index % 2
+        row = index // 2
+
+        x = (
+            col1_x
+            if col == 0
+            else col2_x
+        )
+
+        y = detail_y - (row * 20)
+
+        label, value = item
+
+        pdf.setFont(
+            "Helvetica-Bold",
+            9
+        )
+
+        pdf.drawString(
+            x,
+            y,
+            f"{label}:"
+        )
+
+        pdf.setFont(
+            "Helvetica",
+            9
+        )
+
+        pdf.drawString(
+            x + 78,
+            y,
+            str(value)
+        )
+
+    # -----------------------------------------------------
+    # Student photo
+    # -----------------------------------------------------
+
+    photo_path = student.get("photo_path")
+
+    if photo_path:
+        try:
+            photo_bytes = download_storage_file(photo_path)
+
+            if photo_bytes:
+                from PIL import ImageOps
+
+                image = Image.open(
+                    io.BytesIO(photo_bytes)
+                ).convert("RGB")
+
+                image = ImageOps.fit(
+                    image,
+                    (
+                        max(1, int(photo_w * 3)),
+                        max(1, int(photo_h * 3))
+                    ),
+                    method=Image.Resampling.LANCZOS
+                )
+
+                img_buffer = io.BytesIO()
+                image.save(
+                    img_buffer,
+                    format="PNG"
+                )
+                img_buffer.seek(0)
+
+                pdf.drawImage(
+                    ImageReader(img_buffer),
+                    photo_x,
+                    photo_y,
+                    width=photo_w,
+                    height=photo_h,
+                    preserveAspectRatio=False,
+                    mask="auto"
+                )
+
+                pdf.setStrokeColorRGB(
+                    0.45, 0.45, 0.45
+                )
+                pdf.rect(
+                    photo_x,
+                    photo_y,
+                    photo_w,
+                    photo_h,
+                    stroke=1,
+                    fill=0
+                )
+
+        except Exception:
+            pass
+
+    # -----------------------------------------------------
+    # Marks table
+    # -----------------------------------------------------
+
+    table_top = table_y
+
+    # Keep every marks-related column comfortably visible.
+    subject_col = table_width * 0.38
+    max_col = table_width * 0.15
+    marks_col = table_width * 0.17
+    result_col = table_width * 0.15
+    grade_col = table_width * 0.15
+
+    headers = [
+        "Subject",
+        "Max Marks",
+        "Marks Obtained",
+        "Result",
+        "Grade"
+    ]
+
+    x_positions = [
+        table_x,
+        table_x + subject_col,
+        table_x + subject_col + max_col,
+        table_x + subject_col + max_col + marks_col,
+        table_x + subject_col + max_col + marks_col + result_col
+    ]
+
+    subject_count = max(1, len(marks_rows))
+
+    # A4-safe dynamic row height. Do not make rows so small that
+    # marks/result/grade become unreadable.
+    available_height = max(
+        300,
+        table_top - (remarks_y + 95)
+    )
+
+    row_height = min(
+        20,
+        max(
+            13,
+            available_height / (subject_count + 1)
+        )
+    )
+
+    header_font = 8 if row_height < 16 else 8.5
+    body_font = 7.5 if row_height < 16 else 8.5
+
+    pdf.setFont(
+        "Helvetica-Bold",
+        header_font
+    )
+
+    pdf.rect(
+        table_x,
+        table_top - row_height,
+        table_width,
+        row_height
+    )
+
+    for i in range(1, 5):
+        pdf.line(
+            x_positions[i],
+            table_top,
+            x_positions[i],
+            table_top - row_height
+        )
+
+    # Header alignment
+    header_centers = [
+        table_x + subject_col / 2,
+        x_positions[1] + max_col / 2,
+        x_positions[2] + marks_col / 2,
+        x_positions[3] + result_col / 2,
+        x_positions[4] + grade_col / 2
+    ]
+
+    for i, header in enumerate(headers):
+        if i == 0:
+            pdf.drawString(
+                table_x + 4,
+                table_top - row_height + max(3, row_height / 2 - 3),
+                header
+            )
+        else:
+            pdf.drawCentredString(
+                header_centers[i],
+                table_top - row_height + max(3, row_height / 2 - 3),
+                header
+            )
+
+    y = table_top - row_height
+
+    total_marks = 0
+    total_max = 0
+
+    pdf.setFont(
+        "Helvetica",
+        body_font
+    )
+
+    for row in marks_rows:
+
+        y -= row_height
+
+        subject_name = (
+            row.get("subject_name")
+            or row.get("name")
+            or "Subject"
+        )
+
+        mark_value = row.get("marks")
+        max_value = row.get("max_marks")
+
+        try:
+            mark_number = float(mark_value)
+            mark_display = f"{mark_number:g}"
+        except Exception:
+            mark_number = 0
+            mark_display = "-"
+
+        try:
+            max_number = float(max_value)
+        except Exception:
+            max_number = 100
+
+        total_marks += mark_number
+        total_max += max_number
+
+        passing = row.get("passing_marks")
+
+        try:
+            passing_number = float(passing)
+        except Exception:
+            passing_number = 0
+
+        if mark_value is None:
+            result = "-"
+            grade = "-"
+        else:
+            result = (
+                "PASS"
+                if mark_number >= passing_number
+                else "FAIL"
+            )
+
+            row_percentage = (
+                (mark_number / max_number) * 100
+                if max_number
+                else 0
+            )
+
+            grade = grade_from_percentage(
+                row_percentage
+            )
+
+        pdf.rect(
+            table_x,
+            y,
+            table_width,
+            row_height
+        )
+
+        for i in range(1, 5):
+            pdf.line(
+                x_positions[i],
+                y,
+                x_positions[i],
+                y + row_height
+            )
+
+        baseline = y + max(
+            3,
+            (row_height - body_font) / 2
+        )
+
+        subject_text = str(subject_name)
+        if len(subject_text) > 31:
+            subject_text = subject_text[:30] + "…"
+
+        # Subject
+        pdf.drawString(
+            table_x + 4,
+            baseline,
+            subject_text
+        )
+
+        # All numeric/result/grade values are centered in their columns.
+        pdf.drawCentredString(
+            header_centers[1],
+            baseline,
+            f"{max_number:g}"
+        )
+
+        pdf.drawCentredString(
+            header_centers[2],
+            baseline,
+            mark_display
+        )
+
+        pdf.drawCentredString(
+            header_centers[3],
+            baseline,
+            result
+        )
+
+        pdf.drawCentredString(
+            header_centers[4],
+            baseline,
+            grade
+        )
+
+    # -----------------------------------------------------
+    # Total / percentage / attendance
+    # -----------------------------------------------------
+
+    percentage = (
+        (total_marks / total_max) * 100
+        if total_max
+        else 0
+    )
+
+    summary_y = y - 22
+
+    pdf.setFont(
+        "Helvetica-Bold",
+        9.5
+    )
+
+    total_x = table_x
+    percentage_x = table_x + table_width * 0.43
+    grade_x = table_x + table_width * 0.76
+
+    pdf.drawString(
+        total_x,
+        summary_y,
+        f"Total Marks: {total_marks:g} / {total_max:g}"
+    )
+
+    pdf.drawString(
+        percentage_x,
+        summary_y,
+        f"Percentage: {percentage:.2f}%"
+    )
+
+    overall_grade = grade_from_percentage(
+        percentage
+    )
+
+    pdf.drawString(
+        grade_x,
+        summary_y,
+        f"Grade: {overall_grade}"
+    )
+
+    attendance_y = summary_y - 19
+
+    pdf.setFont(
+        "Helvetica-Bold",
+        9
+    )
+
+    # Present Days is directly below the Percentage column.
+    pdf.drawString(
+        total_x,
+        attendance_y,
+        f"Total Attendance: {int(total_attendance)}"
+    )
+
+    pdf.drawString(
+        percentage_x,
+        attendance_y,
+        f"Present Days: {int(present_days)}"
+    )
+
+    # -----------------------------------------------------
+    # Remarks
+    # -----------------------------------------------------
+
+    pdf.setFont(
+        "Helvetica-Bold",
+        10
+    )
+
+    pdf.drawString(
+        table_x,
+        remarks_y + 35,
+        "Remarks:"
+    )
+
+    pdf.setFont(
+        "Helvetica",
+        9
+    )
+
+    draw_wrapped_text(
+        pdf,
+        student.get("remarks") or "",
+        table_x,
+        remarks_y + 20,
+        table_width,
+        "Helvetica",
+        9,
+        12
+    )
+
+    # -----------------------------------------------------
+    # Signature labels ONLY
+    # -----------------------------------------------------
+
+    pdf.setFont(
+        "Helvetica-Bold",
+        10
+    )
+
+    pdf.drawCentredString(
+        teacher_x,
+        45,
+        "Teacher Signature"
+    )
+
+    pdf.drawCentredString(
+        principal_x,
+        45,
+        "Principal Signature"
+    )
+
+    pdf.save()
+
+    buffer.seek(0)
+
+    return buffer.getvalue()
+
+
+def make_report_card_pdf(
+    template_bytes,
+    template_type,
+    orientation,
+    student,
+    school_info,
+    subjects,
+    marks_rows,
+    exam_name,
+    file_type,
+    total_attendance=0,
+    present_days=0,
+    school_logo_path=None,
+    school_logo_size=52
+):
+
+    overlay_bytes = create_report_overlay(
+        student=student,
+        school_info=school_info,
+        subjects=subjects,        marks_rows=marks_rows,
+        exam_name=exam_name,
+        orientation=orientation,
+        total_attendance=total_attendance,
+        present_days=present_days,
+        school_logo_path=school_logo_path,
+        school_logo_size=school_logo_size
+    )
+    overlay_doc = fitz.open(
+        stream=overlay_bytes,
+        filetype="pdf"
+    )
+
+    # -----------------------------------------------------
+    # PDF template    # -----------------------------------------------------
+
+    if file_type.lower() == "pdf":
+
+        template_doc = fitz.open(
+            stream=template_bytes,
+            filetype="pdf"
+        )
+
+        if len(template_doc) == 0:
+
+            raise Exception(
+                "The PDF template has no pages."
+            )
+
+        page = template_doc[0]
+
+        page.show_pdf_page(
+            page.rect,
+            overlay_doc,
+            0,
+            overlay=True
+        )
+
+        output = template_doc.tobytes(
+            garbage=4,
+            deflate=True
+        )
+
+        template_doc.close()
+        overlay_doc.close()
+
+        return output
+
+    # -----------------------------------------------------
+    # Image template
+    # -----------------------------------------------------
+
+    image = Image.open(
+        io.BytesIO(template_bytes)
+    ).convert("RGB")
+
+    width, height = pdf_page_size(
+        orientation
+    )
+
+    base_buffer = io.BytesIO()
+
+    base_pdf = canvas.Canvas(
+        base_buffer,
+        pagesize=(width, height)
+    )
+
+    base_pdf.drawImage(
+        ImageReader(image),
+        0,
+        0,
+        width=width,
+        height=height,
+        preserveAspectRatio=False
+    )
+
+    base_pdf.save()
+
+    base_buffer.seek(0)
+
+    base_doc = fitz.open(
+        stream=base_buffer.getvalue(),
+        filetype="pdf"
+    )
+
+    page = base_doc[0]
+
+    page.show_pdf_page(
+        page.rect,
+        overlay_doc,
+        0,
+        overlay=True
+    )
+
+    output = base_doc.tobytes(
+        garbage=4,
+        deflate=True
+    )
+
+    base_doc.close()
+    overlay_doc.close()
+
+    return output
+
+
+# =========================================================
+# REPORT CARD GENERATOR
+# =========================================================
+
+
+
 # =========================================================
 # REPORT CARD HELPERS
 # =========================================================
