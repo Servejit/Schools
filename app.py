@@ -1582,11 +1582,6 @@ def students():
             # -------------------------------------------------
 
             with st.expander("✏️ Modify Student"):
-            # -------------------------------------------------
-            # MODIFY
-            # -------------------------------------------------
-
-            with st.expander("✏️ Modify Student"):
 
                 edit_name = st.text_input(
                     "Student Name",
