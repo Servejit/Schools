@@ -1,7 +1,6 @@
 streamlit
 supabase
 requests
-pandas
-openpyxl
 reportlab
 Pillow
+PyMuPDF
