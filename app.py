@@ -2946,6 +2946,15 @@ def bulk_marks():
     selected_subject = subject_map[selected_subject_label]
     subject_id = selected_subject["id"]
 
+    # Admin / SuperAdmin can work with every active class and every
+    # active subject in the selected school. Teachers remain restricted
+    # to their exact assigned class + subject combinations.
+    if role in ["SuperAdmin", "Admin"]:
+        st.success(
+            f"Admin access: all {len(class_data)} active classes are available, "
+            f"and all active subjects for the selected class can be modified below."
+        )
+
     subject_name = (
         selected_subject.get("subject_name")
         or selected_subject.get("name")
@@ -6864,6 +6873,9 @@ def dashboard():
 
         elif menu == "🎓 Students":
             students()
+
+        elif menu == "📚 Classes & Subjects":
+            classes_subjects()
 
         elif menu == "📝 Exam / Assessment":
             exam_assessment_settings()
