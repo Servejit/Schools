@@ -3251,6 +3251,17 @@ def school_logo_from_template(template):
     return None
 
 
+def school_logo_size_from_template(template):
+    config = get_template_config(template)
+
+    try:
+        size = int(config.get("school_logo_size", 52))
+    except Exception:
+        size = 52
+
+    return max(30, min(70, size))
+
+
 def pdf_page_size(orientation):
 
     if orientation == "Landscape":
@@ -3304,7 +3315,8 @@ def create_report_overlay(
     orientation,
     total_attendance=0,
     present_days=0,
-    school_logo_path=None
+    school_logo_path=None,
+    school_logo_size=52
 ):
 
     width, height = pdf_page_size(
@@ -3382,12 +3394,12 @@ def create_report_overlay(
 
     pdf.setFont(
         "Helvetica-Bold",
-        17
+        19
     )
 
     pdf.drawCentredString(
         width / 2,
-        height - 35,
+        height - 32,
         school_name
     )
 
@@ -3418,8 +3430,13 @@ def create_report_overlay(
 
                 from PIL import ImageOps
 
+                logo_size = max(
+                    30,
+                    min(70, int(school_logo_size or 52))
+                )
+
                 logo_image.thumbnail(
-                    (58, 58),
+                    (logo_size - 4, logo_size - 4),
                     Image.Resampling.LANCZOS
                 )
 
@@ -3430,11 +3447,15 @@ def create_report_overlay(
                 )
                 logo_buffer.seek(0)
 
-                # Fixed logo box on the left; keep the logo fully visible.
+                # Align the logo vertically with the School Name row.
                 logo_box_x = left
-                logo_box_y = height - 105
-                logo_box_w = 62
-                logo_box_h = 62
+                logo_box_w = logo_size
+                logo_box_h = logo_size
+                logo_box_y = (
+                    height
+                    - 32
+                    - (logo_box_h / 2)
+                )
 
                 pdf.setStrokeColorRGB(
                     0.75, 0.75, 0.75
@@ -3973,7 +3994,8 @@ def make_report_card_pdf(
     file_type,
     total_attendance=0,
     present_days=0,
-    school_logo_path=None
+    school_logo_path=None,
+    school_logo_size=52
 ):
 
     overlay_bytes = create_report_overlay(
@@ -3984,7 +4006,8 @@ def make_report_card_pdf(
         orientation=orientation,
         total_attendance=total_attendance,
         present_days=present_days,
-        school_logo_path=school_logo_path
+        school_logo_path=school_logo_path,
+        school_logo_size=school_logo_size
     )
     overlay_doc = fitz.open(
         stream=overlay_bytes,
@@ -4228,6 +4251,10 @@ def report_cards():
         selected_template
     )
 
+    logo_size = school_logo_size_from_template(
+        selected_template
+    )
+
     with st.expander(
         "🏫 School Logo (Left Side)",
         expanded=False
@@ -4247,8 +4274,53 @@ def report_cards():
                 )
 
             st.caption(
-                "You can replace the current logo or delete it."
+                "The logo is aligned with the School Name row."
             )
+
+            logo_size = st.slider(
+                "Logo Size",
+                min_value=30,
+                max_value=70,
+                value=logo_size,
+                step=2,
+                help="Resize the school logo on the report card."
+            )
+
+            if st.button(
+                "💾 Save Logo Size",
+                use_container_width=True,
+                key=f"save_report_school_logo_size_{selected_template['id']}"
+            ):
+                try:
+                    logo_config = get_template_config(
+                        selected_template
+                    )
+                    logo_config["school_logo_size"] = int(logo_size)
+
+                    (
+                        sb.table("print_templates")
+                        .update({
+                            "config_json": json.dumps(
+                                logo_config
+                            ),
+                            "updated_at":
+                                datetime.datetime.now(
+                                    datetime.timezone.utc
+                                ).isoformat()
+                        })
+                        .eq(
+                            "id",
+                            selected_template["id"]
+                        )
+                        .execute()
+                    )
+
+                    st.success("Logo size saved successfully.")
+                    st.rerun()
+
+                except Exception as e:
+                    st.error("Could not save logo size.")
+                    st.code(str(e))
 
         else:
             st.info(
@@ -4768,7 +4840,10 @@ def report_cards():
                         school_logo_path=
                             school_logo_from_template(
                                 selected_template
-                            )
+                            ),
+
+                        school_logo_size=
+                            logo_size
                     )
 
                     safe_name = (
@@ -4911,7 +4986,10 @@ def report_cards():
                             school_logo_path=
                                 school_logo_from_template(
                                     selected_template
-                                )
+                                ),
+
+                            school_logo_size=
+                                logo_size
                         )
 
                         safe_name = (
