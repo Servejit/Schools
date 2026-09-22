@@ -7378,7 +7378,7 @@ def school_academic_status(school_id):
                 data=excel_bytes,
                 file_name=(
                     f"School_Academic_Status_{session}_{exam_name}.xlsx"
-                    .replace("/", "_").replace("\", "_")
+                    .replace("/", "_").replace(chr(92), "_")
                 ),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
@@ -7514,7 +7514,7 @@ def school_academic_status(school_id):
                 data=excel_bytes,
                 file_name=(
                     f"School_Academic_Status_SubjectWise_{session}_{exam_name}.xlsx"
-                    .replace("/", "_").replace("\", "_")
+                    .replace("/", "_").replace(chr(92), "_")
                 ),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
