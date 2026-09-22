@@ -1526,6 +1526,8 @@ def students():
 
 def classes_subjects():
 
+    role = st.session_state.profile.get("role")
+
     st.header("📚 Classes & Subjects")
 
     school_id = get_selected_school(
@@ -5329,6 +5331,7 @@ def dashboard():
             "Management",
             [
                 "🎓 Students",
+                "📚 Classes & Subjects",
                 "📝 Marks",
                 "📅 Attendance",
                 "🖨️ Print Templates",
