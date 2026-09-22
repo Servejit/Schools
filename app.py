@@ -7,6 +7,8 @@ import json
 import io
 import zipfile
 import fitz
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill, Font, Alignment
 
 from PIL import Image
 from supabase import create_client
@@ -7096,7 +7098,37 @@ def premium_feature_management():
 
 def school_academic_status(school_id):
     st.subheader("💎 School Academic Status")
-    st.caption("Premium academic performance analysis for the selected school.")
+    st.caption("Premium academic performance analysis. SuperAdmin has full access.")
+
+    role = st.session_state.profile.get("role")
+
+    # SuperAdmin can select any school.
+    if role == "SuperAdmin":
+        try:
+            school_rows = (
+                sb.table("schools")
+                .select("id,name,code,active")
+                .eq("active", True)
+                .order("name")
+                .execute().data or []
+            )
+        except Exception as e:
+            st.error("Could not load schools.")
+            st.code(str(e))
+            return
+
+        school_map = {
+            f"{x.get('name') or '-'} ({x.get('code') or '-'})": x["id"]
+            for x in school_rows
+        }
+        if not school_map:
+            st.warning("No active schools are available.")
+            return
+
+        selected_school_label = st.selectbox(
+            "🏫 School", list(school_map.keys()), key="academic_status_school"
+        )
+        school_id = school_map[selected_school_label]
 
     try:
         class_data = (
@@ -7128,7 +7160,15 @@ def school_academic_status(school_id):
         if str(x.get("academic_year") or "").strip() == session
     ]
 
-    class_options = ["All Classes"] + [
+    # Class selection can be mixed.
+    mix_classes = st.checkbox(
+        "☑️ Mix Classes",
+        value=False,
+        key="academic_status_mix_classes",
+        help="Select multiple classes/sections and combine their students and marks."
+    )
+
+    class_options = [
         f"{x.get('class_name') or '-'} | Section: {x.get('section') or '-'}"
         for x in session_classes
     ]
@@ -7136,9 +7176,30 @@ def school_academic_status(school_id):
         f"{x.get('class_name') or '-'} | Section: {x.get('section') or '-'}": x
         for x in session_classes
     }
-    selected_class = st.selectbox(
-        "🏫 Class", class_options, key="academic_status_class"
-    )
+
+    if mix_classes:
+        selected_classes = st.multiselect(
+            "🏫 Select Classes to Mix",
+            class_options,
+            default=class_options,
+            key="academic_status_mix_class_selection"
+        )
+        selected_class_ids = {
+            str(class_lookup[x]["id"]) for x in selected_classes
+        }
+    else:
+        selected_class = st.selectbox(
+            "🏫 Class", ["All Classes"] + class_options,
+            key="academic_status_class"
+        )
+        if selected_class == "All Classes":
+            selected_class_ids = {str(x["id"]) for x in session_classes}
+        else:
+            selected_class_ids = {str(class_lookup[selected_class]["id"])}
+
+    if not selected_class_ids:
+        st.warning("Select at least one class.")
+        return
 
     exam_names = [
         str(x.get("name") or "").strip()
@@ -7147,14 +7208,66 @@ def school_academic_status(school_id):
     if not exam_names:
         st.warning("No Exam / Assessment has been created by Admin yet.")
         return
+
     exam_name = st.selectbox(
         "📝 Exam / Assessment", exam_names, key="academic_status_exam"
     )
 
-    tab_marks, tab_subject = st.tabs(["📊 Marks Percentage", "📚 Subject Wise"])
+    def make_excel_bytes(sheets):
+        wb = Workbook()
+        first = True
+
+        for sheet_name, dataframe, fills in sheets:
+            if first:
+                ws = wb.active
+                ws.title = sheet_name[:31]
+                first = False
+            else:
+                ws = wb.create_sheet(sheet_name[:31])
+
+            for col_idx, col_name in enumerate(dataframe.columns, 1):
+                cell = ws.cell(1, col_idx, str(col_name))
+                cell.font = Font(bold=True)
+                cell.alignment = Alignment(horizontal="center")
+
+            for row_idx, row in enumerate(
+                dataframe.itertuples(index=False, name=None), 2
+            ):
+                for col_idx, value in enumerate(row, 1):
+                    cell = ws.cell(row_idx, col_idx, value)
+                    cell.alignment = Alignment(vertical="center")
+
+                fill_value = fills.get(row_idx - 2)
+                if fill_value:
+                    fill = PatternFill(
+                        fill_type="solid",
+                        fgColor=fill_value.replace("#", "")
+                    )
+                    for col_idx in range(1, len(dataframe.columns) + 1):
+                        ws.cell(row_idx, col_idx).fill = fill
+
+            ws.freeze_panes = "A2"
+            ws.auto_filter.ref = ws.dimensions
+
+            for col_cells in ws.columns:
+                max_len = 0
+                letter = col_cells[0].column_letter
+                for cell in col_cells:
+                    max_len = max(max_len, len(str(cell.value or "")))
+                ws.column_dimensions[letter].width = min(max(max_len + 2, 12), 28)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return output.getvalue()
+
+    tab_marks, tab_subject = st.tabs(
+        ["📊 Marks Percentage", "📚 Subject Wise"]
+    )
 
     with tab_marks:
         st.markdown("### Marks Percentage")
+
         c1, c2 = st.columns(2)
         with c1:
             direction = st.radio(
@@ -7193,26 +7306,26 @@ def school_academic_status(school_id):
             st.code(str(e))
             return
 
-        if selected_class != "All Classes":
-            cl = class_lookup[selected_class]
-            students_data = [
-                s for s in students_data
-                if str(s.get("class_name") or "").strip().lower()
+        students_data = [
+            s for s in students_data
+            if any(
+                str(s.get("class_name") or "").strip().lower()
                 == str(cl.get("class_name") or "").strip().lower()
                 and str(s.get("section") or "").strip().lower()
                 == str(cl.get("section") or "").strip().lower()
-            ]
-            allowed_class_ids = {str(cl["id"])}
-        else:
-            allowed_class_ids = {str(x["id"]) for x in session_classes}
+                for cl in session_classes
+                if str(cl["id"]) in selected_class_ids
+            )
+        ]
 
         subjects_data = [
-            x for x in subjects_data if str(x.get("class_id")) in allowed_class_ids
+            x for x in subjects_data
+            if str(x.get("class_id")) in selected_class_ids
         ]
         subject_ids = {str(x["id"]) for x in subjects_data}
         marks_data = [
             x for x in marks_data
-            if str(x.get("class_id")) in allowed_class_ids
+            if str(x.get("class_id")) in selected_class_ids
             and str(x.get("subject_id")) in subject_ids
         ]
 
@@ -7226,7 +7339,11 @@ def school_academic_status(school_id):
             total = sum(float(x.get("marks") or 0) for x in records)
             maximum = sum(float(x.get("max_marks") or 0) for x in records)
             pct = total * 100 / maximum if maximum else 0
-            match = pct < threshold if direction == "Below selected percentage" else pct > threshold
+            match = (
+                pct < threshold
+                if direction == "Below selected percentage"
+                else pct > threshold
+            )
             if match:
                 rows.append({
                     "Student Name": s.get("name") or "",
@@ -7242,14 +7359,33 @@ def school_academic_status(school_id):
             df = pd.DataFrame(rows).sort_values(
                 "Percentage",
                 ascending=(direction == "Below selected percentage")
-            )
+            ).reset_index(drop=True)
+
             bg = "#FCE4EC" if direction == "Below selected percentage" else "#E8F5E9"
             st.dataframe(
                 df.style.map(lambda _: f"background-color: {bg}"),
                 hide_index=True, use_container_width=True
             )
+
+            excel_bytes = make_excel_bytes([
+                ("Marks Percentage", df, {
+                    i: bg for i in range(len(df))
+                })
+            ])
+
             st.download_button(
-                "⬇️ Download Marks Percentage CSV",
+                "⬇️ Download Coloured Excel",
+                data=excel_bytes,
+                file_name=(
+                    f"School_Academic_Status_{session}_{exam_name}.xlsx"
+                    .replace("/", "_").replace("\", "_")
+                ),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+            st.download_button(
+                "⬇️ Download CSV",
                 data=df.to_csv(index=False).encode("utf-8"),
                 file_name=f"School_Academic_Status_{session}_{exam_name}.csv".replace("/", "_"),
                 mime="text/csv", use_container_width=True
@@ -7259,6 +7395,7 @@ def school_academic_status(school_id):
 
     with tab_subject:
         st.markdown("### Subject Wise Top Students")
+
         top_n = st.selectbox(
             "🏆 Show Top", [10, 20, 30, 50, 100],
             key="academic_status_top_n"
@@ -7288,27 +7425,36 @@ def school_academic_status(school_id):
             st.code(str(e))
             return
 
-        if selected_class != "All Classes":
-            cl = class_lookup[selected_class]
-            allowed_class_ids = {str(cl["id"])}
-        else:
-            allowed_class_ids = {str(x["id"]) for x in session_classes}
+        students_data = [
+            s for s in students_data
+            if any(
+                str(s.get("class_name") or "").strip().lower()
+                == str(cl.get("class_name") or "").strip().lower()
+                and str(s.get("section") or "").strip().lower()
+                == str(cl.get("section") or "").strip().lower()
+                for cl in session_classes
+                if str(cl["id"]) in selected_class_ids
+            )
+        ]
 
         subjects_data = [
-            x for x in subjects_data if str(x.get("class_id")) in allowed_class_ids
+            x for x in subjects_data
+            if str(x.get("class_id")) in selected_class_ids
         ]
         subject_ids = {str(x["id"]) for x in subjects_data}
         marks_data = [
             x for x in marks_data
-            if str(x.get("class_id")) in allowed_class_ids
+            if str(x.get("class_id")) in selected_class_ids
             and str(x.get("subject_id")) in subject_ids
         ]
+
         student_map = {str(x["id"]): x for x in students_data}
 
         subject_palette = [
             "#E3F2FD", "#E8F5E9", "#FFF3E0", "#F3E5F5", "#FFFDE7",
             "#E0F7FA", "#FBE9E7", "#E8EAF6", "#F1F8E9", "#FCE4EC"
         ]
+
         subject_groups = {}
         for subject in subjects_data:
             sid = str(subject["id"])
@@ -7325,7 +7471,9 @@ def school_academic_status(school_id):
                     "Class": student.get("class_name") or "",
                     "Section": student.get("section") or "",
                     "Marks": float(m.get("marks") or 0),
-                    "Maximum": float(m.get("max_marks") or subject.get("max_marks") or 100)
+                    "Maximum": float(
+                        m.get("max_marks") or subject.get("max_marks") or 100
+                    )
                 })
             rows.sort(key=lambda x: x["Marks"], reverse=True)
             subject_groups[
@@ -7333,19 +7481,45 @@ def school_academic_status(school_id):
             ] = rows[:top_n]
 
         if not any(subject_groups.values()):
-            st.info("No subject marks are available for the selected Session/Class/Exam.")
+            st.info(
+                "No subject marks are available for the selected Session/Class/Exam."
+            )
             return
+
+        excel_sheets = []
 
         for idx, (subject_name, rows) in enumerate(subject_groups.items()):
             if not rows:
                 continue
+
             st.markdown(f"#### 📚 {subject_name}")
             df = pd.DataFrame(rows)
             bg = subject_palette[idx % len(subject_palette)]
+
             st.dataframe(
                 df.style.map(lambda _: f"background-color: {bg}"),
                 hide_index=True, use_container_width=True
             )
+
+            excel_sheets.append((
+                subject_name,
+                df,
+                {i: bg for i in range(len(df))}
+            ))
+
+        if excel_sheets:
+            excel_bytes = make_excel_bytes(excel_sheets)
+            st.download_button(
+                "⬇️ Download Coloured Excel",
+                data=excel_bytes,
+                file_name=(
+                    f"School_Academic_Status_SubjectWise_{session}_{exam_name}.xlsx"
+                    .replace("/", "_").replace("\", "_")
+                ),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
         return
 
 def reports():
