@@ -3259,7 +3259,9 @@ def school_logo_size_from_template(template):
     except Exception:
         size = 52
 
-    return max(20, min(30, size))
+    # 52 pt is the normal/original display size.
+    # The slider can make the logo smaller or larger.
+    return max(30, min(80, size))
 
 
 def pdf_page_size(orientation):
@@ -3430,12 +3432,11 @@ def create_report_overlay(
 
                 from PIL import ImageOps
 
-                # Use a larger logo while keeping it centered on
-                # the School Name row. The size can be adjusted in the UI.
-                # Match the logo height closely to the School Name row.
+                # Keep 52 pt as the normal/original logo size.
+                # The saved slider value can make it smaller or larger.
                 logo_size = max(
-                    38,
-                    min(60, int(school_logo_size or 50))
+                    30,
+                    min(80, int(school_logo_size or 52))
                 )
 
                 logo_image.thumbnail(
@@ -4283,11 +4284,11 @@ def report_cards():
 
             logo_size = st.slider(
                 "Logo Size",
-                min_value=20,
-                max_value=30,
+                min_value=30,
+                max_value=80,
                 value=logo_size,
-                step=1,
-                help="Resize the logo within the School Name row."
+                step=2,
+                help="52 is the normal/original size. Move left for smaller or right for larger."
             )
 
             if st.button(
