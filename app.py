@@ -3259,7 +3259,7 @@ def school_logo_size_from_template(template):
     except Exception:
         size = 52
 
-    return max(30, min(70, size))
+    return max(20, min(30, size))
 
 
 def pdf_page_size(orientation):
@@ -3430,9 +3430,11 @@ def create_report_overlay(
 
                 from PIL import ImageOps
 
+                # Keep the logo completely inside the vertical height
+                # of the School Name row; never let it reach the page border.
                 logo_size = max(
-                    30,
-                    min(70, int(school_logo_size or 52))
+                    20,
+                    min(30, int(school_logo_size or 26))
                 )
 
                 logo_image.thumbnail(
@@ -3451,9 +3453,9 @@ def create_report_overlay(
                 logo_box_x = left
                 logo_box_w = logo_size
                 logo_box_h = logo_size
+                logo_center_y = height - 32
                 logo_box_y = (
-                    height
-                    - 32
+                    logo_center_y
                     - (logo_box_h / 2)
                 )
 
@@ -4279,11 +4281,11 @@ def report_cards():
 
             logo_size = st.slider(
                 "Logo Size",
-                min_value=30,
-                max_value=70,
+                min_value=20,
+                max_value=30,
                 value=logo_size,
-                step=2,
-                help="Resize the school logo on the report card."
+                step=1,
+                help="Resize the logo within the School Name row."
             )
 
             if st.button(
