@@ -3096,9 +3096,9 @@ def attendance():
     try:
         existing = (
             sb.table("attendance")
-            .select("id,student_id,date,status")
+            .select("id,student_id,attendance_date,present")
             .eq("school_id", school_id)
-            .eq("date", str(selected_date))
+            .eq("attendance_date", str(selected_date))
             .execute()
             .data or []
         )
@@ -3119,16 +3119,16 @@ def attendance():
     for student in students_data:
         sid = str(student["id"])
         old = existing_by_student.get(sid, {})
-        old_status = str(old.get("status") or "Present")
+        old_present = old.get("present", True)
 
         status = st.selectbox(
             student.get("name") or "Student",
             ["Present", "Absent"],
-            index=0 if old_status.lower() == "present" else 1,
+            index=0 if bool(old_present) else 1,
             key=f"attendance_{sid}_{selected_date}"
         )
 
-        entries.append((sid, status, old.get("id")))
+        entries.append((sid, status == "Present", old.get("id")))
 
     if st.button(
         "💾 Save Attendance",
@@ -3141,7 +3141,7 @@ def attendance():
                 if old_id:
                     (
                         sb.table("attendance")
-                        .update({"status": status})
+                        .update({"present": present})
                         .eq("id", old_id)
                         .execute()
                     )
@@ -3151,8 +3151,8 @@ def attendance():
                         .insert({
                             "school_id": school_id,
                             "student_id": sid,
-                            "date": str(selected_date),
-                            "status": status
+                            "attendance_date": str(selected_date),
+                            "present": present
                         })
                         .execute()
                     )
@@ -3229,7 +3229,7 @@ def attendance_summary(student_id, school_id):
     try:
         rows = (
             sb.table("attendance")
-            .select("id,date,status")
+            .select("id,attendance_date,present")
             .eq("school_id", school_id)
             .eq("student_id", student_id)
             .execute()
@@ -3241,8 +3241,7 @@ def attendance_summary(student_id, school_id):
     total_days = len(rows)
     present_days = sum(
         1 for row in rows
-        if str(row.get("status") or "").strip().lower()
-        in ["present", "p", "1", "true"]
+        if bool(row.get("present"))
     )
     return total_days, present_days
 
@@ -4998,170 +4997,3 @@ def dashboard():
                 "📄 Report Cards",
                 "📊 Reports"
             ],
-            horizontal=True
-        )
-
-        if menu == "🎓 Students":
-            students()
-
-        elif menu == "📚 Classes & Subjects":
-            classes_subjects()
-
-        elif menu == "📝 Marks":
-            bulk_marks()
-
-        elif menu == "📅 Attendance":
-            attendance()
-
-        elif menu == "🖨️ Print Templates":
-            print_templates()
-
-        elif menu == "📄 Report Cards":
-            report_cards()
-
-        else:
-            st.info(
-                f"{menu} will be added next."
-            )
-
-    # =====================================================
-    # STUDENT
-    # =====================================================
-
-    elif role == "Student":
-
-        st.title("🎓 Student Dashboard")
-
-        try:
-
-            student = (
-                sb.table("students")
-                .select(
-                    "id,school_id,user_id,name,"
-                    "admission_no,class_name,section,"
-                    "date_of_birth,gender,father_name,"
-                    "parent_name,parent_phone,photo_path,"
-                    "remarks,active"
-                )
-                .eq(
-                    "user_id",
-                    st.session_state.user.id
-                )
-                .maybe_single()
-                .execute()
-                .data
-            )
-
-            if student:
-
-                photo_path = student.get(
-                    "photo_path"
-                )
-
-                if photo_path:
-
-                    try:
-
-                        photo_bytes = (
-                            sb.storage
-                            .from_("school-assets")
-                            .download(photo_path)
-                        )
-
-                        st.image(
-                            photo_bytes,
-                            width=140
-                        )
-
-                    except Exception:
-                        pass
-
-                st.subheader(
-                    student.get(
-                        "name",
-                        "Student"
-                    )
-                )
-
-                a, b, c = st.columns(3)
-
-                a.metric(
-                    "Class",
-                    student.get(
-                        "class_name",
-                        "-"
-                    )
-                )
-
-                b.metric(
-                    "Section",
-                    student.get(
-                        "section",
-                        "-"
-                    )
-                )
-
-                c.metric(
-                    "Admission No.",
-                    student.get(
-                        "admission_no",
-                        "-"
-                    )
-                )
-
-                st.write(
-                    "**Father Name:** "
-                    f"{student.get('father_name') or student.get('parent_name') or '-'}"
-                )
-
-                if student.get("remarks"):
-
-                    st.write(
-                        "**Remarks:** "
-                        f"{student.get('remarks')}"
-                    )
-
-            else:
-
-                st.info(
-                    "Your student record is not linked yet."
-                )
-
-        except Exception as e:
-
-            st.error(
-                "Could not load student information."
-            )
-
-            st.code(str(e))
-
-    # =====================================================
-    # PARENT
-    # =====================================================
-
-    elif role == "Parent":
-
-        st.title("👨‍👩‍👧 Parent Dashboard")
-
-        st.info(
-            "Parent modules will be added next."
-        )
-
-    else:
-
-        st.error(
-            f"Unknown role: {role}"
-        )
-
-
-# =========================================================
-# START
-# =========================================================
-
-if st.session_state.logged_in:
-
-    dashboard()
-
-else:
-
-    login()
