@@ -3430,8 +3430,8 @@ def create_report_overlay(
 
                 from PIL import ImageOps
 
-                # Keep the logo completely inside the vertical height
-                # of the School Name row; never let it reach the page border.
+                # Keep the logo compact so it stays fully within
+                # the School Name row and away from the page borders.
                 logo_size = max(
                     20,
                     min(30, int(school_logo_size or 26))
@@ -3449,14 +3449,25 @@ def create_report_overlay(
                 )
                 logo_buffer.seek(0)
 
-                # Align the logo vertically with the School Name row.
-                logo_box_x = left
+                # Equal distance from the top and left page borders.
+                # Keep the logo entirely inside the School Name row.
+                logo_margin = 45
+                logo_box_x = logo_margin
                 logo_box_w = logo_size
                 logo_box_h = logo_size
-                logo_center_y = height - 32
-                logo_box_y = (
-                    logo_center_y
-                    - (logo_box_h / 2)
+                logo_box_y = height - logo_margin - logo_box_h
+
+                # School Name occupies roughly y=22..43 points from top.
+                # Keep the logo inside that same visual band.
+                school_name_top = height - 22
+                school_name_bottom = height - 43
+                logo_box_y = min(
+                    logo_box_y,
+                    school_name_top - logo_box_h
+                )
+                logo_box_y = max(
+                    logo_box_y,
+                    school_name_bottom
                 )
 
                 pdf.setStrokeColorRGB(
