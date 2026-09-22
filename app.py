@@ -6978,6 +6978,13 @@ def report_cards():
 
 
 def premium_feature_enabled(school_id, admin_id, feature_key):
+    # SuperAdmin has unrestricted access to every feature.
+    try:
+        if st.session_state.get("profile", {}).get("role") == "SuperAdmin":
+            return True
+    except Exception:
+        pass
+
     if not school_id or not admin_id:
         return False
     try:
@@ -7949,7 +7956,8 @@ def dashboard():
                 "🖨️ Print Templates",
                 "📄 Report Cards",
                 "📊 Reports",
-                "💎 Premium Features"
+                "💎 Premium Features",
+                "💎 School Academic Status"
             ],
             horizontal=True
         )
@@ -7986,6 +7994,10 @@ def dashboard():
 
         elif menu == "💎 Premium Features":
             premium_feature_management()
+
+        elif menu == "💎 School Academic Status":
+            # SuperAdmin can use every premium feature directly.
+            school_academic_status(profile.get("school_id"))
 
         else:
             st.info(
@@ -8100,8 +8112,7 @@ def dashboard():
                 "📝 Marks",
                 "📅 Attendance",
                 "📄 Report Cards",
-                "📊 Reports",
-                "💎 Premium Features"
+                "📊 Reports"
             ],
             horizontal=True
         )
@@ -8120,9 +8131,6 @@ def dashboard():
 
         elif menu == "📊 Reports":
             reports()
-
-        elif menu == "💎 Premium Features":
-            premium_feature_management()
 
         else:
             st.info(
