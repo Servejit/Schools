@@ -3221,11 +3221,64 @@ def attendance():
         st.info("No active students found.")
         return
 
-    class_options = ["All Classes"] + sorted({
-        str(x.get("class_name") or "")
-        for x in students_data
-        if str(x.get("class_name") or "")
-    })
+    # Class Teacher can see/fill attendance only for classes assigned
+    # to them as Class Teacher. Admin/SuperAdmin retain full access.
+    assigned_class_rows = []
+    if role == "Teacher":
+        try:
+            assigned_class_rows = (
+                sb.table("classes")
+                .select("id,class_name,section,academic_year")
+                .eq("school_id", school_id)
+                .eq("class_teacher_id", st.session_state.user.id)
+                .eq("active", True)
+                .order("class_name")
+                .order("section")
+                .execute()
+                .data or []
+            )
+        except Exception as e:
+            st.error("Could not load your Class Teacher assignments.")
+            st.code(str(e))
+            return
+
+        if not assigned_class_rows:
+            st.warning(
+                "No class has been assigned to you as Class Teacher yet."
+            )
+            return
+
+        assigned_pairs = {
+            (
+                str(x.get("class_name") or "").strip().lower(),
+                str(x.get("section") or "").strip().lower()
+            )
+            for x in assigned_class_rows
+        }
+
+        students_data = [
+            x for x in students_data
+            if (
+                str(x.get("class_name") or "").strip().lower(),
+                str(x.get("section") or "").strip().lower()
+            ) in assigned_pairs
+        ]
+
+        class_options = [
+            f"{x.get('class_name') or '-'} | Section: {x.get('section') or '-'}"
+            for x in assigned_class_rows
+        ]
+        class_lookup = {
+            f"{x.get('class_name') or '-'} | Section: {x.get('section') or '-'}": x
+            for x in assigned_class_rows
+        }
+    else:
+        class_options = ["All Classes"] + sorted({
+            f"{x.get('class_name') or '-'} | Section: {x.get('section') or '-'}"
+            for x in students_data
+            if str(x.get("class_name") or "")
+        })
+        class_lookup = {}
 
     selected_class = st.selectbox(
         "Class",
@@ -3233,11 +3286,27 @@ def attendance():
         key="attendance_class"
     )
 
+    selected_class_row = class_lookup.get(selected_class)
+
     if selected_class != "All Classes":
-        students_data = [
-            x for x in students_data
-            if str(x.get("class_name") or "") == selected_class
-        ]
+        if role == "Teacher" and selected_class_row:
+            target_name = str(selected_class_row.get("class_name") or "").strip().lower()
+            target_section = str(selected_class_row.get("section") or "").strip().lower()
+            students_data = [
+                x for x in students_data
+                if str(x.get("class_name") or "").strip().lower() == target_name
+                and str(x.get("section") or "").strip().lower() == target_section
+            ]
+        else:
+            # Admin/SuperAdmin
+            parts = selected_class.split(" | Section: ", 1)
+            target_name = parts[0].strip().lower()
+            target_section = parts[1].strip().lower() if len(parts) > 1 else ""
+            students_data = [
+                x for x in students_data
+                if str(x.get("class_name") or "").strip().lower() == target_name
+                and str(x.get("section") or "").strip().lower() == target_section
+            ]
 
     try:
         existing = (
@@ -7437,6 +7506,45 @@ def dashboard():
     elif role == "Teacher":
 
         st.title("👨‍🏫 Teacher Dashboard")
+
+        # Show the classes for which this teacher is the Class Teacher.
+        # Class Teachers can manage students and attendance only for
+        # these assigned classes. Subject-teaching assignments remain
+        # separate and continue to control Marks access.
+        try:
+            teacher_class_rows = (
+                sb.table("classes")
+                .select("id,class_name,section,academic_year,active")
+                .eq("school_id", profile.get("school_id"))
+                .eq("class_teacher_id", st.session_state.user.id)
+                .eq("active", True)
+                .order("class_name")
+                .order("section")
+                .execute()
+                .data or []
+            )
+        except Exception:
+            teacher_class_rows = []
+
+        if teacher_class_rows:
+            st.subheader("🏫 My Class Teacher Classes")
+            class_cols = st.columns(min(3, len(teacher_class_rows)))
+            for i, teacher_class in enumerate(teacher_class_rows):
+                with class_cols[i % len(class_cols)]:
+                    st.info(
+                        f"**{teacher_class.get('class_name') or '-'}**"
+                        f" — Section {teacher_class.get('section') or '-'}"
+                        f"\n\nAcademic Year: "
+                        f"{teacher_class.get('academic_year') or '-'}"
+                    )
+            st.caption(
+                "As Class Teacher, you can see and manage students and attendance "
+                "only in your assigned class(es)."
+            )
+        else:
+            st.warning(
+                "No class has been assigned to you as Class Teacher yet."
+            )
 
         menu = st.radio(
             "Teacher Menu",
