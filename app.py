@@ -774,6 +774,42 @@ def students():
     if not school_id:
         return
 
+    # Teachers can only view/change students belonging to classes
+    # where they are assigned as the Class Teacher.
+    assigned_class_keys = None
+    if role == "Teacher":
+        try:
+            assigned_classes = (
+                sb.table("classes")
+                .select("id,class_name,section,class_teacher_id,active")
+                .eq("school_id", school_id)
+                .eq("class_teacher_id", st.session_state.user.id)
+                .eq("active", True)
+                .execute()
+                .data or []
+            )
+            assigned_class_keys = {
+                (
+                    str(x.get("class_name") or "").strip().lower(),
+                    str(x.get("section") or "").strip().lower()
+                )
+                for x in assigned_classes
+            }
+            assigned_class_keys.discard(("", ""))
+
+            if not assigned_class_keys:
+                st.info("No class is assigned to you as Class Teacher yet.")
+                return
+
+            st.success(
+                f"Assigned Class(es): {len(assigned_class_keys)}. "
+                "You can only see and change students in these classes."
+            )
+        except Exception as e:
+            st.error("Could not load your assigned classes.")
+            st.code(str(e))
+            return
+
     st.divider()
 
     try:
@@ -898,6 +934,16 @@ def students():
             key="add_student_button"
         ):
 
+            if role == "Teacher":
+                entered_class_key = (
+                    str(class_name or "").strip().lower(),
+                    str(section or "").strip().lower()
+                )
+                if entered_class_key not in assigned_class_keys:
+                    st.error("You can only add a student to your assigned Class Teacher class.")
+                    return
+
+
             if not name.strip():
                 st.warning(
                     "Student name is required."
@@ -1004,6 +1050,16 @@ def students():
         st.error("Could not load students.")
         st.code(str(e))
         return
+
+    if role == "Teacher" and assigned_class_keys is not None:
+        student_data = [
+            student
+            for student in student_data
+            if (
+                str(student.get("class_name") or "").strip().lower(),
+                str(student.get("section") or "").strip().lower()
+            ) in assigned_class_keys
+        ]
 
     st.subheader(
         f"📋 Students ({len(student_data)})"
@@ -1112,6 +1168,13 @@ def students():
                     "🗑️ Delete",
                     key=f"delete_student_{student_id}"
                 ):
+
+                    if role == "Teacher" and (
+                        str(student.get("class_name") or "").strip().lower(),
+                        str(student.get("section") or "").strip().lower()
+                    ) not in assigned_class_keys:
+                        st.error("You can only change students assigned to your class.")
+                        return
 
                     try:
 
@@ -1343,6 +1406,13 @@ def students():
                     use_container_width=True
                 ):
 
+                    if role == "Teacher" and (
+                        str(student.get("class_name") or "").strip().lower(),
+                        str(student.get("section") or "").strip().lower()
+                    ) not in assigned_class_keys:
+                        st.error("You can only change students assigned to your class.")
+                        return
+
                     try:
 
                         if edit_photo:
@@ -1481,7 +1551,8 @@ def classes_subjects():
             sb.table("classes")
             .select(
                 "id,school_id,class_name,section,"
-                "academic_year,active,created_at,updated_at"
+                "academic_year,active,class_teacher_id,"
+                "created_at,updated_at"
             )
             .eq("school_id", school_id)
             .order("class_name")
@@ -1495,6 +1566,36 @@ def classes_subjects():
         st.error("Could not load classes.")
         st.code(str(e))
         return
+
+    # -----------------------------------------------------
+    # CLASS TEACHER ASSIGNMENT
+    # -----------------------------------------------------
+    try:
+        teacher_data = (
+            sb.table("profiles")
+            .select("id,full_name,email")
+            .eq("school_id", school_id)
+            .eq("role", "Teacher")
+            .eq("active", True)
+            .order("full_name")
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        teacher_data = []
+        if st.session_state.profile.get("role") in ["SuperAdmin", "Admin"]:
+            st.warning("Could not load teachers for class assignment.")
+
+    teacher_options = {"Not Assigned": None}
+    for teacher in teacher_data:
+        label = f"{teacher.get('full_name') or 'Teacher'} — {teacher.get('email') or ''}"
+        teacher_options[label] = teacher["id"]
+
+    with st.expander("👨‍🏫 Assign Class Teachers"):
+        st.caption("Assign one class teacher to each class. Teachers will only see students from their assigned classes.")
+
+        if not teacher_data:
+            st.info("Create an active Teacher account first.")
 
     with st.expander(        "➕ Add New Class",
         expanded=True    ):
@@ -1632,6 +1733,22 @@ def classes_subjects():
                     f"| Academic Year: {academic_year}"
                 )
 
+                current_teacher = next(
+                    (
+                        t for t in teacher_data
+                        if str(t.get("id")) == str(class_item.get("class_teacher_id"))
+                    ),
+                    None
+                )
+                st.caption(
+                    "Class Teacher: "
+                    + (
+                        current_teacher.get("full_name")
+                        if current_teacher
+                        else "Not Assigned"
+                    )
+                )
+
             with c2:
 
                 if active:
@@ -1686,6 +1803,21 @@ def classes_subjects():
                     key=f"edit_class_year_{class_id}"
                 )
 
+                teacher_labels = list(teacher_options.keys())
+                current_teacher_id = class_item.get("class_teacher_id")
+                current_teacher_label = "Not Assigned"
+                for label, teacher_id in teacher_options.items():
+                    if teacher_id and str(teacher_id) == str(current_teacher_id):
+                        current_teacher_label = label
+                        break
+
+                selected_teacher_label = st.selectbox(
+                    "👨‍🏫 Class Teacher",
+                    teacher_labels,
+                    index=teacher_labels.index(current_teacher_label),
+                    key=f"edit_class_teacher_{class_id}"
+                )
+
                 if st.button(
                     "💾 Save Class",
                     key=f"save_class_{class_id}"
@@ -1702,6 +1834,8 @@ def classes_subjects():
                                     edit_section.strip(),
                                 "academic_year":
                                     edit_year.strip(),
+                                "class_teacher_id":
+                                    teacher_options[selected_teacher_label],
                                 "updated_at":
                                     datetime.datetime.now(
                                         datetime.timezone.utc
@@ -5162,9 +5296,6 @@ def dashboard():
         elif menu == "🎓 Students":
             students()
 
-        elif menu == "📚 Classes & Subjects":
-            classes_subjects()
-
         elif menu == "📝 Marks":
             bulk_marks()
 
@@ -5194,7 +5325,6 @@ def dashboard():
             "Management",
             [
                 "🎓 Students",
-                "📚 Classes & Subjects",
                 "📝 Marks",
                 "📅 Attendance",
                 "🖨️ Print Templates",
