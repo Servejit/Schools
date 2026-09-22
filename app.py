@@ -497,8 +497,7 @@ def users():
                 if 200 <= response.status_code < 300:
 
                     st.success(
-                        "User created successfully."
-                    )
+                        "User created successfully."                    )
                     st.rerun()
 
                 else:
@@ -997,8 +996,7 @@ def students():
                 "principal_signature_path,active,"
                 "created_at,updated_at"
             )
-            .eq("school_id", school_id)
-            .order("name")
+            .eq("school_id", school_id)            .order("name")
             .execute()
             .data or []
         )
@@ -1497,8 +1495,7 @@ def classes_subjects():
     except Exception as e:
 
         st.error("Could not load classes.")
-        st.code(str(e))
-        return
+        st.code(str(e))        return
 
     with st.expander(
         "➕ Add New Class",
@@ -1998,7 +1995,6 @@ def classes_subjects():
                     placeholder="Example: Mathematics",
                     key=f"new_subject_name_{class_id}"
                 )
-
                 new_subject_code = st.text_input(
                     "Subject Code",
                     placeholder="Example: MATH",
@@ -2497,8 +2493,7 @@ def bulk_marks():
                     "subject_id": subject_id,
                     "exam_name": exam_name,
                     "marks": mark_value,
-                    "max_marks": max_marks,
-                    "class_id": class_id
+                    "max_marks": max_marks,                    "class_id": class_id
                 })
 
         if errors:
@@ -2997,8 +2992,7 @@ def print_templates():
             # Immediate status update
             new_active = st.checkbox(
                 "Template Active",
-                value=active,
-                key=f"template_active_{template_id}"
+                value=active,                key=f"template_active_{template_id}"
             )
 
             if new_active != active:
@@ -3497,8 +3491,7 @@ def create_report_overlay(
     pdf.drawCentredString(
         width / 2,
         height - 82,
-        str(exam_name)
-    )
+        str(exam_name)    )
 
     # -----------------------------------------------------
     # Student details
@@ -3997,8 +3990,7 @@ def make_report_card_pdf(
     overlay_bytes = create_report_overlay(
         student=student,
         school_info=school_info,
-        subjects=subjects,
-        marks_rows=marks_rows,
+        subjects=subjects,        marks_rows=marks_rows,
         exam_name=exam_name,
         orientation=orientation,
         total_attendance=total_attendance,
@@ -4254,24 +4246,44 @@ def report_cards():
         expanded=False
     ):
         if current_logo_path:
+            st.success("A school logo is currently saved.")
+
             current_logo_bytes = download_storage_file(
                 current_logo_path
             )
+
             if current_logo_bytes:
                 st.image(
                     current_logo_bytes,
-                    width=90
+                    width=110,
+                    caption="Current School Logo"
                 )
 
+            st.caption(
+                "You can replace the current logo or delete it."
+            )
+
+        else:
+            st.info(
+                "No school logo is currently saved."
+            )
+
         uploaded_logo = st.file_uploader(
-            "Upload / Replace School Logo",
+            "Upload School Logo",
             type=["png", "jpg", "jpeg"],
             key="report_school_logo"
         )
 
+        replace_label = (
+            "🔄 Replace School Logo"
+            if current_logo_path
+            else "💾 Save School Logo"
+        )
+
         if uploaded_logo and st.button(
-            "💾 Save School Logo",
+            replace_label,
             use_container_width=True,
+            type="primary",
             key="save_report_school_logo"
         ):
             try:
@@ -4280,6 +4292,7 @@ def report_cards():
                     f"{school_id}/school-logo/"
                     f"{uuid.uuid4().hex}.{ext}"
                 )
+                old_logo_path = current_logo_path
 
                 sb.storage.from_(
                     "school-assets"
@@ -4288,11 +4301,10 @@ def report_cards():
                     uploaded_logo.getvalue(),
                     file_options={
                         "content-type": uploaded_logo.type,
-                        "upsert": "true"
+                        "upsert": "false"
                     }
                 )
 
-                # Preserve the template's existing configuration.
                 logo_config = get_template_config(
                     selected_template
                 )
@@ -4316,11 +4328,77 @@ def report_cards():
                     .execute()
                 )
 
-                st.success("School logo saved.")
+                if old_logo_path and old_logo_path != logo_path:
+                    try:
+                        (
+                            sb.storage
+                            .from_("school-assets")
+                            .remove([old_logo_path])
+                        )
+                    except Exception:
+                        pass
+
+                st.success(
+                    "School logo replaced successfully."
+                    if old_logo_path
+                    else "School logo saved successfully."
+                )
                 st.rerun()
 
             except Exception as e:
-                st.error("Could not save school logo.")
+                st.error("Could not save/replace school logo.")
+                st.code(str(e))
+
+        if current_logo_path and st.button(
+            "🗑️ Delete School Logo",
+            use_container_width=True,
+            key=f"delete_report_school_logo_{selected_template['id']}"
+        ):
+            try:
+                try:
+                    (
+                        sb.storage
+                        .from_("school-assets")
+                        .remove([current_logo_path])
+                    )
+                except Exception:
+                    pass
+
+                logo_config = get_template_config(
+                    selected_template
+                )
+
+                for logo_key in [
+                    "school_logo_path",
+                    "logo_path",
+                    "school_logo",
+                    "logo"
+                ]:
+                    logo_config.pop(logo_key, None)
+
+                (
+                    sb.table("print_templates")
+                    .update({
+                        "config_json": json.dumps(
+                            logo_config
+                        ),
+                        "updated_at":
+                            datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat()
+                    })
+                    .eq(
+                        "id",
+                        selected_template["id"]
+                    )
+                    .execute()
+                )
+
+                st.success("School logo deleted successfully.")
+                st.rerun()
+
+            except Exception as e:
+                st.error("Could not delete school logo.")
                 st.code(str(e))
 
     orientation = (
@@ -4497,8 +4575,7 @@ def report_cards():
 
     try:
 
-        subject_data = (
-            sb.table("subjects")
+        subject_data = (            sb.table("subjects")
             .select(
                 "id,school_id,class_id,name,subject_name,"
                 "code,max_marks,passing_marks,active"
@@ -4997,8 +5074,7 @@ def dashboard():
             [
                 "🏫 Schools",
                 "👥 Users",
-                "🎓 Students",
-                "📚 Classes & Subjects",
+                "🎓 Students",                "📚 Classes & Subjects",
                 "📝 Marks",
                 "📅 Attendance",
                 "🖨️ Print Templates",
