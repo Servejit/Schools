@@ -5975,44 +5975,116 @@ def report_cards():
         with st.expander(
             "🏫 School Logo (Left Side)",
             expanded=False
-        ):
-        if current_logo_path:
-            st.success("A school logo is currently saved.")
+            ):
+            if current_logo_path:
+                st.success("A school logo is currently saved.")
 
-            current_logo_bytes = download_storage_file(
-                current_logo_path
-            )
-
-            if current_logo_bytes:
-                st.image(
-                    current_logo_bytes,
-                    width=110,
-                    caption="Current School Logo"
+                current_logo_bytes = download_storage_file(
+                    current_logo_path
                 )
 
-            st.caption(
-                "The logo is aligned with the School Name row."
+                if current_logo_bytes:
+                    st.image(
+                        current_logo_bytes,
+                        width=110,
+                        caption="Current School Logo"
+                    )
+
+                st.caption(
+                    "The logo is aligned with the School Name row."
+                )
+
+                logo_size = st.slider(
+                    "Logo Size",
+                    min_value=30,
+                    max_value=80,
+                    value=logo_size,
+                    step=2,
+                    help="52 is the normal/original size. Move left for smaller or right for larger."
+                )
+
+                if st.button(
+                    "💾 Save Logo Size",
+                    use_container_width=True,
+                    key=f"save_report_school_logo_size_{selected_template['id']}"
+                ):
+                    try:
+                        logo_config = get_template_config(
+                            selected_template
+                        )
+                        logo_config["school_logo_size"] = int(logo_size)
+
+                        (
+                            sb.table("print_templates")
+                            .update({
+                                "config_json": json.dumps(
+                                    logo_config
+                                ),
+                                "updated_at":
+                                    datetime.datetime.now(
+                                        datetime.timezone.utc
+                                    ).isoformat()
+                            })
+                            .eq(
+                                "id",
+                                selected_template["id"]
+                            )
+                            .execute()
+                        )
+
+                        st.success("Logo size saved successfully.")
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error("Could not save logo size.")
+                        st.code(str(e))
+
+            else:
+                st.info(
+                    "No school logo is currently saved."
+                )
+
+            uploaded_logo = st.file_uploader(
+                "Upload School Logo",
+                type=["png", "jpg", "jpeg"],
+                key="report_school_logo"
             )
 
-            logo_size = st.slider(
-                "Logo Size",
-                min_value=30,
-                max_value=80,
-                value=logo_size,
-                step=2,
-                help="52 is the normal/original size. Move left for smaller or right for larger."
+            replace_label = (
+                "🔄 Replace School Logo"
+                if current_logo_path
+                else "💾 Save School Logo"
             )
 
-            if st.button(
-                "💾 Save Logo Size",
+            if uploaded_logo and st.button(
+                replace_label,
                 use_container_width=True,
-                key=f"save_report_school_logo_size_{selected_template['id']}"
+                type="primary",
+                key="save_report_school_logo"
             ):
                 try:
+                    ext = uploaded_logo.name.split(".")[-1].lower()
+                    logo_path = (
+                        f"{school_id}/school-logo/"
+                        f"{uuid.uuid4().hex}.{ext}"
+                    )
+                    old_logo_path = current_logo_path
+
+                    sb.storage.from_(
+                        "school-assets"
+                    ).upload(
+                        logo_path,
+                        uploaded_logo.getvalue(),
+                        file_options={
+                            "content-type": uploaded_logo.type,
+                            "upsert": "false"
+                        }
+                    )
+
                     logo_config = get_template_config(
                         selected_template
                     )
-                    logo_config["school_logo_size"] = int(logo_size)
+                    logo_config["school_logo_path"] = logo_path
 
                     (
                         sb.table("print_templates")
@@ -6032,150 +6104,78 @@ def report_cards():
                         .execute()
                     )
 
-                    st.success("Logo size saved successfully.")
+                    if old_logo_path and old_logo_path != logo_path:
+                        try:
+                            (
+                                sb.storage
+                                .from_("school-assets")
+                                .remove([old_logo_path])
+                            )
+                        except Exception:
+                            pass
+
+                    st.success(
+                        "School logo replaced successfully."
+                        if old_logo_path
+                        else "School logo saved successfully."
+                    )
                     st.rerun()
 
                 except Exception as e:
-                    st.error("Could not save logo size.")
+                    st.error("Could not save/replace school logo.")
                     st.code(str(e))
 
-        else:
-            st.info(
-                "No school logo is currently saved."
-            )
-
-        uploaded_logo = st.file_uploader(
-            "Upload School Logo",
-            type=["png", "jpg", "jpeg"],
-            key="report_school_logo"
-        )
-
-        replace_label = (
-            "🔄 Replace School Logo"
-            if current_logo_path
-            else "💾 Save School Logo"
-        )
-
-        if uploaded_logo and st.button(
-            replace_label,
-            use_container_width=True,
-            type="primary",
-            key="save_report_school_logo"
-        ):
-            try:
-                ext = uploaded_logo.name.split(".")[-1].lower()
-                logo_path = (
-                    f"{school_id}/school-logo/"
-                    f"{uuid.uuid4().hex}.{ext}"
-                )
-                old_logo_path = current_logo_path
-
-                sb.storage.from_(
-                    "school-assets"
-                ).upload(
-                    logo_path,
-                    uploaded_logo.getvalue(),
-                    file_options={
-                        "content-type": uploaded_logo.type,
-                        "upsert": "false"
-                    }
-                )
-
-                logo_config = get_template_config(
-                    selected_template
-                )
-                logo_config["school_logo_path"] = logo_path
-
-                (
-                    sb.table("print_templates")
-                    .update({
-                        "config_json": json.dumps(
-                            logo_config
-                        ),
-                        "updated_at":
-                            datetime.datetime.now(
-                                datetime.timezone.utc
-                            ).isoformat()
-                    })
-                    .eq(
-                        "id",
-                        selected_template["id"]
-                    )
-                    .execute()
-                )
-
-                if old_logo_path and old_logo_path != logo_path:
+            if current_logo_path and st.button(
+                "🗑️ Delete School Logo",
+                use_container_width=True,
+                key=f"delete_report_school_logo_{selected_template['id']}"
+            ):
+                try:
                     try:
                         (
                             sb.storage
                             .from_("school-assets")
-                            .remove([old_logo_path])
+                            .remove([current_logo_path])
                         )
                     except Exception:
                         pass
 
-                st.success(
-                    "School logo replaced successfully."
-                    if old_logo_path
-                    else "School logo saved successfully."
-                )
-                st.rerun()
+                    logo_config = get_template_config(
+                        selected_template
+                    )
 
-            except Exception as e:
-                st.error("Could not save/replace school logo.")
-                st.code(str(e))
+                    for logo_key in [
+                        "school_logo_path",
+                        "logo_path",
+                        "school_logo",
+                        "logo"
+                    ]:
+                        logo_config.pop(logo_key, None)
 
-        if current_logo_path and st.button(
-            "🗑️ Delete School Logo",
-            use_container_width=True,
-            key=f"delete_report_school_logo_{selected_template['id']}"
-        ):
-            try:
-                try:
                     (
-                        sb.storage
-                        .from_("school-assets")
-                        .remove([current_logo_path])
+                        sb.table("print_templates")
+                        .update({
+                            "config_json": json.dumps(
+                                logo_config
+                            ),
+                            "updated_at":
+                                datetime.datetime.now(
+                                    datetime.timezone.utc
+                                ).isoformat()
+                        })
+                        .eq(
+                            "id",
+                            selected_template["id"]
+                        )
+                        .execute()
                     )
-                except Exception:
-                    pass
 
-                logo_config = get_template_config(
-                    selected_template
-                )
+                    st.success("School logo deleted successfully.")
+                    st.rerun()
 
-                for logo_key in [
-                    "school_logo_path",
-                    "logo_path",
-                    "school_logo",
-                    "logo"
-                ]:
-                    logo_config.pop(logo_key, None)
-
-                (
-                    sb.table("print_templates")
-                    .update({
-                        "config_json": json.dumps(
-                            logo_config
-                        ),
-                        "updated_at":
-                            datetime.datetime.now(
-                                datetime.timezone.utc
-                            ).isoformat()
-                    })
-                    .eq(
-                        "id",
-                        selected_template["id"]
-                    )
-                    .execute()
-                )
-
-                st.success("School logo deleted successfully.")
-                st.rerun()
-
-            except Exception as e:
-                st.error("Could not delete school logo.")
-                st.code(str(e))
+                except Exception as e:
+                    st.error("Could not delete school logo.")
+                    st.code(str(e))
 
     orientation = (
         selected_template.get("orientation")
