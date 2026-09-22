@@ -1514,15 +1514,29 @@ def students():
             st.info("No students found in your assigned class.")
             return
 
+        # The checkbox and dropdown work together:
+        # - Turning Select All ON selects every student.
+        # - Turning it OFF clears the selection.
+        # - After that, the teacher can freely select individual students
+        #   from the dropdown without the checkbox forcing all students again.
         select_all = st.checkbox(
             "☑️ Select All Students",
             key="teacher_select_all_students"
         )
 
-        if select_all:
-            st.session_state["teacher_selected_students"] = list(student_labels.keys())
-        elif st.session_state.get("teacher_selected_students"):
+        previous_select_all = st.session_state.get(
+            "teacher_select_all_students_previous",
+            False
+        )
+
+        if select_all and not previous_select_all:
+            st.session_state["teacher_selected_students"] = list(
+                student_labels.keys()
+            )
+        elif not select_all and previous_select_all:
             st.session_state["teacher_selected_students"] = []
+
+        st.session_state["teacher_select_all_students_previous"] = select_all
 
         selected_labels = st.multiselect(
             "🎓 Select Students",
@@ -6879,6 +6893,8 @@ def dashboard():
 
         st.title("🛠️ Admin Dashboard")
 
+        # Admin has full access to every Teacher module and
+        # also retains all Admin-only management functions.
         menu = st.radio(
             "Management",
             [
