@@ -386,7 +386,6 @@ def users():
     st.header("👥 User Management")
 
     try:
-
         school_data = (
             sb.table("schools")
             .select("id,name,code,active")
@@ -394,9 +393,7 @@ def users():
             .execute()
             .data or []
         )
-
     except Exception as e:
-
         st.error(str(e))
         return
 
@@ -414,37 +411,43 @@ def users():
         for x in active_schools
     }
 
-    with st.expander(
-        "➕ Create User",
-        expanded=True
-    ):
+    # -----------------------------------------------------
+    # CREATE USER
+    # -----------------------------------------------------
+    with st.expander("➕ Create User", expanded=True):
 
         selected_school = st.selectbox(
             "School",
-            list(school_map.keys())
+            list(school_map.keys()),
+            key="create_user_school"
         )
 
-        name = st.text_input("Full Name")
-        email = st.text_input("Email")
+        name = st.text_input(
+            "Full Name",
+            key="create_user_name"
+        )
+
+        email = st.text_input(
+            "Email",
+            key="create_user_email"
+        )
 
         password = st.text_input(
             "Password",
-            type="password"
+            type="password",
+            key="create_user_password"
         )
 
         role = st.selectbox(
             "Role",
-            [
-                "Admin",
-                "Teacher",
-                "Student",
-                "Parent"
-            ]
+            ["Admin", "Teacher", "Student", "Parent"],
+            key="create_user_role"
         )
 
         if st.button(
             "👤 Create User",
-            use_container_width=True
+            use_container_width=True,
+            key="create_user_button"
         ):
 
             if not name.strip():
@@ -460,21 +463,16 @@ def users():
                 return
 
             if len(password) < 6:
-                st.warning(
-                    "Password must be at least 6 characters."
-                )
+                st.warning("Password must be at least 6 characters.")
                 return
 
             token = st.session_state.access_token
 
             if not token:
-                st.error(
-                    "Session expired. Logout and login again."
-                )
+                st.error("Session expired. Logout and login again.")
                 return
 
             try:
-
                 response = requests.post(
                     CREATE_USER,
                     json={
@@ -482,9 +480,7 @@ def users():
                         "password": password,
                         "full_name": name.strip(),
                         "role": role,
-                        "school_id": school_map[
-                            selected_school
-                        ]
+                        "school_id": school_map[selected_school]
                     },
                     headers={
                         "Authorization": f"Bearer {token}",
@@ -495,45 +491,32 @@ def users():
                 )
 
                 if 200 <= response.status_code < 300:
-
-                    st.success(
-                        "User created successfully."
-                    )
+                    st.success("✅ User created successfully.")
                     st.rerun()
                 else:
-
                     st.error(
-                        f"Create-User failed: "
-                        f"HTTP {response.status_code}"
+                        f"Create-User failed: HTTP {response.status_code}"
                     )
-
                     st.code(response.text)
 
             except Exception as e:
-
-                st.error(
-                    "Could not connect to Create-User."
-                )
-
+                st.error("Could not connect to Create-User.")
                 st.code(str(e))
 
     st.divider()
-
     st.subheader("📋 Existing Users")
 
     try:
-
         user_data = (
             sb.table("profiles")
             .select(
                 "id,email,full_name,role,active,school_id"
             )
+            .order("full_name")
             .execute()
             .data or []
         )
-
     except Exception as e:
-
         st.error(str(e))
         return
 
@@ -542,6 +525,9 @@ def users():
         for x in school_data
     }
 
+    # -----------------------------------------------------
+    # MODIFY USERS
+    # -----------------------------------------------------
     for user in user_data:
 
         user_id = user["id"]
@@ -552,20 +538,16 @@ def users():
             c1, c2, c3 = st.columns([3, 2, 1])
 
             with c1:
-
                 st.write(
                     user.get("full_name")
                     or user.get("email")
                 )
-
                 st.caption(user.get("email"))
 
             with c2:
-
                 st.write(
                     f"Role: **{user.get('role')}**"
                 )
-
                 st.caption(
                     school_names.get(
                         str(user.get("school_id")),
@@ -574,14 +556,11 @@ def users():
                 )
 
             with c3:
-
                 if st.button(
                     "Deactivate" if active else "Activate",
                     key=f"user_status_{user_id}"
                 ):
-
                     try:
-
                         (
                             sb.table("profiles")
                             .update({
@@ -590,11 +569,102 @@ def users():
                             .eq("id", user_id)
                             .execute()
                         )
+                        st.success("✅ User status saved successfully.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Could not update user status.")
+                        st.code(str(e))
 
+            with st.expander("✏️ Modify User"):
+
+                edit_name = st.text_input(
+                    "Full Name",
+                    value=user.get("full_name") or "",
+                    key=f"edit_user_name_{user_id}"
+                )
+
+                edit_role = st.selectbox(
+                    "Role",
+                    ["Admin", "Teacher", "Student", "Parent"],
+                    index=(
+                        ["Admin", "Teacher", "Student", "Parent"].index(
+                            user.get("role")
+                        )
+                        if user.get("role") in
+                        ["Admin", "Teacher", "Student", "Parent"]
+                        else 0
+                    ),
+                    key=f"edit_user_role_{user_id}"
+                )
+
+                current_school_id = str(
+                    user.get("school_id") or ""
+                )
+
+                school_labels = list(school_map.keys())
+
+                current_school_label = next(
+                    (
+                        label
+                        for label, sid in school_map.items()
+                        if str(sid) == current_school_id
+                    ),
+                    school_labels[0]
+                )
+
+                edit_school_label = st.selectbox(
+                    "School",
+                    school_labels,
+                    index=school_labels.index(
+                        current_school_label
+                    ),
+                    key=f"edit_user_school_{user_id}"
+                )
+
+                st.text_input(
+                    "Email",
+                    value=user.get("email") or "",
+                    disabled=True,
+                    key=f"edit_user_email_{user_id}"
+                )
+
+                st.caption(
+                    "Email is the login email and is not changed here."
+                )
+
+                if st.button(
+                    "💾 Save User Changes",
+                    key=f"save_user_{user_id}",
+                    use_container_width=True
+                ):
+
+                    if not edit_name.strip():
+                        st.warning("Full Name is required.")
+                        continue
+
+                    try:
+                        (
+                            sb.table("profiles")
+                            .update({
+                                "full_name": edit_name.strip(),
+                                "role": edit_role,
+                                "school_id": school_map[
+                                    edit_school_label
+                                ]
+                            })
+                            .eq("id", user_id)
+                            .execute()
+                        )
+
+                        st.session_state["saved_user_changes"] = True
                         st.rerun()
 
                     except Exception as e:
-                        st.error(str(e))
+                        st.error("Could not save user changes.")
+                        st.code(str(e))
+
+    if st.session_state.pop("saved_user_changes", False):
+        st.success("✅ User changes saved successfully.")
 
 
 # =========================================================
@@ -1691,6 +1761,9 @@ def classes_subjects():
                     st.error("Could not add class.")
                     st.code(str(e))
 
+    if st.session_state.pop("saved_class_changes", False):
+        st.success("✅ Class teacher / class changes saved successfully.")
+
     st.divider()
 
     st.caption(
@@ -1780,6 +1853,55 @@ def classes_subjects():
                     except Exception as e:
                         st.error(str(e))
 
+            if role in ["SuperAdmin", "Admin"]:
+                current_teacher_id = class_item.get("class_teacher_id")
+                current_teacher_label = "Not Assigned"
+
+                for label, teacher_id in teacher_options.items():
+                    if teacher_id and str(teacher_id) == str(current_teacher_id):
+                        current_teacher_label = label
+                        break
+
+                assignment_label = st.selectbox(
+                    "👨‍🏫 Assign Class Teacher",
+                    list(teacher_options.keys()),
+                    index=list(teacher_options.keys()).index(
+                        current_teacher_label
+                    ),
+                    key=f"assign_teacher_{class_id}"
+                )
+
+                if st.button(
+                    "💾 Save Class Teacher",
+                    key=f"save_teacher_{class_id}",
+                    use_container_width=True
+                ):
+                    try:
+                        (
+                            sb.table("classes")
+                            .update({
+                                "class_teacher_id":
+                                    teacher_options[assignment_label],
+                                "updated_at":
+                                    datetime.datetime.now(
+                                        datetime.timezone.utc
+                                    ).isoformat()
+                            })
+                            .eq("id", class_id)
+                            .execute()
+                        )
+
+                        st.session_state["saved_class_changes"] = True
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error(
+                            "Could not assign Class Teacher. "
+                            "Make sure the classes table has the "
+                            "class_teacher_id column."
+                        )
+                        st.code(str(e))
+
             with st.expander("✏️ Edit Class"):
 
                 edit_class_name = st.text_input(
@@ -1844,14 +1966,14 @@ def classes_subjects():
                                 teacher_options[selected_teacher_label]
                             )
 
-                        (
+                        update_result = (
                             sb.table("classes")
                             .update(class_update_record)
                             .eq("id", class_id)
                             .execute()
                         )
 
-                        st.success("Class updated.")
+                        st.session_state["saved_class_changes"] = True
                         st.rerun()
 
                     except Exception as e:
@@ -5331,7 +5453,6 @@ def dashboard():
             "Management",
             [
                 "🎓 Students",
-                "📚 Classes & Subjects",
                 "📝 Marks",
                 "📅 Attendance",
                 "🖨️ Print Templates",
@@ -5343,9 +5464,6 @@ def dashboard():
 
         if menu == "🎓 Students":
             students()
-
-        elif menu == "📚 Classes & Subjects":
-            classes_subjects()
 
         elif menu == "📝 Marks":
             bulk_marks()
