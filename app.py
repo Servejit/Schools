@@ -497,8 +497,7 @@ def users():
                 if 200 <= response.status_code < 300:
 
                     st.success(
-                        "User created successfully."                    )
-                    st.rerun()
+                        "User created successfully."                    )                    st.rerun()
 
                 else:
 
@@ -997,8 +996,7 @@ def students():
                 "created_at,updated_at"
             )
             .eq("school_id", school_id)            .order("name")
-            .execute()
-            .data or []
+            .execute()            .data or []
         )
 
     except Exception as e:
@@ -1495,10 +1493,10 @@ def classes_subjects():
     except Exception as e:
 
         st.error("Could not load classes.")
-        st.code(str(e))        return
+        st.code(str(e))
+        return
 
-    with st.expander(
-        "➕ Add New Class",
+    with st.expander(        "➕ Add New Class",
         expanded=True
     ):
 
@@ -1997,8 +1995,7 @@ def classes_subjects():
                 )
                 new_subject_code = st.text_input(
                     "Subject Code",
-                    placeholder="Example: MATH",
-                    key=f"new_subject_code_{class_id}"
+                    placeholder="Example: MATH",                    key=f"new_subject_code_{class_id}"
                 )
 
                 sc1, sc2 = st.columns(2)
@@ -2497,7 +2494,6 @@ def bulk_marks():
                 })
 
         if errors:
-
             st.error(
                 "Please correct these errors:"
             )
@@ -2998,7 +2994,6 @@ def print_templates():
             if new_active != active:
 
                 try:
-
                     (
                         sb.table("print_templates")
                         .update({
@@ -3498,7 +3493,6 @@ def create_report_overlay(
     # -----------------------------------------------------
 
     detail_y = info_y - 35
-
     details = [
 
         (
@@ -3997,7 +3991,6 @@ def make_report_card_pdf(
         present_days=present_days,
         school_logo_path=school_logo_path
     )
-
     overlay_doc = fitz.open(
         stream=overlay_bytes,
         filetype="pdf"
@@ -4497,8 +4490,7 @@ def report_cards():
         return
 
     # -----------------------------------------------------
-    # EXAMS
-    # -----------------------------------------------------
+    # EXAMS    # -----------------------------------------------------
 
     try:
 
@@ -4997,8 +4989,7 @@ def report_cards():
 
 
 # =========================================================
-# DASHBOARD
-# =========================================================
+# DASHBOARD# =========================================================
 
 def dashboard():
 
