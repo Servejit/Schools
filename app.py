@@ -1911,20 +1911,6 @@ def classes_subjects():
     if not school_id:
         return
 
-    # Teachers can see only classes where they are the Class Teacher.
-    if role == "Teacher":
-        try:
-            class_data = [
-                x for x in class_data
-                if str(x.get("class_teacher_id")) == str(st.session_state.user.id)
-            ]
-        except Exception:
-            class_data = []
-
-        if not class_data:
-            st.info("No class has been assigned to you as Class Teacher yet.")
-            return
-
     st.divider()
 
     st.subheader("📚 Classes")
@@ -1950,6 +1936,16 @@ def classes_subjects():
         st.error("Could not load classes.")
         st.code(str(e))
         return
+
+    # Teachers can see only classes where they are the Class Teacher.
+    if role == "Teacher":
+        class_data = [
+            x for x in class_data
+            if str(x.get("class_teacher_id")) == str(st.session_state.user.id)
+        ]
+        if not class_data:
+            st.info("No class has been assigned to you as Class Teacher yet.")
+            return
 
     # -----------------------------------------------------
     # CLASS TEACHER ASSIGNMENT
@@ -2080,7 +2076,7 @@ def classes_subjects():
                         st.error("Could not add class.")
                         st.code(str(e))
     
-        if st.session_state.pop("saved_class_changes", False):
+    if st.session_state.pop("saved_class_changes", False):
         st.success("✅ Class teacher / class changes saved successfully.")
 
     st.divider()
@@ -2147,7 +2143,7 @@ def classes_subjects():
 
             with c3:
 
-                if st.button(
+                if role in ["SuperAdmin", "Admin"] and st.button(
                     "Deactivate" if active else "Activate",
                     key=f"class_active_{class_id}"
                 ):
@@ -2221,114 +2217,115 @@ def classes_subjects():
                         )
                         st.code(str(e))
 
-            with st.expander("✏️ Edit Class"):
-
-                edit_class_name = st.text_input(
-                    "Class Name",
-                    value=class_title,
-                    key=f"edit_class_name_{class_id}"
-                )
-
-                edit_section = st.text_input(
-                    "Section",
-                    value=class_item.get("section") or "",
-                    key=f"edit_class_section_{class_id}"
-                )
-
-                edit_year = st.text_input(
-                    "Academic Year",
-                    value=class_item.get("academic_year") or "",
-                    key=f"edit_class_year_{class_id}"
-                )
-
-                selected_teacher_label = None
-
-                if role in ["SuperAdmin", "Admin"]:
-                    teacher_labels = list(teacher_options.keys())
-                    current_teacher_id = class_item.get("class_teacher_id")
-                    current_teacher_label = "Not Assigned"
-
-                    for label, teacher_id in teacher_options.items():
-                        if teacher_id and str(teacher_id) == str(current_teacher_id):
-                            current_teacher_label = label
-                            break
-
-                    selected_teacher_label = st.selectbox(
-                        "👨‍🏫 Class Teacher",
-                        teacher_labels,
-                        index=teacher_labels.index(current_teacher_label),
-                        key=f"edit_class_teacher_{class_id}"
+            if role in ["SuperAdmin", "Admin"]:
+                with st.expander("✏️ Edit Class"):
+    
+                    edit_class_name = st.text_input(
+                        "Class Name",
+                        value=class_title,
+                        key=f"edit_class_name_{class_id}"
                     )
-
-                if st.button(
-                    "💾 Save Class",
-                    key=f"save_class_{class_id}"
-                ):
-
-                    try:
-
-                        class_update_record = {
-                            "class_name":
-                                edit_class_name.strip(),
-                            "section":
-                                edit_section.strip(),
-                            "academic_year":
-                                edit_year.strip(),
-                            "updated_at":
-                                datetime.datetime.now(
-                                    datetime.timezone.utc
-                                ).isoformat()
-                        }
-
-                        if role in ["SuperAdmin", "Admin"]:
-                            class_update_record["class_teacher_id"] = (
-                                teacher_options[selected_teacher_label]
+    
+                    edit_section = st.text_input(
+                        "Section",
+                        value=class_item.get("section") or "",
+                        key=f"edit_class_section_{class_id}"
+                    )
+    
+                    edit_year = st.text_input(
+                        "Academic Year",
+                        value=class_item.get("academic_year") or "",
+                        key=f"edit_class_year_{class_id}"
+                    )
+    
+                    selected_teacher_label = None
+    
+                    if role in ["SuperAdmin", "Admin"]:
+                        teacher_labels = list(teacher_options.keys())
+                        current_teacher_id = class_item.get("class_teacher_id")
+                        current_teacher_label = "Not Assigned"
+    
+                        for label, teacher_id in teacher_options.items():
+                            if teacher_id and str(teacher_id) == str(current_teacher_id):
+                                current_teacher_label = label
+                                break
+    
+                        selected_teacher_label = st.selectbox(
+                            "👨‍🏫 Class Teacher",
+                            teacher_labels,
+                            index=teacher_labels.index(current_teacher_label),
+                            key=f"edit_class_teacher_{class_id}"
+                        )
+    
+                    if st.button(
+                        "💾 Save Class",
+                        key=f"save_class_{class_id}"
+                    ):
+    
+                        try:
+    
+                            class_update_record = {
+                                "class_name":
+                                    edit_class_name.strip(),
+                                "section":
+                                    edit_section.strip(),
+                                "academic_year":
+                                    edit_year.strip(),
+                                "updated_at":
+                                    datetime.datetime.now(
+                                        datetime.timezone.utc
+                                    ).isoformat()
+                            }
+    
+                            if role in ["SuperAdmin", "Admin"]:
+                                class_update_record["class_teacher_id"] = (
+                                    teacher_options[selected_teacher_label]
+                                )
+    
+                            update_result = (
+                                sb.table("classes")
+                                .update(class_update_record)
+                                .eq("id", class_id)
+                                .execute()
                             )
-
-                        update_result = (
-                            sb.table("classes")
-                            .update(class_update_record)
-                            .eq("id", class_id)
-                            .execute()
-                        )
-
-                        st.session_state["saved_class_changes"] = True
-                        st.rerun()
-
-                    except Exception as e:
-
-                        st.error(
-                            "Could not update class."
-                        )
-
-                        st.code(str(e))
-
-                if st.button(
-                    "🗑️ Delete Class",
-                    key=f"delete_class_{class_id}"
-                ):
-
-                    try:
-
-                        (
-                            sb.table("classes")
-                            .delete()
-                            .eq("id", class_id)
-                            .execute()
-                        )
-
-                        st.success("Class deleted.")
-                        st.rerun()
-
-                    except Exception as e:
-
-                        st.error(
-                            "Could not delete class."
-                        )
-
-                        st.code(str(e))
-
-            st.markdown("#### 📖 Subjects")
+    
+                            st.session_state["saved_class_changes"] = True
+                            st.rerun()
+    
+                        except Exception as e:
+    
+                            st.error(
+                                "Could not update class."
+                            )
+    
+                            st.code(str(e))
+    
+                    if st.button(
+                        "🗑️ Delete Class",
+                        key=f"delete_class_{class_id}"
+                    ):
+    
+                        try:
+    
+                            (
+                                sb.table("classes")
+                                .delete()
+                                .eq("id", class_id)
+                                .execute()
+                            )
+    
+                            st.success("Class deleted.")
+                            st.rerun()
+    
+                        except Exception as e:
+    
+                            st.error(
+                                "Could not delete class."
+                            )
+    
+                            st.code(str(e))
+    
+                st.markdown("#### 📖 Subjects")
 
             try:
 
