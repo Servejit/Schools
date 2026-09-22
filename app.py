@@ -803,7 +803,7 @@ def students():
 
             st.success(
                 f"Assigned Class(es): {len(assigned_class_keys)}. "
-                "You can only see and change students in these classes."
+                "You have full control over students in these classes except deleting students."
             )
         except Exception as e:
             st.error("Could not load your assigned classes.")
@@ -1164,55 +1164,49 @@ def students():
                 else:
                     st.error("INACTIVE")
 
-                if st.button(
-                    "🗑️ Delete",
-                    key=f"delete_student_{student_id}"
-                ):
+                if role in ["SuperAdmin", "Admin"]:
+                    if st.button(
+                        "🗑️ Delete",
+                        key=f"delete_student_{student_id}"
+                    ):
 
-                    if role == "Teacher" and (
-                        str(student.get("class_name") or "").strip().lower(),
-                        str(student.get("section") or "").strip().lower()
-                    ) not in assigned_class_keys:
-                        st.error("You can only change students assigned to your class.")
-                        return
+                        try:
 
-                    try:
+                            paths_to_delete = []
 
-                        paths_to_delete = []
+                            for field in [
+                                "photo_path",
+                                "teacher_signature_path",
+                                "principal_signature_path"
+                            ]:
 
-                        for field in [
-                            "photo_path",
-                            "teacher_signature_path",
-                            "principal_signature_path"
-                        ]:
+                                path = student.get(field)
 
-                            path = student.get(field)
+                                if path:
+                                    paths_to_delete.append(path)
 
-                            if path:
-                                paths_to_delete.append(path)
+                            if paths_to_delete:
 
-                        if paths_to_delete:
+                                (
+                                    sb.storage
+                                    .from_("school-assets")
+                                    .remove(paths_to_delete)
+                                )
 
                             (
-                                sb.storage
-                                .from_("school-assets")
-                                .remove(paths_to_delete)
+                                sb.table("students")
+                                .delete()
+                                .eq("id", student_id)
+                                .execute()
                             )
 
-                        (
-                            sb.table("students")
-                            .delete()
-                            .eq("id", student_id)
-                            .execute()
-                        )
+                            st.success("Student deleted.")
+                            st.rerun()
 
-                        st.success("Student deleted.")
-                        st.rerun()
+                        except Exception as e:
 
-                    except Exception as e:
-
-                        st.error("Delete failed.")
-                        st.code(str(e))
+                            st.error("Delete failed.")
+                            st.code(str(e))
 
             # -------------------------------------------------
             # MODIFY
@@ -1591,11 +1585,12 @@ def classes_subjects():
         label = f"{teacher.get('full_name') or 'Teacher'} — {teacher.get('email') or ''}"
         teacher_options[label] = teacher["id"]
 
-    with st.expander("👨‍🏫 Assign Class Teachers"):
-        st.caption("Assign one class teacher to each class. Teachers will only see students from their assigned classes.")
+    if role in ["SuperAdmin", "Admin"]:
+        with st.expander("👨‍🏫 Assign Class Teachers"):
+            st.caption("Assign one class teacher to each class. Teachers will only see students from their assigned classes.")
 
-        if not teacher_data:
-            st.info("Create an active Teacher account first.")
+            if not teacher_data:
+                st.info("Create an active Teacher account first.")
 
     with st.expander(        "➕ Add New Class",
         expanded=True    ):
@@ -1803,20 +1798,24 @@ def classes_subjects():
                     key=f"edit_class_year_{class_id}"
                 )
 
-                teacher_labels = list(teacher_options.keys())
-                current_teacher_id = class_item.get("class_teacher_id")
-                current_teacher_label = "Not Assigned"
-                for label, teacher_id in teacher_options.items():
-                    if teacher_id and str(teacher_id) == str(current_teacher_id):
-                        current_teacher_label = label
-                        break
+                selected_teacher_label = None
 
-                selected_teacher_label = st.selectbox(
-                    "👨‍🏫 Class Teacher",
-                    teacher_labels,
-                    index=teacher_labels.index(current_teacher_label),
-                    key=f"edit_class_teacher_{class_id}"
-                )
+                if role in ["SuperAdmin", "Admin"]:
+                    teacher_labels = list(teacher_options.keys())
+                    current_teacher_id = class_item.get("class_teacher_id")
+                    current_teacher_label = "Not Assigned"
+
+                    for label, teacher_id in teacher_options.items():
+                        if teacher_id and str(teacher_id) == str(current_teacher_id):
+                            current_teacher_label = label
+                            break
+
+                    selected_teacher_label = st.selectbox(
+                        "👨‍🏫 Class Teacher",
+                        teacher_labels,
+                        index=teacher_labels.index(current_teacher_label),
+                        key=f"edit_class_teacher_{class_id}"
+                    )
 
                 if st.button(
                     "💾 Save Class",
@@ -1825,22 +1824,27 @@ def classes_subjects():
 
                     try:
 
+                        class_update_record = {
+                            "class_name":
+                                edit_class_name.strip(),
+                            "section":
+                                edit_section.strip(),
+                            "academic_year":
+                                edit_year.strip(),
+                            "updated_at":
+                                datetime.datetime.now(
+                                    datetime.timezone.utc
+                                ).isoformat()
+                        }
+
+                        if role in ["SuperAdmin", "Admin"]:
+                            class_update_record["class_teacher_id"] = (
+                                teacher_options[selected_teacher_label]
+                            )
+
                         (
                             sb.table("classes")
-                            .update({
-                                "class_name":
-                                    edit_class_name.strip(),
-                                "section":
-                                    edit_section.strip(),
-                                "academic_year":
-                                    edit_year.strip(),
-                                "class_teacher_id":
-                                    teacher_options[selected_teacher_label],
-                                "updated_at":
-                                    datetime.datetime.now(
-                                        datetime.timezone.utc
-                                    ).isoformat()
-                            })
+                            .update(class_update_record)
                             .eq("id", class_id)
                             .execute()
                         )
