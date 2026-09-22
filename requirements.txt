@@ -1,5 +1,6 @@
 streamlit
 supabase
+requests
 pandas
 openpyxl
 reportlab
