@@ -3172,11 +3172,15 @@ def attendance():
 def get_template_config(template):
 
     try:
+        value = template.get("config_json")
 
-        if template.get("config_json"):
-            return json.loads(
-                template["config_json"]
-            )
+        if isinstance(value, dict):
+            return dict(value)
+
+        if isinstance(value, str) and value.strip():
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
 
     except Exception:
         pass
@@ -3247,7 +3251,19 @@ def attendance_summary(student_id, school_id):
 
 
 def school_logo_from_template(template):
-    return get_template_config(template).get("school_logo_path")
+    config = get_template_config(template)
+
+    for key in [
+        "school_logo_path",
+        "logo_path",
+        "school_logo",
+        "logo"
+    ]:
+        value = config.get(key)
+        if value:
+            return str(value).strip()
+
+    return None
 
 
 def pdf_page_size(orientation):
@@ -3413,13 +3429,13 @@ def create_report_overlay(
             if logo_bytes:
                 logo_image = Image.open(
                     io.BytesIO(logo_bytes)
-                ).convert("RGB")
+                ).convert("RGBA")
 
                 from PIL import ImageOps
 
-                logo_image = ImageOps.contain(
-                    logo_image,
-                    (55, 55)
+                logo_image.thumbnail(
+                    (58, 58),
+                    Image.Resampling.LANCZOS
                 )
 
                 logo_buffer = io.BytesIO()
@@ -3429,17 +3445,37 @@ def create_report_overlay(
                 )
                 logo_buffer.seek(0)
 
+                # Fixed logo box on the left; keep the logo fully visible.
+                logo_box_x = left
+                logo_box_y = height - 105
+                logo_box_w = 62
+                logo_box_h = 62
+
+                pdf.setStrokeColorRGB(
+                    0.75, 0.75, 0.75
+                )
+                pdf.rect(
+                    logo_box_x,
+                    logo_box_y,
+                    logo_box_w,
+                    logo_box_h,
+                    stroke=1,
+                    fill=0
+                )
+
                 pdf.drawImage(
                     ImageReader(logo_buffer),
-                    left,
-                    height - 100,
-                    width=55,
-                    height=55,
+                    logo_box_x + 2,
+                    logo_box_y + 2,
+                    width=logo_box_w - 4,
+                    height=logo_box_h - 4,
                     preserveAspectRatio=True,
                     anchor="c",
                     mask="auto"
                 )
+
         except Exception:
+            # Never let a missing logo prevent report generation.
             pass
 
     pdf.setFont(
@@ -3620,13 +3656,6 @@ def create_report_overlay(
     result_col = table_width * 0.14
     grade_col = table_width * 0.18
 
-    row_height = 21
-
-    pdf.setFont(
-        "Helvetica-Bold",
-        9
-    )
-
     headers = [
         "Subject",
         "Max Marks",
@@ -3643,6 +3672,31 @@ def create_report_overlay(
         table_x + subject_col + max_col + marks_col + result_col
     ]
 
+    # Dynamically shrink rows when there are many subjects so that
+    # every subject remains visible on the A4 report card.
+    subject_count = max(1, len(marks_rows))
+    reserved_bottom = remarks_y + 75
+    available_height = max(
+        120,
+        table_top - reserved_bottom - 38
+    )
+
+    row_height = min(
+        21,
+        max(
+            10,
+            available_height / (subject_count + 1)
+        )
+    )
+
+    header_font = 9 if row_height >= 15 else 7.5
+    body_font = 8.5 if row_height >= 15 else 7
+
+    pdf.setFont(
+        "Helvetica-Bold",
+        header_font
+    )
+
     pdf.rect(
         table_x,
         table_top - row_height,
@@ -3651,18 +3705,17 @@ def create_report_overlay(
     )
 
     for i in range(1, 5):
-        x = x_positions[i]
         pdf.line(
-            x,
+            x_positions[i],
             table_top,
-            x,
+            x_positions[i],
             table_top - row_height
         )
 
     for i, header in enumerate(headers):
         pdf.drawString(
-            x_positions[i] + 5,
-            table_top - 14,
+            x_positions[i] + 4,
+            table_top - row_height + max(3, row_height / 2 - 3),
             header
         )
 
@@ -3673,57 +3726,60 @@ def create_report_overlay(
 
     pdf.setFont(
         "Helvetica",
-        8.5
+        body_font
     )
 
     for row in marks_rows:
 
         y -= row_height
 
-        subject_name = row.get(
-            "subject_name"
-        ) or row.get(
-            "name"
-        ) or "Subject"
-
-        mark_value = row.get("marks")
-
-        max_value = row.get(
-            "max_marks"
+        subject_name = (
+            row.get("subject_name")
+            or row.get("name")
+            or "Subject"
         )
 
-        try:
-            mark_number = float(
-                mark_value
-            )
-        except Exception:
-            mark_number = 0
+        mark_value = row.get("marks")
+        max_value = row.get("max_marks")
 
         try:
-            max_number = float(
-                max_value
-            )
+            mark_number = float(mark_value)
+            mark_display = f"{mark_number:g}"
+        except Exception:
+            mark_number = 0
+            mark_display = "-"
+
+        try:
+            max_number = float(max_value)
         except Exception:
             max_number = 100
 
         total_marks += mark_number
         total_max += max_number
 
-        passing = row.get(
-            "passing_marks"
-        )
+        passing = row.get("passing_marks")
 
         try:
-            passing_number = float(
-                passing
-            )
+            passing_number = float(passing)
         except Exception:
             passing_number = 0
 
         result = (
             "PASS"
-            if mark_number >= passing_number
-            else "FAIL"
+            if mark_value is not None and mark_number >= passing_number
+            else ("FAIL" if mark_value is not None else "-")
+        )
+
+        row_percentage = (
+            (mark_number / max_number) * 100
+            if max_number and mark_value is not None
+            else 0
+        )
+
+        grade = (
+            grade_from_percentage(row_percentage)
+            if mark_value is not None
+            else "-"
         )
 
         pdf.rect(
@@ -3734,56 +3790,55 @@ def create_report_overlay(
         )
 
         for i in range(1, 5):
-            x = x_positions[i]
             pdf.line(
-                x,
+                x_positions[i],
                 y,
-                x,
+                x_positions[i],
                 y + row_height
             )
 
-        row_percentage = (
-            (mark_number / max_number) * 100
-            if max_number
-            else 0
+        baseline = y + max(
+            3,
+            (row_height - body_font) / 2
         )
 
-        grade = grade_from_percentage(
-            row_percentage
+        # Keep long subject names visible instead of clipping them.
+        subject_text = str(subject_name)
+        if len(subject_text) > 30:
+            subject_text = subject_text[:29] + "…"
+
+        pdf.drawString(
+            table_x + 4,
+            baseline,
+            subject_text
         )
 
         pdf.drawString(
-            table_x + 5,
-            y + 6,
-            str(subject_name)[:34]
-        )
-
-        pdf.drawString(
-            x_positions[1] + 5,
-            y + 6,
+            x_positions[1] + 4,
+            baseline,
             f"{max_number:g}"
         )
 
         pdf.drawString(
-            x_positions[2] + 5,
-            y + 6,
-            f"{mark_number:g}"
+            x_positions[2] + 4,
+            baseline,
+            mark_display
         )
 
         pdf.drawString(
-            x_positions[3] + 5,
-            y + 6,
+            x_positions[3] + 4,
+            baseline,
             result
         )
 
         pdf.drawString(
-            x_positions[4] + 5,
-            y + 6,
+            x_positions[4] + 4,
+            baseline,
             grade
         )
 
     # -----------------------------------------------------
-    # Total / percentage
+    # Total / percentage / attendance
     # -----------------------------------------------------
 
     percentage = (
@@ -3792,11 +3847,11 @@ def create_report_overlay(
         else 0
     )
 
-    summary_y = y - 30
+    summary_y = y - 22
 
     pdf.setFont(
         "Helvetica-Bold",
-        10
+        9.5
     )
 
     pdf.drawString(
@@ -3806,7 +3861,7 @@ def create_report_overlay(
     )
 
     pdf.drawString(
-        table_x + 220,
+        table_x + table_width * 0.43,
         summary_y,
         f"Percentage: {percentage:.2f}%"
     )
@@ -3816,28 +3871,39 @@ def create_report_overlay(
     )
 
     pdf.drawString(
-        table_x + 390,
+        table_x + table_width * 0.76,
         summary_y,
         f"Grade: {overall_grade}"
     )
 
-    attendance_y = summary_y - 20
+    attendance_y = summary_y - 19
 
     pdf.setFont(
         "Helvetica-Bold",
         9
     )
 
+    # Three aligned fields: Total Attendance | Present Days | Percentage.
+    col_a = table_x
+    col_b = table_x + table_width * 0.34
+    col_c = table_x + table_width * 0.68
+
     pdf.drawString(
-        table_x,
+        col_a,
         attendance_y,
         f"Total Attendance: {int(total_attendance)}"
     )
 
     pdf.drawString(
-        table_x + 190,
+        col_b,
         attendance_y,
         f"Present Days: {int(present_days)}"
+    )
+
+    pdf.drawString(
+        col_c,
+        attendance_y,
+        f"Percentage: {percentage:.2f}%"
     )
 
     # -----------------------------------------------------
@@ -4206,12 +4272,13 @@ def report_cards():
                 ).upload(
                     logo_path,
                     uploaded_logo.getvalue(),
-                    {
+                    file_options={
                         "content-type": uploaded_logo.type,
                         "upsert": "true"
                     }
                 )
 
+                # Preserve the template's existing configuration.
                 logo_config = get_template_config(
                     selected_template
                 )
@@ -4477,40 +4544,64 @@ def report_cards():
 
             rows = []
 
-        result = []
+        marks_by_subject = {}
 
         for row in rows:
+            subject_id = row.get("subject_id")
+            if subject_id is not None:
+                marks_by_subject[str(subject_id)] = row
 
-            subject = subject_by_id.get(
-                str(row.get("subject_id"))
-            )
+        # Determine the student's class from the class_id used in their marks.
+        marked_class_ids = {
+            str(row.get("class_id"))
+            for row in rows
+            if row.get("class_id") is not None
+        }
 
-            if not subject:
+        result = []
+
+        for subject in subject_data:
+
+            subject_id = str(subject.get("id"))
+
+            # If marks contain a class_id, show all active subjects
+            # belonging to that class. Otherwise use only subjects
+            # that actually have a mark for this student.
+            if marked_class_ids:
+                if str(subject.get("class_id")) not in marked_class_ids:
+                    continue
+            elif subject_id not in marks_by_subject:
                 continue
 
-            combined = dict(row)
+            row = marks_by_subject.get(subject_id)
 
-            combined[
-                "subject_name"
-            ] = (
+            if row:
+                combined = dict(row)
+            else:
+                combined = {
+                    "id": None,
+                    "student_id": student["id"],
+                    "subject_id": subject.get("id"),
+                    "exam_name": exam_name,
+                    "marks": None,
+                    "max_marks": subject.get("max_marks"),
+                    "class_id": subject.get("class_id")
+                }
+
+            combined["subject_name"] = (
                 subject.get("subject_name")
                 or subject.get("name")
                 or "Subject"
             )
 
-            combined[
-                "passing_marks"
-            ] = (
+            combined["passing_marks"] = (
                 subject.get("passing_marks")
                 if subject.get("passing_marks") is not None
                 else 33
             )
 
             if combined.get("max_marks") is None:
-
-                combined[
-                    "max_marks"
-                ] = (
+                combined["max_marks"] = (
                     subject.get("max_marks")
                     if subject.get("max_marks") is not None
                     else 100
@@ -4518,7 +4609,6 @@ def report_cards():
 
             result.append(combined)
 
-        # Put subjects in subject order
         result.sort(
             key=lambda x: str(
                 x.get("subject_name") or ""
