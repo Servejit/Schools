@@ -919,6 +919,88 @@ def users():
 # GET ACTIVE SCHOOL
 # =========================================================
 
+# =========================================================
+# EXAM / ASSESSMENT SETTINGS
+# =========================================================
+
+def get_exam_assessments(school_id, active_only=True):
+    try:
+        query = sb.table("exam_assessments").select(
+            "id,school_id,name,active,created_at"
+        ).eq("school_id", school_id).order("name")
+        if active_only:
+            query = query.eq("active", True)
+        return query.execute().data or []
+    except Exception:
+        return []
+
+
+def exam_assessment_settings():
+    st.header("📝 Exam / Assessment Settings")
+    role = st.session_state.profile.get("role")
+    if role not in ["SuperAdmin", "Admin"]:
+        st.error("Only Admin can manage Exam / Assessment names.")
+        return
+
+    school_id = get_selected_school("exam_settings_school")
+    if not school_id:
+        return
+
+    exams = get_exam_assessments(school_id, active_only=False)
+
+    with st.expander("➕ Add Exam / Assessment", expanded=True):
+        new_name = st.text_input(
+            "Exam / Assessment Name",
+            placeholder="Example: PT1, Half Yearly, Annual",
+            key="new_exam_assessment_name"
+        ).strip()
+
+        if st.button("💾 Save Exam / Assessment", type="primary",
+                     use_container_width=True, key="save_exam_assessment"):
+            if not new_name:
+                st.warning("Enter an Exam / Assessment name.")
+                return
+            if any(
+                str(x.get("name") or "").strip().lower() == new_name.lower()
+                and x.get("active", True) for x in exams
+            ):
+                st.warning("This Exam / Assessment already exists.")
+                return
+            try:
+                sb.table("exam_assessments").insert({
+                    "school_id": school_id, "name": new_name, "active": True
+                }).execute()
+                st.success("Exam / Assessment saved successfully.")
+                st.rerun()
+            except Exception as e:
+                st.error("Could not save Exam / Assessment.")
+                st.code(str(e))
+
+    st.subheader("Existing Exam / Assessments")
+    for exam in exams:
+        exam_id = exam["id"]
+        active = exam.get("active", True)
+        with st.container(border=True):
+            c1, c2 = st.columns([4, 1])
+            with c1:
+                st.write(f"**{exam.get('name', '')}**")
+                st.caption("ACTIVE" if active else "INACTIVE")
+            with c2:
+                if st.button(
+                    "Deactivate" if active else "Activate",
+                    key=f"exam_status_{exam_id}"
+                ):
+                    try:
+                        sb.table("exam_assessments").update(
+                            {"active": not active}
+                        ).eq("id", exam_id).execute()
+                        st.success("Saved successfully.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Could not update Exam / Assessment.")
+                        st.code(str(e))
+
+
 def get_selected_school(key_prefix):
 
     profile = st.session_state.profile
@@ -1437,10 +1519,14 @@ def students():
             key="teacher_select_all_students"
         )
 
+        if select_all:
+            st.session_state["teacher_selected_students"] = list(student_labels.keys())
+        elif st.session_state.get("teacher_selected_students"):
+            st.session_state["teacher_selected_students"] = []
+
         selected_labels = st.multiselect(
             "🎓 Select Students",
             list(student_labels.keys()),
-            default=(list(student_labels.keys()) if select_all else []),
             placeholder="Select one or more students",
             key="teacher_selected_students"
         )
@@ -2860,15 +2946,20 @@ def bulk_marks():
         f"| Passing Marks: **{passing_marks:g}**"
     )
 
-    exam_name = st.text_input(
-        "📝 Exam / Assessment Name",
-        placeholder="Example: Half Yearly, Annual",
+    exam_options = get_exam_assessments(school_id)
+    if not exam_options:
+        st.warning("No Exam / Assessment has been created by Admin yet.")
+        return
+
+    exam_names = [
+        str(x.get("name") or "").strip()
+        for x in exam_options if x.get("name")
+    ]
+    exam_name = st.selectbox(
+        "📝 Exam / Assessment",
+        exam_names,
         key="marks_exam_name"
     ).strip()
-
-    if not exam_name:
-        st.info("Enter the Exam / Assessment name.")
-        return
 
     try:
         student_data = (
@@ -4314,10 +4405,11 @@ def report_cards():
         selected_template
     )
 
-    with st.expander(
-        "🏫 School Logo (Left Side)",
-        expanded=False
-    ):
+    if role in ["SuperAdmin", "Admin"]:
+        with st.expander(
+            "🏫 School Logo (Left Side)",
+            expanded=False
+        ):
         if current_logo_path:
             st.success("A school logo is currently saved.")
 
@@ -4615,40 +4707,18 @@ def report_cards():
         return
 
     # -----------------------------------------------------
-    # EXAMS    # -----------------------------------------------------
+    # EXAM / ASSESSMENT
+    # -----------------------------------------------------
 
-    try:
-
-        marks_exam_rows = (
-            sb.table("marks")
-            .select("exam_name")
-            .eq("school_id", school_id)            .execute()
-            .data or []
-        )
-
-    except Exception as e:
-
-        st.error(
-            "Could not load exams."
-        )
-
-        st.code(str(e))
+    exam_options = get_exam_assessments(school_id)
+    if not exam_options:
+        st.warning("No Exam / Assessment has been created by Admin yet.")
         return
 
-    exam_names = sorted({
-        str(x.get("exam_name"))
-        for x in marks_exam_rows
-        if x.get("exam_name")
-    })
-
-    if not exam_names:
-
-        st.warning(
-            "No marks/exams found. Enter marks first."
-        )
-
-        return
-
+    exam_names = [
+        str(x.get("name") or "").strip()
+        for x in exam_options if x.get("name")
+    ]
     exam_name = st.selectbox(
         "📝 Exam / Assessment",
         exam_names,
@@ -5194,7 +5264,9 @@ def dashboard():
             [
                 "🏫 Schools",
                 "👥 Users",
-                "🎓 Students",                "📚 Classes & Subjects",
+                "🎓 Students",
+                "📚 Classes & Subjects",
+                "📝 Exam / Assessment",
                 "📝 Marks",
                 "📅 Attendance",
                 "🖨️ Print Templates",
@@ -5212,6 +5284,9 @@ def dashboard():
 
         elif menu == "🎓 Students":
             students()
+
+        elif menu == "📝 Exam / Assessment":
+            exam_assessment_settings()
 
         elif menu == "📝 Marks":
             bulk_marks()
@@ -5243,6 +5318,7 @@ def dashboard():
             [
                 "🎓 Students",
                 "📚 Classes & Subjects",
+                "📝 Exam / Assessment",
                 "📝 Marks",
                 "📅 Attendance",
                 "🖨️ Print Templates",
@@ -5257,6 +5333,9 @@ def dashboard():
 
         elif menu == "📚 Classes & Subjects":
             classes_subjects()
+
+        elif menu == "📝 Exam / Assessment":
+            exam_assessment_settings()
 
         elif menu == "📝 Marks":
             bulk_marks()
@@ -5289,7 +5368,6 @@ def dashboard():
                 "🎓 Students",
                 "📝 Marks",
                 "📅 Attendance",
-                "🖨️ Print Templates",
                 "📄 Report Cards",
                 "📊 Reports"
             ],
@@ -5304,9 +5382,6 @@ def dashboard():
 
         elif menu == "📅 Attendance":
             attendance()
-
-        elif menu == "🖨️ Print Templates":
-            print_templates()
 
         elif menu == "📄 Report Cards":
             report_cards()
