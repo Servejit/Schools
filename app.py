@@ -497,8 +497,9 @@ def users():
                 if 200 <= response.status_code < 300:
 
                     st.success(
-                        "User created successfully."                    )                    st.rerun()
-
+                        "User created successfully."
+                    )
+                    st.rerun()
                 else:
 
                     st.error(
@@ -998,7 +999,6 @@ def students():
             .eq("school_id", school_id)            .order("name")
             .execute()            .data or []
         )
-
     except Exception as e:
 
         st.error("Could not load students.")
@@ -1497,8 +1497,7 @@ def classes_subjects():
         return
 
     with st.expander(        "➕ Add New Class",
-        expanded=True
-    ):
+        expanded=True    ):
 
         c1, c2, c3 = st.columns(3)
 
@@ -1997,7 +1996,6 @@ def classes_subjects():
                     "Subject Code",
                     placeholder="Example: MATH",                    key=f"new_subject_code_{class_id}"
                 )
-
                 sc1, sc2 = st.columns(2)
 
                 with sc1:
@@ -2497,7 +2495,6 @@ def bulk_marks():
             st.error(
                 "Please correct these errors:"
             )
-
             for error in errors:
                 st.error(error)
 
@@ -2997,8 +2994,7 @@ def print_templates():
                     (
                         sb.table("print_templates")
                         .update({
-                            "active": new_active,
-                            "updated_at":
+                            "active": new_active,                            "updated_at":
                                 datetime.datetime.now(
                                     datetime.timezone.utc
                                 ).isoformat()
@@ -3497,8 +3493,7 @@ def create_report_overlay(
 
         (
             "Student Name",
-            student.get("name") or "-"
-        ),
+            student.get("name") or "-"        ),
 
         (
             "Father Name",
@@ -3997,8 +3992,7 @@ def make_report_card_pdf(
     )
 
     # -----------------------------------------------------
-    # PDF template
-    # -----------------------------------------------------
+    # PDF template    # -----------------------------------------------------
 
     if file_type.lower() == "pdf":
 
@@ -4497,8 +4491,7 @@ def report_cards():
         marks_exam_rows = (
             sb.table("marks")
             .select("exam_name")
-            .eq("school_id", school_id)
-            .execute()
+            .eq("school_id", school_id)            .execute()
             .data or []
         )
 
@@ -4997,7 +4990,6 @@ def dashboard():
     role = profile.get("role")
 
     top1, top2 = st.columns([5, 1])
-
     with top1:
 
         st.caption(
