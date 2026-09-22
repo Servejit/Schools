@@ -4997,3 +4997,170 @@ def dashboard():
                 "📄 Report Cards",
                 "📊 Reports"
             ],
+            horizontal=True
+        )
+
+        if menu == "🎓 Students":
+            students()
+
+        elif menu == "📚 Classes & Subjects":
+            classes_subjects()
+
+        elif menu == "📝 Marks":
+            bulk_marks()
+
+        elif menu == "📅 Attendance":
+            attendance()
+
+        elif menu == "🖨️ Print Templates":
+            print_templates()
+
+        elif menu == "📄 Report Cards":
+            report_cards()
+
+        else:
+            st.info(
+                f"{menu} will be added next."
+            )
+
+    # =====================================================
+    # STUDENT
+    # =====================================================
+
+    elif role == "Student":
+
+        st.title("🎓 Student Dashboard")
+
+        try:
+
+            student = (
+                sb.table("students")
+                .select(
+                    "id,school_id,user_id,name,"
+                    "admission_no,class_name,section,"
+                    "date_of_birth,gender,father_name,"
+                    "parent_name,parent_phone,photo_path,"
+                    "remarks,active"
+                )
+                .eq(
+                    "user_id",
+                    st.session_state.user.id
+                )
+                .maybe_single()
+                .execute()
+                .data
+            )
+
+            if student:
+
+                photo_path = student.get(
+                    "photo_path"
+                )
+
+                if photo_path:
+
+                    try:
+
+                        photo_bytes = (
+                            sb.storage
+                            .from_("school-assets")
+                            .download(photo_path)
+                        )
+
+                        st.image(
+                            photo_bytes,
+                            width=140
+                        )
+
+                    except Exception:
+                        pass
+
+                st.subheader(
+                    student.get(
+                        "name",
+                        "Student"
+                    )
+                )
+
+                a, b, c = st.columns(3)
+
+                a.metric(
+                    "Class",
+                    student.get(
+                        "class_name",
+                        "-"
+                    )
+                )
+
+                b.metric(
+                    "Section",
+                    student.get(
+                        "section",
+                        "-"
+                    )
+                )
+
+                c.metric(
+                    "Admission No.",
+                    student.get(
+                        "admission_no",
+                        "-"
+                    )
+                )
+
+                st.write(
+                    "**Father Name:** "
+                    f"{student.get('father_name') or student.get('parent_name') or '-'}"
+                )
+
+                if student.get("remarks"):
+
+                    st.write(
+                        "**Remarks:** "
+                        f"{student.get('remarks')}"
+                    )
+
+            else:
+
+                st.info(
+                    "Your student record is not linked yet."
+                )
+
+        except Exception as e:
+
+            st.error(
+                "Could not load student information."
+            )
+
+            st.code(str(e))
+
+    # =====================================================
+    # PARENT
+    # =====================================================
+
+    elif role == "Parent":
+
+        st.title("👨‍👩‍👧 Parent Dashboard")
+
+        st.info(
+            "Parent modules will be added next."
+        )
+
+    else:
+
+        st.error(
+            f"Unknown role: {role}"
+        )
+
+
+# =========================================================
+# START
+# =========================================================
+
+if st.session_state.logged_in:
+
+    dashboard()
+
+else:
+
+    login()
