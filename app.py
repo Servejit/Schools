@@ -6110,15 +6110,21 @@ def report_cards():
 
         template_map[label] = template
 
-    selected_template_label = st.selectbox(
-        "🖨️ Select Active Report Card Template",
-        list(template_map.keys()),
-        key="report_template_select"
-    )
+    if role in ["SuperAdmin", "Admin"]:
+        selected_template_label = st.selectbox(
+            "🖨️ Select Active Report Card Template",
+            list(template_map.keys()),
+            key="report_template_select"
+        )
 
-    selected_template = template_map[
-        selected_template_label
-    ]
+        selected_template = template_map[
+            selected_template_label
+        ]
+    else:
+        # Teachers use the school's active Report Card template automatically.
+        # They do not get access to template selection or template management.
+        selected_template_label = next(iter(template_map.keys()))
+        selected_template = template_map[selected_template_label]
 
     current_logo_path = school_logo_from_template(
         selected_template
@@ -6378,15 +6384,19 @@ def report_cards():
         st.code(str(e))
         return
 
-    st.success(
-        f"Active template: "
-        f"{selected_template.get('template_name') or selected_template.get('name')}"
-    )
-
-    st.caption(
-        "The template is used as the A4 background. "
-        "Student information and marks are placed over it."
-    )
+    if role in ["SuperAdmin", "Admin"]:
+        st.success(
+            f"Active template: "
+            f"{selected_template.get('template_name') or selected_template.get('name')}"
+        )
+        st.caption(
+            "The template is used as the A4 background. "
+            "Student information and marks are placed over it."
+        )
+    else:
+        st.info(
+            "Report cards use the school's active Report Card template."
+        )
 
     st.divider()
 
@@ -6421,10 +6431,61 @@ def report_cards():
         st.code(str(e))
         return
 
+    if role == "Teacher":
+        try:
+            teacher_report_classes = (
+                sb.table("classes")
+                .select("class_name,section,academic_year")
+                .eq("school_id", school_id)
+                .eq("class_teacher_id", st.session_state.user.id)
+                .eq("active", True)
+                .order("class_name")
+                .order("section")
+                .execute()
+                .data or []
+            )
+        except Exception as e:
+            st.error("Could not load your Class Teacher classes.")
+            st.code(str(e))
+            return
+
+        assigned_pairs = {
+            (
+                str(x.get("class_name") or "").strip().lower(),
+                str(x.get("section") or "").strip().lower()
+            )
+            for x in teacher_report_classes
+        }
+
+        student_data = [
+            student for student in student_data
+            if (
+                str(student.get("class_name") or "").strip().lower(),
+                str(student.get("section") or "").strip().lower()
+            ) in assigned_pairs
+        ]
+
+        if teacher_report_classes:
+            class_labels = [
+                f"{x.get('class_name') or '-'} - Section {x.get('section') or '-'}"
+                for x in teacher_report_classes
+            ]
+            st.info(
+                "🏫 **Class Teacher Report Cards:** "
+                + "  |  ".join(class_labels)
+            )
+        else:
+            st.warning(
+                "You are not assigned as Class Teacher to any class."
+            )
+            return
+
     if not student_data:
 
         st.warning(
-            "No active students found."
+            "No active students found in your assigned Class Teacher class(es)."
+            if role == "Teacher"
+            else "No active students found."
         )
 
         return
