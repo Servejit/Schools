@@ -3141,7 +3141,7 @@ def attendance():
                 if old_id:
                     (
                         sb.table("attendance")
-                        .update({"present": present})
+                        .update({"present": status})
                         .eq("id", old_id)
                         .execute()
                     )
@@ -3152,7 +3152,7 @@ def attendance():
                             "school_id": school_id,
                             "student_id": sid,
                             "attendance_date": str(selected_date),
-                            "present": present
+                            "present": status
                         })
                         .execute()
                     )
