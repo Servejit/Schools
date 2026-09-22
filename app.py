@@ -3399,7 +3399,7 @@ def create_report_overlay(
 
     pdf.drawCentredString(
         width / 2,
-        height - 32,
+        height - 38,
         school_name
     )
 
@@ -3432,6 +3432,7 @@ def create_report_overlay(
 
                 # Use a larger logo while keeping it centered on
                 # the School Name row. The size can be adjusted in the UI.
+                # Match the logo height closely to the School Name row.
                 logo_size = max(
                     38,
                     min(60, int(school_logo_size or 50))
@@ -3449,12 +3450,12 @@ def create_report_overlay(
                 )
                 logo_buffer.seek(0)
 
-                # Left margin matches the report content margin.
-                # Vertically center the larger logo on the School Name row.
+                # Keep the same left margin and align the logo
+                # vertically with the lowered School Name.
                 logo_box_x = left
                 logo_box_w = logo_size
                 logo_box_h = logo_size
-                logo_center_y = height - 32
+                logo_center_y = height - 38
                 logo_box_y = (
                     logo_center_y
                     - (logo_box_h / 2)
