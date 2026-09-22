@@ -6976,477 +6976,370 @@ def report_cards():
 # REPORTS
 # =========================================================
 
-def reports():
-    st.header("📊 Reports")
 
-    role = st.session_state.profile.get("role")
-    if role not in ["SuperAdmin", "Admin", "Teacher"]:
-        st.error("You do not have permission to view reports.")
+def premium_feature_enabled(school_id, admin_id, feature_key):
+    if not school_id or not admin_id:
+        return False
+    try:
+        row = (
+            sb.table("premium_feature_access")
+            .select("active")
+            .eq("school_id", school_id)
+            .eq("admin_id", admin_id)
+            .eq("feature_key", feature_key)
+            .maybe_single().execute().data
+        )
+        return bool(row and row.get("active") is True)
+    except Exception:
+        return False
+
+
+def premium_feature_management():
+    st.header("💎 Premium Feature Management")
+    st.caption("SuperAdmin controls which Admin users can use premium features.")
+
+    try:
+        schools_data = (
+            sb.table("schools").select("id,name,code,active")
+            .order("name").execute().data or []
+        )
+        admin_data = (
+            sb.table("profiles").select("id,email,full_name,school_id,role,active")
+            .eq("role", "Admin").order("full_name").execute().data or []
+        )
+    except Exception as e:
+        st.error("Could not load premium feature settings.")
+        st.code(str(e))
         return
 
-    school_id = get_selected_school("reports_school")
-    if not school_id:
+    schools_map = {
+        f"{x.get('name') or '-'} ({x.get('code') or '-'})": x
+        for x in schools_data if x.get("active", True)
+    }
+    if not schools_map:
+        st.warning("No active schools available.")
         return
 
-    report_type = st.selectbox(
-        "📊 Report Type",
-        [
-            "Student Performance",
-            "Class Summary",
-            "Subject Summary",
-            "Attendance Summary"
-        ],
-        key="reports_type"
+    selected_school_label = st.selectbox(
+        "🏫 School", list(schools_map.keys()), key="premium_school"
     )
+    school_id = schools_map[selected_school_label]["id"]
+
+    school_admins = [
+        x for x in admin_data if str(x.get("school_id")) == str(school_id)
+    ]
+    if not school_admins:
+        st.info("No Admin users are assigned to this school.")
+        return
+
+    st.subheader("💎 School Academic Status")
+    st.caption("Activate or deactivate this premium feature separately for each Admin.")
+
+    for admin in school_admins:
+        admin_id = admin["id"]
+        try:
+            existing = (
+                sb.table("premium_feature_access")
+                .select("id,active")
+                .eq("school_id", school_id)
+                .eq("admin_id", admin_id)
+                .eq("feature_key", "school_academic_status")
+                .maybe_single().execute().data
+            )
+        except Exception:
+            existing = None
+
+        active = bool(existing and existing.get("active") is True)
+        label = admin.get("full_name") or admin.get("email") or "Admin"
+
+        with st.container(border=True):
+            c1, c2 = st.columns([4, 1])
+            with c1:
+                st.write(f"**{label}**")
+                st.caption(admin.get("email") or "")
+            with c2:
+                st.write("ACTIVE" if active else "DEACTIVATED")
+                if st.button(
+                    "Deactivate" if active else "Activate",
+                    key=f"premium_toggle_{school_id}_{admin_id}"
+                ):
+                    try:
+                        if existing:
+                            (
+                                sb.table("premium_feature_access")
+                                .update({"active": not active})
+                                .eq("id", existing["id"]).execute()
+                            )
+                        else:
+                            (
+                                sb.table("premium_feature_access")
+                                .insert({
+                                    "school_id": school_id,
+                                    "admin_id": admin_id,
+                                    "feature_key": "school_academic_status",
+                                    "active": True
+                                }).execute()
+                            )
+                        st.success("Premium feature setting saved.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Could not save premium feature setting.")
+                        st.code(str(e))
+
+
+def school_academic_status(school_id):
+    st.subheader("💎 School Academic Status")
+    st.caption("Premium academic performance analysis for the selected school.")
 
     try:
         class_data = (
             sb.table("classes")
             .select("id,class_name,section,academic_year,active")
-            .eq("school_id", school_id)
-            .eq("active", True)
-            .order("class_name")
-            .order("section")
-            .execute()
-            .data or []
+            .eq("school_id", school_id).eq("active", True)
+            .order("class_name").order("section").execute().data or []
         )
     except Exception as e:
         st.error("Could not load classes.")
         st.code(str(e))
         return
 
-    teacher_assignments = []
-    if role == "Teacher":
-        try:
-            teacher_assignments = (
-                sb.table("teacher_subject_assignments")
-                .select("class_id,subject_id")
-                .eq("school_id", school_id)
-                .eq("teacher_id", st.session_state.user.id)
-                .execute()
-                .data or []
-            )
-        except Exception as e:
-            st.error("Could not load teacher assignments.")
-            st.code(str(e))
-            return
-
-        assigned_class_ids = {
-            str(x.get("class_id")) for x in teacher_assignments
-        }
-        class_data = [
-            x for x in class_data
-            if str(x.get("id")) in assigned_class_ids
-        ]
-
     if not class_data:
-        st.info("No classes are available for your report access.")
+        st.info("No active classes are available.")
         return
 
-    class_map = {
-        (
-            f"{x.get('class_name') or '-'}"
-            f" | Section: {x.get('section') or '-'}"
-            f" | {x.get('academic_year') or '-'}"
-        ): x
-        for x in class_data
+    sessions = sorted({
+        str(x.get("academic_year") or "").strip()
+        for x in class_data if str(x.get("academic_year") or "").strip()
+    })
+    if not sessions:
+        st.warning("No Academic Session is available in the active classes.")
+        return
+
+    session = st.selectbox("📅 Session", sessions, key="academic_status_session")
+    session_classes = [
+        x for x in class_data
+        if str(x.get("academic_year") or "").strip() == session
+    ]
+
+    class_options = ["All Classes"] + [
+        f"{x.get('class_name') or '-'} | Section: {x.get('section') or '-'}"
+        for x in session_classes
+    ]
+    class_lookup = {
+        f"{x.get('class_name') or '-'} | Section: {x.get('section') or '-'}": x
+        for x in session_classes
     }
+    selected_class = st.selectbox(
+        "🏫 Class", class_options, key="academic_status_class"
+    )
 
-    if report_type != "Attendance Summary":
-        exam_options = get_exam_assessments(school_id)
-        exam_names = [
-            str(x.get("name") or "").strip()
-            for x in exam_options
-            if x.get("name")
-        ]
-        if not exam_names:
-            st.warning("No Exam / Assessment has been created by Admin yet.")
-            return
-        exam_name = st.selectbox(
-            "📝 Exam / Assessment",
-            exam_names,
-            key="reports_exam"
-        )
-    else:
-        exam_name = None
+    exam_names = [
+        str(x.get("name") or "").strip()
+        for x in get_exam_assessments(school_id) if x.get("name")
+    ]
+    if not exam_names:
+        st.warning("No Exam / Assessment has been created by Admin yet.")
+        return
+    exam_name = st.selectbox(
+        "📝 Exam / Assessment", exam_names, key="academic_status_exam"
+    )
 
-    # -----------------------------------------------------
-    # STUDENT PERFORMANCE
-    # -----------------------------------------------------
-    if report_type == "Student Performance":
-        selected_label = st.selectbox(
-            "📚 Class",
-            list(class_map.keys()),
-            key="reports_student_class"
-        )
-        selected_class = class_map[selected_label]
+    tab_marks, tab_subject = st.tabs(["📊 Marks Percentage", "📚 Subject Wise"])
+
+    with tab_marks:
+        st.markdown("### Marks Percentage")
+        c1, c2 = st.columns(2)
+        with c1:
+            direction = st.radio(
+                "Students to show",
+                ["Below selected percentage", "Above selected percentage"],
+                horizontal=True, key="academic_status_direction"
+            )
+        with c2:
+            threshold = st.selectbox(
+                "Percentage", [30, 40, 50, 70, 80, 90],
+                format_func=lambda x: f"{x}%",
+                key="academic_status_threshold"
+            )
 
         try:
-            students_data = (
-                sb.table("students")
-                .select("id,name,admission_no,class_name,section")
-                .eq("school_id", school_id)
-                .eq("active", True)
-                .order("name")
-                .execute()
-                .data or []
-            )
-            students_data = [
-                s for s in students_data
-                if str(s.get("class_name") or "").strip().lower()
-                == str(selected_class.get("class_name") or "").strip().lower()
-                and str(s.get("section") or "").strip().lower()
-                == str(selected_class.get("section") or "").strip().lower()
-            ]
-
             subjects_data = (
                 sb.table("subjects")
-                .select("id,subject_name,name,max_marks")
-                .eq("school_id", school_id)
-                .eq("class_id", selected_class["id"])
-                .eq("active", True)
-                .order("subject_name")
-                .execute()
-                .data or []
+                .select("id,class_id,subject_name,name,max_marks,active")
+                .eq("school_id", school_id).eq("active", True)
+                .execute().data or []
             )
-
-            marks_data = (
-                sb.table("marks")
-                .select("student_id,subject_id,marks,max_marks")
-                .eq("school_id", school_id)
-                .eq("class_id", selected_class["id"])
-                .eq("exam_name", exam_name)
-                .execute()
-                .data or []
-            )
-        except Exception as e:
-            st.error("Could not load performance data.")
-            st.code(str(e))
-            return
-
-        if role == "Teacher":
-            allowed = {
-                str(x.get("subject_id"))
-                for x in teacher_assignments
-                if str(x.get("class_id")) == str(selected_class["id"])
-            }
-            subjects_data = [
-                x for x in subjects_data if str(x.get("id")) in allowed
-            ]
-            marks_data = [
-                x for x in marks_data if str(x.get("subject_id")) in allowed
-            ]
-
-        subject_names = {
-            str(x["id"]): (
-                x.get("subject_name") or x.get("name") or "Subject"
-            )
-            for x in subjects_data
-        }
-        subject_max = {
-            str(x["id"]): float(x.get("max_marks") or 100)
-            for x in subjects_data
-        }
-        marks_by_student = {}
-        for m in marks_data:
-            marks_by_student.setdefault(str(m["student_id"]), {})[
-                str(m["subject_id"])
-            ] = float(m.get("marks") or 0)
-
-        rows = []
-        for student in students_data:
-            sid = str(student["id"])
-            row = {
-                "Student Name": student.get("name") or "",
-                "Admission No.": student.get("admission_no") or ""
-            }
-            total = 0.0
-            maximum = 0.0
-            for subject_id, subject_name in subject_names.items():
-                value = marks_by_student.get(sid, {}).get(subject_id)
-                row[subject_name] = value if value is not None else ""
-                if value is not None:
-                    total += value
-                    maximum += subject_max.get(subject_id, 100)
-            row["Total Marks"] = round(total, 2)
-            row["Maximum Marks"] = round(maximum, 2)
-            row["Percentage"] = round(total * 100 / maximum, 2) if maximum else 0
-            row["Grade"] = grade_from_percentage(row["Percentage"])
-            rows.append(row)
-
-        df = pd.DataFrame(rows)
-        st.dataframe(df, hide_index=True, use_container_width=True)
-        st.download_button(
-            "⬇️ Download Student Performance CSV",
-            data=df.to_csv(index=False).encode("utf-8"),
-            file_name=f"Student_Performance_{exam_name}.csv".replace("/", "_"),
-            mime="text/csv",
-            use_container_width=True
-        )
-        return
-
-    # -----------------------------------------------------
-    # CLASS SUMMARY
-    # -----------------------------------------------------
-    if report_type == "Class Summary":
-        try:
             students_data = (
                 sb.table("students")
-                .select("id,name,class_name,section")
-                .eq("school_id", school_id)
-                .eq("active", True)
-                .execute()
-                .data or []
+                .select("id,name,admission_no,class_name,section,active")
+                .eq("school_id", school_id).eq("active", True)
+                .order("name").execute().data or []
             )
             marks_data = (
                 sb.table("marks")
-                .select("student_id,marks,max_marks,class_id")
-                .eq("school_id", school_id)
-                .eq("exam_name", exam_name)
-                .execute()
-                .data or []
+                .select("student_id,subject_id,marks,max_marks,class_id")
+                .eq("school_id", school_id).eq("exam_name", exam_name)
+                .execute().data or []
             )
         except Exception as e:
-            st.error("Could not load class summary.")
+            st.error("Could not load academic status data.")
             st.code(str(e))
             return
 
-        allowed_class_ids = {str(x["id"]) for x in class_data}
-        by_student = {}
-        for m in marks_data:
-            if str(m.get("class_id")) not in allowed_class_ids:
-                continue
-            sid = str(m["student_id"])
-            total, maximum = by_student.get(sid, (0.0, 0.0))
-            by_student[sid] = (
-                total + float(m.get("marks") or 0),
-                maximum + float(m.get("max_marks") or 0)
-            )
-
-        rows = []
-        for cl in class_data:
-            class_students = [
+        if selected_class != "All Classes":
+            cl = class_lookup[selected_class]
+            students_data = [
                 s for s in students_data
                 if str(s.get("class_name") or "").strip().lower()
                 == str(cl.get("class_name") or "").strip().lower()
                 and str(s.get("section") or "").strip().lower()
                 == str(cl.get("section") or "").strip().lower()
             ]
-            percentages = []
-            for s in class_students:
-                total, maximum = by_student.get(str(s["id"]), (0, 0))
-                if maximum:
-                    percentages.append(total * 100 / maximum)
+            allowed_class_ids = {str(cl["id"])}
+        else:
+            allowed_class_ids = {str(x["id"]) for x in session_classes}
 
-            rows.append({
-                "Class": cl.get("class_name") or "-",
-                "Section": cl.get("section") or "-",
-                "Students": len(class_students),
-                "Students With Marks": len(percentages),
-                "Average %": round(sum(percentages) / len(percentages), 2) if percentages else 0,
-                "Highest %": round(max(percentages), 2) if percentages else 0,
-                "Lowest %": round(min(percentages), 2) if percentages else 0
-            })
+        subjects_data = [
+            x for x in subjects_data if str(x.get("class_id")) in allowed_class_ids
+        ]
+        subject_ids = {str(x["id"]) for x in subjects_data}
+        marks_data = [
+            x for x in marks_data
+            if str(x.get("class_id")) in allowed_class_ids
+            and str(x.get("subject_id")) in subject_ids
+        ]
 
-        df = pd.DataFrame(rows)
-        st.dataframe(df, hide_index=True, use_container_width=True)
-        st.download_button(
-            "⬇️ Download Class Summary CSV",
-            data=df.to_csv(index=False).encode("utf-8"),
-            file_name=f"Class_Summary_{exam_name}.csv".replace("/", "_"),
-            mime="text/csv",
-            use_container_width=True
+        marks_by_student = {}
+        for m in marks_data:
+            marks_by_student.setdefault(str(m["student_id"]), []).append(m)
+
+        rows = []
+        for s in students_data:
+            records = marks_by_student.get(str(s["id"]), [])
+            total = sum(float(x.get("marks") or 0) for x in records)
+            maximum = sum(float(x.get("max_marks") or 0) for x in records)
+            pct = total * 100 / maximum if maximum else 0
+            match = pct < threshold if direction == "Below selected percentage" else pct > threshold
+            if match:
+                rows.append({
+                    "Student Name": s.get("name") or "",
+                    "Admission No.": s.get("admission_no") or "",
+                    "Class": s.get("class_name") or "",
+                    "Section": s.get("section") or "",
+                    "Total Marks": round(total, 2),
+                    "Maximum Marks": round(maximum, 2),
+                    "Percentage": round(pct, 2)
+                })
+
+        if rows:
+            df = pd.DataFrame(rows).sort_values(
+                "Percentage",
+                ascending=(direction == "Below selected percentage")
+            )
+            bg = "#FCE4EC" if direction == "Below selected percentage" else "#E8F5E9"
+            st.dataframe(
+                df.style.map(lambda _: f"background-color: {bg}"),
+                hide_index=True, use_container_width=True
+            )
+            st.download_button(
+                "⬇️ Download Marks Percentage CSV",
+                data=df.to_csv(index=False).encode("utf-8"),
+                file_name=f"School_Academic_Status_{session}_{exam_name}.csv".replace("/", "_"),
+                mime="text/csv", use_container_width=True
+            )
+        else:
+            st.info("No students match the selected percentage condition.")
+
+    with tab_subject:
+        st.markdown("### Subject Wise Top Students")
+        top_n = st.selectbox(
+            "🏆 Show Top", [10, 20, 30, 50, 100],
+            key="academic_status_top_n"
         )
-        return
-
-    # -----------------------------------------------------
-    # SUBJECT SUMMARY
-    # -----------------------------------------------------
-    if report_type == "Subject Summary":
-        selected_label = st.selectbox(
-            "📚 Class",
-            list(class_map.keys()),
-            key="reports_subject_class"
-        )
-        selected_class = class_map[selected_label]
 
         try:
             subjects_data = (
                 sb.table("subjects")
-                .select("id,subject_name,name,max_marks,passing_marks")
-                .eq("school_id", school_id)
-                .eq("class_id", selected_class["id"])
-                .eq("active", True)
-                .order("subject_name")
-                .execute()
-                .data or []
+                .select("id,class_id,subject_name,name,max_marks,active")
+                .eq("school_id", school_id).eq("active", True)
+                .order("subject_name").execute().data or []
+            )
+            students_data = (
+                sb.table("students")
+                .select("id,name,admission_no,class_name,section,active")
+                .eq("school_id", school_id).eq("active", True)
+                .execute().data or []
             )
             marks_data = (
                 sb.table("marks")
-                .select("student_id,subject_id,marks")
-                .eq("school_id", school_id)
-                .eq("class_id", selected_class["id"])
-                .eq("exam_name", exam_name)
-                .execute()
-                .data or []
+                .select("student_id,subject_id,marks,max_marks,class_id")
+                .eq("school_id", school_id).eq("exam_name", exam_name)
+                .execute().data or []
             )
         except Exception as e:
-            st.error("Could not load subject summary.")
+            st.error("Could not load subject-wise data.")
             st.code(str(e))
             return
 
-        if role == "Teacher":
-            allowed = {
-                str(x.get("subject_id"))
-                for x in teacher_assignments
-                if str(x.get("class_id")) == str(selected_class["id"])
-            }
-            subjects_data = [
-                x for x in subjects_data if str(x.get("id")) in allowed
-            ]
-            marks_data = [
-                x for x in marks_data if str(x.get("subject_id")) in allowed
-            ]
+        if selected_class != "All Classes":
+            cl = class_lookup[selected_class]
+            allowed_class_ids = {str(cl["id"])}
+        else:
+            allowed_class_ids = {str(x["id"]) for x in session_classes}
 
-        rows = []
+        subjects_data = [
+            x for x in subjects_data if str(x.get("class_id")) in allowed_class_ids
+        ]
+        subject_ids = {str(x["id"]) for x in subjects_data}
+        marks_data = [
+            x for x in marks_data
+            if str(x.get("class_id")) in allowed_class_ids
+            and str(x.get("subject_id")) in subject_ids
+        ]
+        student_map = {str(x["id"]): x for x in students_data}
+
+        subject_palette = [
+            "#E3F2FD", "#E8F5E9", "#FFF3E0", "#F3E5F5", "#FFFDE7",
+            "#E0F7FA", "#FBE9E7", "#E8EAF6", "#F1F8E9", "#FCE4EC"
+        ]
+        subject_groups = {}
         for subject in subjects_data:
             sid = str(subject["id"])
-            values = [
-                float(m.get("marks") or 0)
-                for m in marks_data
-                if str(m.get("subject_id")) == sid
-            ]
-            passing = float(subject.get("passing_marks") or 0)
-            rows.append({
-                "Subject": subject.get("subject_name") or subject.get("name") or "-",
-                "Students With Marks": len(values),
-                "Average Marks": round(sum(values) / len(values), 2) if values else 0,
-                "Highest Marks": round(max(values), 2) if values else 0,
-                "Lowest Marks": round(min(values), 2) if values else 0,
-                "Pass Count": sum(1 for v in values if v >= passing),
-                "Maximum Marks": float(subject.get("max_marks") or 100),
-                "Passing Marks": passing
-            })
+            rows = []
+            for m in marks_data:
+                if str(m.get("subject_id")) != sid:
+                    continue
+                student = student_map.get(str(m.get("student_id")))
+                if not student:
+                    continue
+                rows.append({
+                    "Student Name": student.get("name") or "",
+                    "Admission No.": student.get("admission_no") or "",
+                    "Class": student.get("class_name") or "",
+                    "Section": student.get("section") or "",
+                    "Marks": float(m.get("marks") or 0),
+                    "Maximum": float(m.get("max_marks") or subject.get("max_marks") or 100)
+                })
+            rows.sort(key=lambda x: x["Marks"], reverse=True)
+            subject_groups[
+                subject.get("subject_name") or subject.get("name") or "Subject"
+            ] = rows[:top_n]
 
-        df = pd.DataFrame(rows)
-        st.dataframe(df, hide_index=True, use_container_width=True)
-        st.download_button(
-            "⬇️ Download Subject Summary CSV",
-            data=df.to_csv(index=False).encode("utf-8"),
-            file_name=f"Subject_Summary_{exam_name}.csv".replace("/", "_"),
-            mime="text/csv",
-            use_container_width=True
-        )
+        if not any(subject_groups.values()):
+            st.info("No subject marks are available for the selected Session/Class/Exam.")
+            return
+
+        for idx, (subject_name, rows) in enumerate(subject_groups.items()):
+            if not rows:
+                continue
+            st.markdown(f"#### 📚 {subject_name}")
+            df = pd.DataFrame(rows)
+            bg = subject_palette[idx % len(subject_palette)]
+            st.dataframe(
+                df.style.map(lambda _: f"background-color: {bg}"),
+                hide_index=True, use_container_width=True
+            )
         return
-
-    # -----------------------------------------------------
-    # ATTENDANCE SUMMARY
-    # -----------------------------------------------------
-    c1, c2 = st.columns(2)
-    with c1:
-        start_date = st.date_input(
-            "From Date",
-            value=datetime.date.today().replace(day=1),
-            key="reports_att_from"
-        )
-    with c2:
-        end_date = st.date_input(
-            "To Date",
-            value=datetime.date.today(),
-            key="reports_att_to"
-        )
-
-    if start_date > end_date:
-        st.error("From Date cannot be after To Date.")
-        return
-
-    selected_label = st.selectbox(
-        "📚 Class",
-        ["All Classes"] + list(class_map.keys()),
-        key="reports_att_class"
-    )
-
-    try:
-        students_data = (
-            sb.table("students")
-            .select("id,name,admission_no,class_name,section")
-            .eq("school_id", school_id)
-            .eq("active", True)
-            .order("name")
-            .execute()
-            .data or []
-        )
-        attendance_data = (
-            sb.table("attendance")
-            .select("student_id,attendance_date,present")
-            .eq("school_id", school_id)
-            .gte("attendance_date", str(start_date))
-            .lte("attendance_date", str(end_date))
-            .execute()
-            .data or []
-        )
-    except Exception as e:
-        st.error("Could not load attendance report.")
-        st.code(str(e))
-        return
-
-    if selected_label != "All Classes":
-        cl = class_map[selected_label]
-        students_data = [
-            s for s in students_data
-            if str(s.get("class_name") or "").strip().lower()
-            == str(cl.get("class_name") or "").strip().lower()
-            and str(s.get("section") or "").strip().lower()
-            == str(cl.get("section") or "").strip().lower()
-        ]
-
-    allowed_pairs = {
-        (
-            str(x.get("class_name") or "").strip().lower(),
-            str(x.get("section") or "").strip().lower()
-        )
-        for x in class_data
-    }
-    if role == "Teacher":
-        students_data = [
-            s for s in students_data
-            if (
-                str(s.get("class_name") or "").strip().lower(),
-                str(s.get("section") or "").strip().lower()
-            ) in allowed_pairs
-        ]
-
-    by_student = {}
-    for a in attendance_data:
-        sid = str(a["student_id"])
-        total, present = by_student.get(sid, (0, 0))
-        by_student[sid] = (total + 1, present + (1 if a.get("present") else 0))
-
-    rows = []
-    for s in students_data:
-        total, present = by_student.get(str(s["id"]), (0, 0))
-        rows.append({
-            "Student Name": s.get("name") or "",
-            "Admission No.": s.get("admission_no") or "",
-            "Class": s.get("class_name") or "",
-            "Section": s.get("section") or "",
-            "Total Days": total,
-            "Present Days": present,
-            "Absent Days": total - present,
-            "Attendance %": round(present * 100 / total, 2) if total else 0
-        })
-
-    df = pd.DataFrame(rows)
-    st.dataframe(df, hide_index=True, use_container_width=True)
-    st.download_button(
-        "⬇️ Download Attendance Summary CSV",
-        data=df.to_csv(index=False).encode("utf-8"),
-        file_name=f"Attendance_Summary_{start_date}_{end_date}.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-
-
 
 # =========================================================
 # DASHBOARD# =========================================================
@@ -7571,7 +7464,8 @@ def dashboard():
                 "📅 Attendance",
                 "🖨️ Print Templates",
                 "📄 Report Cards",
-                "📊 Reports"
+                "📊 Reports",
+                "💎 Premium Features"
             ],
             horizontal=True
         )
@@ -7606,6 +7500,9 @@ def dashboard():
         elif menu == "📊 Reports":
             reports()
 
+        elif menu == "💎 Premium Features":
+            premium_feature_management()
+
         else:
             st.info(
                 f"{menu} will be added next."
@@ -7621,20 +7518,20 @@ def dashboard():
 
         # Admin has full access to every Teacher module and
         # also retains all Admin-only management functions.
-        menu = st.radio(
-            "Management",
-            [
-                "🎓 Students",
-                "📚 Classes & Subjects",
-                "📝 Exam / Assessment",
-                "📝 Marks",
-                "📅 Attendance",
-                "🖨️ Print Templates",
-                "📄 Report Cards",
-                "📊 Reports"
-            ],
-            horizontal=True
-        )
+        admin_menu_options = [
+            "🎓 Students",
+            "📚 Classes & Subjects",
+            "📝 Exam / Assessment",
+            "📝 Marks",
+            "📅 Attendance",
+            "🖨️ Print Templates",
+            "📄 Report Cards",
+            "📊 Reports"
+        ]
+        if premium_feature_enabled(profile.get("school_id"), st.session_state.user.id, "school_academic_status"):
+            admin_menu_options.append("💎 School Academic Status")
+
+        menu = st.radio("Management", admin_menu_options, horizontal=True)
 
         if menu == "🎓 Students":
             students()
@@ -7659,6 +7556,9 @@ def dashboard():
 
         elif menu == "📊 Reports":
             reports()
+
+        elif menu == "💎 School Academic Status":
+            school_academic_status(profile.get("school_id"))
 
         else:
             st.info(
