@@ -3073,6 +3073,139 @@ def bulk_marks():
             st.code(str(e))
 
 
+
+def attendance():
+    st.header("📅 Attendance")
+
+    role = st.session_state.profile.get("role")
+
+    if role not in ["SuperAdmin", "Admin", "Teacher"]:
+        st.error("You do not have permission to manage attendance.")
+        return
+
+    school_id = get_selected_school("attendance_school")
+    if not school_id:
+        return
+
+    selected_date = st.date_input(
+        "Attendance Date",
+        value=datetime.date.today(),
+        key="attendance_date"
+    )
+
+    try:
+        students_data = (
+            sb.table("students")
+            .select("id,name,class_name,section,admission_no,active")
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .order("name")
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error("Could not load students.")
+        st.code(str(e))
+        return
+
+    if not students_data:
+        st.info("No active students found.")
+        return
+
+    class_options = ["All Classes"] + sorted({
+        str(x.get("class_name") or "")
+        for x in students_data
+        if str(x.get("class_name") or "")
+    })
+
+    selected_class = st.selectbox(
+        "Class",
+        class_options,
+        key="attendance_class"
+    )
+
+    if selected_class != "All Classes":
+        students_data = [
+            x for x in students_data
+            if str(x.get("class_name") or "") == selected_class
+        ]
+
+    try:
+        existing = (
+            sb.table("attendance")
+            .select("id,student_id,attendance_date,present")
+            .eq("school_id", school_id)
+            .eq("attendance_date", str(selected_date))
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error(
+            "Attendance table could not be loaded. "
+            "Create the attendance table in Supabase first."
+        )
+        st.code(str(e))
+        return
+
+    existing_by_student = {
+        str(x["student_id"]): x for x in existing
+    }
+
+    entries = []
+
+    for student in students_data:
+        sid = str(student["id"])
+        old = existing_by_student.get(sid, {})
+        old_present = old.get("present", True)
+
+        status = st.selectbox(
+            student.get("name") or "Student",
+            ["Present", "Absent"],
+            index=0 if bool(old_present) else 1,
+            key=f"attendance_{sid}_{selected_date}"
+        )
+
+        entries.append((sid, status == "Present", old.get("id")))
+
+    if st.button(
+        "💾 Save Attendance",
+        type="primary",
+        use_container_width=True,
+        key="save_attendance_button"
+    ):
+        try:
+            for sid, status, old_id in entries:
+                if old_id:
+                    (
+                        sb.table("attendance")
+                        .update({"present": status})
+                        .eq("id", old_id)
+                        .execute()
+                    )
+                else:
+                    (
+                        sb.table("attendance")
+                        .insert({
+                            "school_id": school_id,
+                            "student_id": sid,
+                            "attendance_date": str(selected_date),
+                            "present": status
+                        })
+                        .execute()
+                    )
+
+            st.success("Attendance saved successfully.")
+            st.rerun()
+
+        except Exception as e:
+            st.error("Could not save attendance.")
+            st.code(str(e))
+
+
+# =========================================================
+# REPORT CARD HELPERS
+# =========================================================
+
 # =========================================================
 # REPORT CARD HELPERS
 # =========================================================
