@@ -397,10 +397,7 @@ def users():
         st.error(str(e))
         return
 
-    active_schools = [
-        x for x in school_data
-        if x.get("active", True)
-    ]
+    active_schools = [x for x in school_data if x.get("active", True)]
 
     if not active_schools:
         st.warning("Create an active school first.")
@@ -422,16 +419,8 @@ def users():
             key="create_user_school"
         )
 
-        name = st.text_input(
-            "Full Name",
-            key="create_user_name"
-        )
-
-        email = st.text_input(
-            "Email",
-            key="create_user_email"
-        )
-
+        name = st.text_input("Full Name", key="create_user_name")
+        email = st.text_input("Email", key="create_user_email")
         password = st.text_input(
             "Password",
             type="password",
@@ -509,9 +498,7 @@ def users():
     try:
         user_data = (
             sb.table("profiles")
-            .select(
-                "id,email,full_name,role,active,school_id"
-            )
+            .select("id,email,full_name,role,active,school_id")
             .order("full_name")
             .execute()
             .data or []
@@ -524,6 +511,24 @@ def users():
         str(x["id"]): x["name"]
         for x in school_data
     }
+
+    # -----------------------------------------------------
+    # TEACHER ASSIGNMENT DATA
+    # -----------------------------------------------------
+    def load_teacher_assignments(teacher_id):
+        try:
+            return (
+                sb.table("teacher_subject_assignments")
+                .select(
+                    "id,school_id,teacher_id,class_id,subject_id"
+                )
+                .eq("teacher_id", teacher_id)
+                .eq("school_id", school_map[selected_school])
+                .execute()
+                .data or []
+            )
+        except Exception:
+            return []
 
     # -----------------------------------------------------
     # MODIFY USERS
@@ -545,9 +550,7 @@ def users():
                 st.caption(user.get("email"))
 
             with c2:
-                st.write(
-                    f"Role: **{user.get('role')}**"
-                )
+                st.write(f"Role: **{user.get('role')}**")
                 st.caption(
                     school_names.get(
                         str(user.get("school_id")),
@@ -563,9 +566,7 @@ def users():
                     try:
                         (
                             sb.table("profiles")
-                            .update({
-                                "active": not active
-                            })
+                            .update({"active": not active})
                             .eq("id", user_id)
                             .execute()
                         )
@@ -583,24 +584,26 @@ def users():
                     key=f"edit_user_name_{user_id}"
                 )
 
+                role_options = [
+                    "Admin",
+                    "Teacher",
+                    "Student",
+                    "Parent"
+                ]
+
+                current_role = user.get("role")
                 edit_role = st.selectbox(
                     "Role",
-                    ["Admin", "Teacher", "Student", "Parent"],
+                    role_options,
                     index=(
-                        ["Admin", "Teacher", "Student", "Parent"].index(
-                            user.get("role")
-                        )
-                        if user.get("role") in
-                        ["Admin", "Teacher", "Student", "Parent"]
+                        role_options.index(current_role)
+                        if current_role in role_options
                         else 0
                     ),
                     key=f"edit_user_role_{user_id}"
                 )
 
-                current_school_id = str(
-                    user.get("school_id") or ""
-                )
-
+                current_school_id = str(user.get("school_id") or "")
                 school_labels = list(school_map.keys())
 
                 current_school_label = next(
@@ -615,9 +618,7 @@ def users():
                 edit_school_label = st.selectbox(
                     "School",
                     school_labels,
-                    index=school_labels.index(
-                        current_school_label
-                    ),
+                    index=school_labels.index(current_school_label),
                     key=f"edit_user_school_{user_id}"
                 )
 
@@ -631,6 +632,165 @@ def users():
                 st.caption(
                     "Email is the login email and is not changed here."
                 )
+
+                # -----------------------------------------
+                # TEACHER CLASS / SUBJECT ASSIGNMENTS
+                # -----------------------------------------
+                if edit_role == "Teacher":
+
+                    edit_school_id = school_map[edit_school_label]
+
+                    try:
+                        edit_classes = (
+                            sb.table("classes")
+                            .select(
+                                "id,class_name,section,academic_year,active"
+                            )
+                            .eq("school_id", edit_school_id)
+                            .eq("active", True)
+                            .order("class_name")
+                            .order("section")
+                            .execute()
+                            .data or []
+                        )
+                    except Exception:
+                        edit_classes = []
+
+                    class_labels = {}
+                    for cl in edit_classes:
+                        label = (
+                            f"{cl.get('class_name') or '-'}"
+                            f" | Section: {cl.get('section') or '-'}"
+                            f" | {cl.get('academic_year') or '-'}"
+                        )
+                        class_labels[label] = cl
+
+                    # Class Teacher assignments are stored on classes.
+                    if class_labels:
+                        try:
+                            class_teacher_rows = (
+                                sb.table("classes")
+                                .select(
+                                    "id,class_name,section,academic_year"
+                                )
+                                .eq(
+                                    "school_id",
+                                    edit_school_id
+                                )
+                                .eq(
+                                    "class_teacher_id",
+                                    user_id
+                                )
+                                .eq("active", True)
+                                .execute()
+                                .data or []
+                            )
+                        except Exception:
+                            class_teacher_rows = []
+
+                        current_ct_ids = {
+                            str(x["id"])
+                            for x in class_teacher_rows
+                        }
+
+                        selected_ct_labels = st.multiselect(
+                            "👨‍🏫 Class Teacher — Assigned Classes",
+                            list(class_labels.keys()),
+                            default=[
+                                label
+                                for label, cl in class_labels.items()
+                                if str(cl["id"]) in current_ct_ids
+                            ],
+                            key=f"class_teacher_assign_{user_id}"
+                        )
+
+                        st.caption(
+                            "A teacher can be Class Teacher of multiple classes. "
+                            "Only Admin can change these assignments."
+                        )
+
+                    # Subject-teacher assignments.
+                    try:
+                        assignment_rows = (
+                            sb.table("teacher_subject_assignments")
+                            .select(
+                                "id,class_id,subject_id"
+                            )
+                            .eq("teacher_id", user_id)
+                            .eq("school_id", edit_school_id)
+                            .execute()
+                            .data or []
+                        )
+                    except Exception:
+                        assignment_rows = []
+
+                    assignment_ids = {
+                        (
+                            str(x.get("class_id")),
+                            str(x.get("subject_id"))
+                        )
+                        for x in assignment_rows
+                    }
+
+                    subject_options = {}
+                    if class_labels:
+                        for cl_label, cl in class_labels.items():
+                            try:
+                                subjects_for_class = (
+                                    sb.table("subjects")
+                                    .select(
+                                        "id,name,subject_name,class_id,active"
+                                    )
+                                    .eq(
+                                        "school_id",
+                                        edit_school_id
+                                    )
+                                    .eq(
+                                        "class_id",
+                                        cl["id"]
+                                    )
+                                    .eq("active", True)
+                                    .order("subject_name")
+                                    .execute()
+                                    .data or []
+                                )
+                            except Exception:
+                                subjects_for_class = []
+
+                            for sub in subjects_for_class:
+                                sub_name = (
+                                    sub.get("subject_name")
+                                    or sub.get("name")
+                                    or "Subject"
+                                )
+                                label = (
+                                    f"{cl_label} → {sub_name}"
+                                )
+                                subject_options[label] = (
+                                    cl["id"],
+                                    sub["id"]
+                                )
+
+                    current_assignment_labels = [
+                        label
+                        for label, ids in subject_options.items()
+                        if (
+                            str(ids[0]),
+                            str(ids[1])
+                        ) in assignment_ids
+                    ]
+
+                    selected_subject_assignments = st.multiselect(
+                        "📖 Subject Teacher — Class + Subject Assignments",
+                        list(subject_options.keys()),
+                        default=current_assignment_labels,
+                        key=f"subject_teacher_assign_{user_id}"
+                    )
+
+                    st.caption(
+                        "One teacher can teach many classes and many subjects. "
+                        "Each permission is an exact Class + Subject combination."
+                    )
 
                 if st.button(
                     "💾 Save User Changes",
@@ -648,13 +808,101 @@ def users():
                             .update({
                                 "full_name": edit_name.strip(),
                                 "role": edit_role,
-                                "school_id": school_map[
-                                    edit_school_label
-                                ]
+                                "school_id": school_map[edit_school_label]
                             })
                             .eq("id", user_id)
                             .execute()
                         )
+
+                        # Save teacher assignments only when the user is a Teacher.
+                        if edit_role == "Teacher":
+
+                            edit_school_id = school_map[edit_school_label]
+
+                            # Class Teacher: first clear this teacher's
+                            # existing assignments, then apply the selected ones.
+                            (
+                                sb.table("classes")
+                                .update({
+                                    "class_teacher_id": None,
+                                    "updated_at":
+                                        datetime.datetime.now(
+                                            datetime.timezone.utc
+                                        ).isoformat()
+                                })
+                                .eq("school_id", edit_school_id)
+                                .eq("class_teacher_id", user_id)
+                                .execute()
+                            )
+
+                            for label in selected_ct_labels:
+                                cl = class_labels[label]
+                                (
+                                    sb.table("classes")
+                                    .update({
+                                        "class_teacher_id": user_id,
+                                        "updated_at":
+                                            datetime.datetime.now(
+                                                datetime.timezone.utc
+                                            ).isoformat()
+                                    })
+                                    .eq("id", cl["id"])
+                                    .execute()
+                                )
+
+                            # Subject Teacher: replace the teacher's exact
+                            # Class + Subject assignment set.
+                            (
+                                sb.table("teacher_subject_assignments")
+                                .delete()
+                                .eq("teacher_id", user_id)
+                                .eq("school_id", edit_school_id)
+                                .execute()
+                            )
+
+                            new_assignments = []
+                            for label in selected_subject_assignments:
+                                class_id_value, subject_id_value = (
+                                    subject_options[label]
+                                )
+                                new_assignments.append({
+                                    "school_id": edit_school_id,
+                                    "teacher_id": user_id,
+                                    "class_id": class_id_value,
+                                    "subject_id": subject_id_value
+                                })
+
+                            if new_assignments:
+                                (
+                                    sb.table(
+                                        "teacher_subject_assignments"
+                                    )
+                                    .insert(new_assignments)
+                                    .execute()
+                                )
+
+                        else:
+                            # If the role is changed away from Teacher,
+                            # remove all teacher permissions.
+                            (
+                                sb.table("classes")
+                                .update({
+                                    "class_teacher_id": None,
+                                    "updated_at":
+                                        datetime.datetime.now(
+                                            datetime.timezone.utc
+                                        ).isoformat()
+                                })
+                                .eq("class_teacher_id", user_id)
+                                .execute()
+                            )
+
+                            (
+                                sb.table("teacher_subject_assignments")
+                                .delete()
+                                .eq("teacher_id", user_id)
+                                .execute()
+                            )
 
                         st.session_state["saved_user_changes"] = True
                         st.rerun()
@@ -2375,24 +2623,15 @@ def bulk_marks():
 
     role = st.session_state.profile.get("role")
 
-    if role not in [
-        "SuperAdmin",
-        "Admin",
-        "Teacher"
-    ]:
-
-        st.error(
-            "You do not have permission to enter marks."
-        )
+    if role not in ["SuperAdmin", "Admin", "Teacher"]:
+        st.error("You do not have permission to enter marks.")
         return
 
     school_id = get_selected_school("marks_school")
-
     if not school_id:
         return
 
     try:
-
         class_data = (
             sb.table("classes")
             .select(
@@ -2406,9 +2645,7 @@ def bulk_marks():
             .execute()
             .data or []
         )
-
     except Exception as e:
-
         st.error("Could not load classes.")
         st.code(str(e))
         return
@@ -2417,16 +2654,53 @@ def bulk_marks():
         st.info("No active classes found.")
         return
 
+    # Teachers see only classes for which they have a subject assignment.
+    if role == "Teacher":
+        try:
+            teacher_assignments = (
+                sb.table("teacher_subject_assignments")
+                .select("class_id,subject_id")
+                .eq("school_id", school_id)
+                .eq("teacher_id", st.session_state.user.id)
+                .execute()
+                .data or []
+            )
+        except Exception as e:
+            st.error(
+                "Teacher subject assignments are not available. "
+                "Ask Admin to create the teacher_subject_assignments table."
+            )
+            st.code(str(e))
+            return
+
+        if not teacher_assignments:
+            st.info(
+                "No subject-teaching assignments have been given to you yet."
+            )
+            return
+
+        assigned_class_ids = {
+            str(x.get("class_id"))
+            for x in teacher_assignments
+        }
+
+        class_data = [
+            x for x in class_data
+            if str(x.get("id")) in assigned_class_ids
+        ]
+
+        if not class_data:
+            st.info("No classes are assigned to you for teaching.")
+            return
+
     class_map = {}
 
     for item in class_data:
-
         label = (
             f"{item.get('class_name') or '-'}"
             f" | Section: {item.get('section') or '-'}"
             f" | {item.get('academic_year') or '-'}"
         )
-
         class_map[label] = item
 
     selected_class_label = st.selectbox(
@@ -2435,22 +2709,13 @@ def bulk_marks():
         key="marks_class"
     )
 
-    selected_class = class_map[
-        selected_class_label
-    ]
-
+    selected_class = class_map[selected_class_label]
     class_id = selected_class["id"]
 
-    class_name = selected_class.get(
-        "class_name"
-    ) or ""
-
-    section = selected_class.get(
-        "section"
-    ) or ""
+    class_name = selected_class.get("class_name") or ""
+    section = selected_class.get("section") or ""
 
     try:
-
         subject_data = (
             sb.table("subjects")
             .select(
@@ -2464,40 +2729,48 @@ def bulk_marks():
             .execute()
             .data or []
         )
-
     except Exception as e:
-
         st.error("Could not load subjects.")
         st.code(str(e))
         return
 
     if not subject_data:
-
-        st.warning(
-            "No active subjects found for this class."
-        )
+        st.warning("No active subjects found for this class.")
         return
+
+    # Teachers see only the subjects assigned to them in the selected class.
+    if role == "Teacher":
+        assigned_subject_ids = {
+            str(x.get("subject_id"))
+            for x in teacher_assignments
+            if str(x.get("class_id")) == str(class_id)
+        }
+
+        subject_data = [
+            x for x in subject_data
+            if str(x.get("id")) in assigned_subject_ids
+        ]
+
+        if not subject_data:
+            st.info(
+                "No subject is assigned to you for this class."
+            )
+            return
 
     subject_map = {}
 
     for subject in subject_data:
-
         subject_name = (
             subject.get("subject_name")
             or subject.get("name")
             or "Subject"
         )
-
         max_marks = (
             subject.get("max_marks")
             if subject.get("max_marks") is not None
             else 100
         )
-
-        label = (
-            f"{subject_name} (Max: {max_marks})"
-        )
-
+        label = f"{subject_name} (Max: {max_marks})"
         subject_map[label] = subject
 
     selected_subject_label = st.selectbox(
@@ -2506,10 +2779,7 @@ def bulk_marks():
         key="marks_subject"
     )
 
-    selected_subject = subject_map[
-        selected_subject_label
-    ]
-
+    selected_subject = subject_map[selected_subject_label]
     subject_id = selected_subject["id"]
 
     subject_name = (
@@ -2518,13 +2788,8 @@ def bulk_marks():
         or "Subject"
     )
 
-    max_marks = float(
-        selected_subject.get("max_marks") or 100
-    )
-
-    passing_marks = float(
-        selected_subject.get("passing_marks") or 0
-    )
+    max_marks = float(selected_subject.get("max_marks") or 100)
+    passing_marks = float(selected_subject.get("passing_marks") or 0)
 
     st.caption(
         f"Maximum Marks: **{max_marks:g}** "
@@ -2538,14 +2803,10 @@ def bulk_marks():
     ).strip()
 
     if not exam_name:
-
-        st.info(
-            "Enter the Exam / Assessment name."
-        )
+        st.info("Enter the Exam / Assessment name.")
         return
 
     try:
-
         student_data = (
             sb.table("students")
             .select(
@@ -2558,37 +2819,29 @@ def bulk_marks():
             .execute()
             .data or []
         )
-
     except Exception as e:
-
         st.error("Could not load students.")
         st.code(str(e))
         return
 
     students_for_class = [
-        student
-        for student in student_data
+        student for student in student_data
         if (
             str(student.get("class_name") or "").strip().lower()
-            ==
-            str(class_name).strip().lower()
+            == str(class_name).strip().lower()
             and
             str(student.get("section") or "").strip().lower()
-            ==
-            str(section).strip().lower()
+            == str(section).strip().lower()
         )
     ]
 
     if not students_for_class:
-
         st.warning(
-            f"No active students found for "
-            f"{class_name} / Section {section}."
+            f"No active students found for {class_name} / Section {section}."
         )
         return
 
     try:
-
         existing_marks = (
             sb.table("marks")
             .select(
@@ -2602,9 +2855,7 @@ def bulk_marks():
             .execute()
             .data or []
         )
-
     except Exception as e:
-
         st.error("Could not load existing marks.")
         st.code(str(e))
         return
@@ -2617,35 +2868,21 @@ def bulk_marks():
     editor_rows = []
 
     for student in students_for_class:
-
         student_id = str(student["id"])
-
         existing = marks_by_student.get(student_id)
 
         editor_rows.append({
-            "Student ID":
-                student_id,
-
-            "Student Name":
-                student.get("name") or "",
-
-            "Admission No.":
-                student.get("admission_no") or "",
-
-            "Marks":
-                existing.get("marks")
-                if existing else None
+            "Student ID": student_id,
+            "Student Name": student.get("name") or "",
+            "Admission No.": student.get("admission_no") or "",
+            "Marks": existing.get("marks") if existing else None
         })
 
     marks_df = pd.DataFrame(editor_rows)
 
-    st.markdown(
-        f"### 📝 {subject_name} — {exam_name}"
-    )
-
+    st.markdown(f"### 📝 {subject_name} — {exam_name}")
     st.caption(
-        f"{len(students_for_class)} students | "
-        f"Maximum {max_marks:g} marks"
+        f"{len(students_for_class)} students | Maximum {max_marks:g} marks"
     )
 
     edited_df = st.data_editor(
@@ -2658,14 +2895,13 @@ def bulk_marks():
             "Admission No."
         ],
         column_config={
-            "Marks":
-                st.column_config.NumberColumn(
-                    "Marks",
-                    min_value=0.0,
-                    max_value=max_marks,
-                    step=0.5,
-                    format="%.2f"
-                )
+            "Marks": st.column_config.NumberColumn(
+                "Marks",
+                min_value=0.0,
+                max_value=max_marks,
+                step=0.5,
+                format="%.2f"
+            )
         },
         key=(
             f"marks_editor_{school_id}_"
@@ -2690,7 +2926,6 @@ def bulk_marks():
 
             student_id = str(row["Student ID"])
             value = row["Marks"]
-
             existing = marks_by_student.get(student_id)
 
             if (
@@ -2698,717 +2933,74 @@ def bulk_marks():
                 or pd.isna(value)
                 or str(value).strip() == ""
             ):
-
                 if existing:
                     deletes.append(existing["id"])
-
                 continue
 
             try:
                 mark_value = float(value)
             except Exception:
-
                 errors.append(
                     f"{row['Student Name']}: Invalid marks."
                 )
-
                 continue
 
             if mark_value < 0:
-
                 errors.append(
-                    f"{row['Student Name']}: "
-                    "Marks cannot be negative."
+                    f"{row['Student Name']}: Marks cannot be negative."
                 )
-
                 continue
 
             if mark_value > max_marks:
-
                 errors.append(
-                    f"{row['Student Name']}: "
-                    f"{mark_value:g} exceeds "
+                    f"{row['Student Name']}: {mark_value:g} exceeds "
                     f"maximum {max_marks:g}."
                 )
-
                 continue
 
             if existing:
-
                 updates.append({
                     "id": existing["id"],
                     "marks": mark_value,
                     "max_marks": max_marks,
                     "class_id": class_id
                 })
-
             else:
-
                 records_to_insert.append({
                     "school_id": school_id,
                     "student_id": student_id,
                     "subject_id": subject_id,
                     "exam_name": exam_name,
                     "marks": mark_value,
-                    "max_marks": max_marks,                    "class_id": class_id
+                    "max_marks": max_marks,
+                    "class_id": class_id
                 })
 
         if errors:
-            st.error(
-                "Please correct these errors:"
-            )
+            st.error("Please correct these errors:")
             for error in errors:
                 st.error(error)
-
             return
 
         try:
-
             if records_to_insert:
+                sb.table("marks").insert(records_to_insert).execute()
 
-                (
-                    sb.table("marks")
-                    .insert(records_to_insert)
-                    .execute()
-                )
-
-            for record in updates:
-
-                (
-                    sb.table("marks")
-                    .update({
-                        "marks": record["marks"],
-                        "max_marks": record["max_marks"],
-                        "class_id": record["class_id"]
-                    })
-                    .eq("id", record["id"])
-                    .execute()
-                )
+            for update_row in updates:
+                sb.table("marks").update({
+                    "marks": update_row["marks"],
+                    "max_marks": update_row["max_marks"],
+                    "class_id": update_row["class_id"]
+                }).eq("id", update_row["id"]).execute()
 
             for mark_id in deletes:
+                sb.table("marks").delete().eq("id", mark_id).execute()
 
-                (
-                    sb.table("marks")
-                    .delete()
-                    .eq("id", mark_id)
-                    .execute()
-                )
-
-            st.success(
-                "✅ All marks saved successfully."
-            )
-
+            st.success("✅ Marks saved successfully.")
             st.rerun()
 
         except Exception as e:
-
             st.error("Could not save marks.")
-            st.code(str(e))
-
-
-# =========================================================
-# A4 PRINT TEMPLATES
-# =========================================================
-
-def print_templates():
-
-    st.header("🖨️ A4 Print Templates")
-
-    role = st.session_state.profile.get("role")
-
-    if role not in [
-        "SuperAdmin",
-        "Admin",
-        "Teacher"
-    ]:
-
-        st.error(
-            "You do not have permission to manage print templates."
-        )
-
-        return
-
-    school_id = get_selected_school("template_school")
-
-    if not school_id:
-        return
-
-    try:
-
-        school_info = (
-            sb.table("schools")
-            .select("id,name,code,address")
-            .eq("id", school_id)
-            .maybe_single()
-            .execute()
-            .data
-        )
-
-    except Exception as e:
-
-        st.error(
-            "Could not load school information."
-        )
-
-        st.code(str(e))
-        return
-
-    school_name = (
-        school_info.get("name")
-        if school_info
-        else "School"
-    )
-
-    school_code = (
-        school_info.get("code")
-        if school_info
-        else str(school_id)
-    )
-
-    st.info(
-        f"🏫 Templates for: **{school_name} "
-        f"({school_code})**"
-    )
-
-    st.markdown(
-        """
-        ### A4 School Paper Designs
-
-        Each school can keep its own A4 designs.
-
-        Supported files: **PDF, PNG, JPG, JPEG**
-        """
-    )
-
-    st.divider()
-
-    with st.expander(
-        "➕ Upload New A4 Template",
-        expanded=True
-    ):
-
-        template_name = st.text_input(
-            "Template Name",
-            placeholder="Example: Annual Report Card 2026-27",
-            key="template_name"
-        )
-
-        template_type = st.selectbox(
-            "Template Type",
-            [
-                "Report Card",
-                "Certificate",
-                "Fee Receipt",
-                "Attendance",
-                "Other"
-            ],
-            key="template_type"
-        )
-
-        orientation = st.radio(
-            "A4 Orientation",
-            ["Portrait", "Landscape"],
-            horizontal=True,
-            key="template_orientation"
-        )
-
-        uploaded_file = st.file_uploader(
-            "Upload A4 Design",
-            type=["pdf", "png", "jpg", "jpeg"],
-            key="template_file"
-        )
-
-        if uploaded_file:
-
-            st.write(
-                f"📄 **{uploaded_file.name}**"
-            )
-
-            st.caption(
-                f"File size: "
-                f"{uploaded_file.size / 1024:.1f} KB"
-            )
-
-            extension = (
-                uploaded_file.name
-                .split(".")[-1]
-                .lower()
-            )
-
-            if extension in [
-                "png",
-                "jpg",
-                "jpeg"
-            ]:
-
-                st.image(
-                    uploaded_file,
-                    caption="Template Preview",
-                    use_container_width=True
-                )
-
-        if st.button(
-            "⬆️ Upload & Save Template",
-            type="primary",
-            use_container_width=True,
-            key="upload_template_button"
-        ):
-
-            if not template_name.strip():
-
-                st.warning(
-                    "Enter a template name."
-                )
-                return
-
-            if not uploaded_file:
-
-                st.warning(
-                    "Select a PDF or image file first."
-                )
-                return
-
-            try:
-
-                original_name = uploaded_file.name
-
-                extension = (
-                    original_name
-                    .split(".")[-1]
-                    .lower()
-                )
-
-                unique_name = (
-                    f"{uuid.uuid4().hex}.{extension}"
-                )
-
-                storage_path = (
-                    f"{school_id}/"
-                    f"templates/"
-                    f"{unique_name}"
-                )
-
-                file_bytes = uploaded_file.getvalue()
-
-                content_type_map = {
-                    "pdf": "application/pdf",
-                    "png": "image/png",
-                    "jpg": "image/jpeg",
-                    "jpeg": "image/jpeg"
-                }
-
-                (
-                    sb.storage
-                    .from_("school-assets")
-                    .upload(
-                        storage_path,
-                        file_bytes,
-                        file_options={
-                            "content-type":
-                                content_type_map.get(
-                                    extension,
-                                    "application/octet-stream"
-                                ),
-                            "upsert": "false"
-                        }
-                    )
-                )
-
-                config = {
-                    "template_type": template_type,
-                    "original_file_name": original_name
-                }
-
-                (
-                    sb.table("print_templates")
-                    .insert({
-                        "school_id": school_id,
-                        "name": template_name.strip(),
-                        "template_name": template_name.strip(),
-                        "page_size": "A4",
-                        "orientation": orientation,
-                        "storage_path": storage_path,
-                        "file_path": storage_path,
-                        "file_type": extension,
-                        "config_json": json.dumps(config),
-                        "active": True
-                    })
-                    .execute()
-                )
-
-                st.success(
-                    "✅ A4 template uploaded successfully."
-                )
-
-                st.rerun()
-
-            except Exception as e:
-
-                st.error(
-                    "Could not upload the template."
-                )
-
-                st.code(str(e))
-
-    st.divider()
-
-    st.subheader("📋 Existing A4 Templates")
-
-    try:
-
-        template_data = (
-            sb.table("print_templates")
-            .select(
-                "id,school_id,name,template_name,"
-                "page_size,orientation,storage_path,"
-                "config_json,active,created_at,"
-                "updated_at,file_path,file_type"
-            )
-            .eq("school_id", school_id)
-            .order("created_at", desc=True)
-            .execute()
-            .data or []
-        )
-
-    except Exception as e:
-
-        st.error("Could not load templates.")
-        st.code(str(e))
-        return
-
-    if not template_data:
-
-        st.info(
-            "No A4 templates uploaded for this school yet."
-        )
-
-        return
-
-    for template in template_data:
-
-        template_id = template["id"]
-
-        template_name_value = (
-            template.get("template_name")
-            or template.get("name")
-            or "Unnamed Template"
-        )
-
-        orientation_value = (
-            template.get("orientation")
-            or "Portrait"
-        )
-
-        page_size_value = (
-            template.get("page_size")
-            or "A4"
-        )
-
-        file_path = (
-            template.get("file_path")
-            or template.get("storage_path")
-            or ""
-        )
-
-        file_type = (
-            template.get("file_type")
-            or ""
-        )
-
-        active = template.get("active", True)
-
-        try:
-
-            config = (
-                json.loads(
-                    template["config_json"]
-                )
-                if template.get("config_json")
-                else {}
-            )
-
-        except Exception:
-
-            config = {}
-
-        original_file_name = (
-            config.get("original_file_name")
-            or (
-                f"{template_name_value}.{file_type}"
-                if file_type
-                else template_name_value
-            )
-        )
-
-        template_type_value = (
-            config.get("template_type")
-            or "Other"
-        )
-
-        with st.container(border=True):
-
-            c1, c2, c3 = st.columns([4, 3, 1])
-
-            with c1:
-
-                st.markdown(
-                    f"### 📄 {template_name_value}"
-                )
-
-                st.caption(
-                    f"Type: {template_type_value}"
-                )
-
-                st.caption(
-                    f"File: {original_file_name}"
-                )
-
-            with c2:
-
-                st.write(
-                    f"**{page_size_value} "
-                    f"{orientation_value}**"
-                )
-
-                if active:
-                    st.success("ACTIVE")
-                else:
-                    st.error("INACTIVE")
-
-            with c3:
-
-                if st.button(
-                    "🗑️ Delete",
-                    key=f"delete_template_{template_id}"
-                ):
-
-                    try:
-
-                        if file_path:
-
-                            (
-                                sb.storage
-                                .from_("school-assets")
-                                .remove([file_path])
-                            )
-
-                        (
-                            sb.table("print_templates")
-                            .delete()
-                            .eq("id", template_id)
-                            .execute()
-                        )
-
-                        st.rerun()
-
-                    except Exception as e:
-
-                        st.error(
-                            "Could not delete template."
-                        )
-
-                        st.code(str(e))
-
-            if file_path:
-
-                try:
-
-                    template_bytes = (
-                        sb.storage
-                        .from_("school-assets")
-                        .download(file_path)
-                    )
-
-                    mime_map = {
-                        "pdf": "application/pdf",
-                        "png": "image/png",
-                        "jpg": "image/jpeg",
-                        "jpeg": "image/jpeg"
-                    }
-
-                    st.download_button(
-                        "⬇️ Download Template",
-                        data=template_bytes,
-                        file_name=original_file_name,
-                        mime=mime_map.get(
-                            file_type.lower(),
-                            "application/octet-stream"
-                        ),
-                        key=f"download_template_{template_id}",
-                        use_container_width=True
-                    )
-
-                except Exception:
-
-                    st.error(
-                        "Could not prepare template download."
-                    )
-
-            # Immediate status update
-            new_active = st.checkbox(
-                "Template Active",
-                value=active,                key=f"template_active_{template_id}"
-            )
-
-            if new_active != active:
-
-                try:
-                    (
-                        sb.table("print_templates")
-                        .update({
-                            "active": new_active,                            "updated_at":
-                                datetime.datetime.now(
-                                    datetime.timezone.utc
-                                ).isoformat()
-                        })
-                        .eq("id", template_id)
-                        .execute()
-                    )
-
-                    st.success(
-                        "Template status updated."
-                    )
-
-                    st.rerun()
-
-                except Exception as e:
-
-                    st.error(
-                        "Could not update template."
-                    )
-
-                    st.code(str(e))
-
-
-# =========================================================
-# ATTENDANCE
-# =========================================================
-
-def attendance():
-    st.header("📅 Attendance")
-
-    role = st.session_state.profile.get("role")
-
-    if role not in ["SuperAdmin", "Admin", "Teacher"]:
-        st.error("You do not have permission to manage attendance.")
-        return
-
-    school_id = get_selected_school("attendance_school")
-    if not school_id:
-        return
-
-    selected_date = st.date_input(
-        "Attendance Date",
-        value=datetime.date.today(),
-        key="attendance_date"
-    )
-
-    try:
-        students_data = (
-            sb.table("students")
-            .select("id,name,class_name,section,admission_no,active")
-            .eq("school_id", school_id)
-            .eq("active", True)
-            .order("name")
-            .execute()
-            .data or []
-        )
-    except Exception as e:
-        st.error("Could not load students.")
-        st.code(str(e))
-        return
-
-    if not students_data:
-        st.info("No active students found.")
-        return
-
-    class_options = ["All Classes"] + sorted({
-        str(x.get("class_name") or "")
-        for x in students_data
-        if str(x.get("class_name") or "")
-    })
-
-    selected_class = st.selectbox(
-        "Class",
-        class_options,
-        key="attendance_class"
-    )
-
-    if selected_class != "All Classes":
-        students_data = [
-            x for x in students_data
-            if str(x.get("class_name") or "") == selected_class
-        ]
-
-    try:
-        existing = (
-            sb.table("attendance")
-            .select("id,student_id,attendance_date,present")
-            .eq("school_id", school_id)
-            .eq("attendance_date", str(selected_date))
-            .execute()
-            .data or []
-        )
-    except Exception as e:
-        st.error(
-            "Attendance table could not be loaded. "
-            "Create the attendance table in Supabase first."
-        )
-        st.code(str(e))
-        return
-
-    existing_by_student = {
-        str(x["student_id"]): x for x in existing
-    }
-
-    entries = []
-
-    for student in students_data:
-        sid = str(student["id"])
-        old = existing_by_student.get(sid, {})
-        old_present = old.get("present", True)
-
-        status = st.selectbox(
-            student.get("name") or "Student",
-            ["Present", "Absent"],
-            index=0 if bool(old_present) else 1,
-            key=f"attendance_{sid}_{selected_date}"
-        )
-
-        entries.append((sid, status == "Present", old.get("id")))
-
-    if st.button(
-        "💾 Save Attendance",
-        type="primary",
-        use_container_width=True,
-        key="save_attendance_button"
-    ):
-        try:
-            for sid, status, old_id in entries:
-                if old_id:
-                    (
-                        sb.table("attendance")
-                        .update({"present": status})
-                        .eq("id", old_id)
-                        .execute()
-                    )
-                else:
-                    (
-                        sb.table("attendance")
-                        .insert({
-                            "school_id": school_id,
-                            "student_id": sid,
-                            "attendance_date": str(selected_date),
-                            "present": status
-                        })
-                        .execute()
-                    )
-
-            st.success("Attendance saved successfully.")
-            st.rerun()
-
-        except Exception as e:
-            st.error("Could not save attendance.")
             st.code(str(e))
 
 
