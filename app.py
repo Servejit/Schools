@@ -8002,20 +8002,20 @@ def dashboard():
 
         # Admin has full access to every Teacher module and
         # also retains all Admin-only management functions.
-        admin_menu_options = [
-            "🎓 Students",
-            "📚 Classes & Subjects",
-            "📝 Exam / Assessment",
-            "📝 Marks",
-            "📅 Attendance",
-            "🖨️ Print Templates",
-            "📄 Report Cards",
-            "📊 Reports"
-        ]
-        if premium_feature_enabled(profile.get("school_id"), st.session_state.user.id, "school_academic_status"):
-            admin_menu_options.append("💎 School Academic Status")
-
-        menu = st.radio("Management", admin_menu_options, horizontal=True)
+        menu = st.radio(
+            "Management",
+            [
+                "🎓 Students",
+                "📚 Classes & Subjects",
+                "📝 Exam / Assessment",
+                "📝 Marks",
+                "📅 Attendance",
+                "🖨️ Print Templates",
+                "📄 Report Cards",
+                "📊 Reports"
+            ],
+            horizontal=True
+        )
 
         if menu == "🎓 Students":
             students()
@@ -8040,9 +8040,6 @@ def dashboard():
 
         elif menu == "📊 Reports":
             reports()
-
-        elif menu == "💎 School Academic Status":
-            school_academic_status(profile.get("school_id"))
 
         else:
             st.info(
