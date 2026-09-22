@@ -3456,10 +3456,13 @@ def create_report_overlay(
                 logo_box_x = left
                 logo_box_w = logo_size
                 logo_box_h = logo_size
-                logo_center_y = height - 38
+                # Keep the logo fully inside the School Name
+                # header row. Its top edge must not rise above
+                # the School Name row.
+                logo_top_y = height - 24
                 logo_box_y = (
-                    logo_center_y
-                    - (logo_box_h / 2)
+                    logo_top_y
+                    - logo_box_h
                 )
 
                 pdf.setStrokeColorRGB(
