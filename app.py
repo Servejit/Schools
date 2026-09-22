@@ -3034,6 +3034,138 @@ def print_templates():
 
 
 # =========================================================
+# ATTENDANCE
+# =========================================================
+
+def attendance():
+    st.header("📅 Attendance")
+
+    role = st.session_state.profile.get("role")
+
+    if role not in ["SuperAdmin", "Admin", "Teacher"]:
+        st.error("You do not have permission to manage attendance.")
+        return
+
+    school_id = get_selected_school("attendance_school")
+    if not school_id:
+        return
+
+    selected_date = st.date_input(
+        "Attendance Date",
+        value=datetime.date.today(),
+        key="attendance_date"
+    )
+
+    try:
+        students_data = (
+            sb.table("students")
+            .select("id,name,class_name,section,admission_no,active")
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .order("name")
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error("Could not load students.")
+        st.code(str(e))
+        return
+
+    if not students_data:
+        st.info("No active students found.")
+        return
+
+    class_options = ["All Classes"] + sorted({
+        str(x.get("class_name") or "")
+        for x in students_data
+        if str(x.get("class_name") or "")
+    })
+
+    selected_class = st.selectbox(
+        "Class",
+        class_options,
+        key="attendance_class"
+    )
+
+    if selected_class != "All Classes":
+        students_data = [
+            x for x in students_data
+            if str(x.get("class_name") or "") == selected_class
+        ]
+
+    try:
+        existing = (
+            sb.table("attendance")
+            .select("id,student_id,date,status")
+            .eq("school_id", school_id)
+            .eq("date", str(selected_date))
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error(
+            "Attendance table could not be loaded. "
+            "Create the attendance table in Supabase first."
+        )
+        st.code(str(e))
+        return
+
+    existing_by_student = {
+        str(x["student_id"]): x for x in existing
+    }
+
+    entries = []
+
+    for student in students_data:
+        sid = str(student["id"])
+        old = existing_by_student.get(sid, {})
+        old_status = str(old.get("status") or "Present")
+
+        status = st.selectbox(
+            student.get("name") or "Student",
+            ["Present", "Absent"],
+            index=0 if old_status.lower() == "present" else 1,
+            key=f"attendance_{sid}_{selected_date}"
+        )
+
+        entries.append((sid, status, old.get("id")))
+
+    if st.button(
+        "💾 Save Attendance",
+        type="primary",
+        use_container_width=True,
+        key="save_attendance_button"
+    ):
+        try:
+            for sid, status, old_id in entries:
+                if old_id:
+                    (
+                        sb.table("attendance")
+                        .update({"status": status})
+                        .eq("id", old_id)
+                        .execute()
+                    )
+                else:
+                    (
+                        sb.table("attendance")
+                        .insert({
+                            "school_id": school_id,
+                            "student_id": sid,
+                            "date": str(selected_date),
+                            "status": status
+                        })
+                        .execute()
+                    )
+
+            st.success("Attendance saved successfully.")
+            st.rerun()
+
+        except Exception as e:
+            st.error("Could not save attendance.")
+            st.code(str(e))
+
+
+# =========================================================
 # REPORT CARD HELPERS
 # =========================================================
 
@@ -3050,6 +3182,73 @@ def get_template_config(template):
         pass
 
     return {}
+
+
+def grade_from_percentage(percentage):
+    try:
+        p = float(percentage)
+    except Exception:
+        p = 0
+
+    if p >= 91: return "A1"
+    if p >= 81: return "A2"
+    if p >= 71: return "B1"
+    if p >= 61: return "B2"
+    if p >= 51: return "C1"
+    if p >= 41: return "C2"
+    if p >= 33: return "D"
+    return "E"
+
+
+def download_storage_file(path):
+    if not path:
+        return None
+
+    path = str(path).strip()
+
+    if path.startswith("http://") or path.startswith("https://"):
+        try:
+            response = requests.get(path, timeout=20)
+            if response.ok:
+                return response.content
+        except Exception:
+            pass
+
+    for bucket in ["school-assets", "student-photos"]:
+        try:
+            data = sb.storage.from_(bucket).download(path)
+            if data:
+                return data
+        except Exception:
+            pass
+
+    return None
+
+
+def attendance_summary(student_id, school_id):
+    try:
+        rows = (
+            sb.table("attendance")
+            .select("id,date,status")
+            .eq("school_id", school_id)
+            .eq("student_id", student_id)
+            .execute()
+            .data or []
+        )
+    except Exception:
+        return 0, 0
+
+    total_days = len(rows)
+    present_days = sum(
+        1 for row in rows
+        if str(row.get("status") or "").strip().lower()
+        in ["present", "p", "1", "true"]
+    )
+    return total_days, present_days
+
+
+def school_logo_from_template(template):
+    return get_template_config(template).get("school_logo_path")
 
 
 def pdf_page_size(orientation):
@@ -3102,7 +3301,10 @@ def create_report_overlay(
     subjects,
     marks_rows,
     exam_name,
-    orientation
+    orientation,
+    total_attendance=0,
+    present_days=0,
+    school_logo_path=None
 ):
 
     width, height = pdf_page_size(
@@ -3201,6 +3403,45 @@ def create_report_overlay(
             height - 49,
             school_address
         )
+
+    # School logo on the LEFT side
+    if school_logo_path:
+        try:
+            logo_bytes = download_storage_file(
+                school_logo_path
+            )
+
+            if logo_bytes:
+                logo_image = Image.open(
+                    io.BytesIO(logo_bytes)
+                ).convert("RGB")
+
+                from PIL import ImageOps
+
+                logo_image = ImageOps.contain(
+                    logo_image,
+                    (55, 55)
+                )
+
+                logo_buffer = io.BytesIO()
+                logo_image.save(
+                    logo_buffer,
+                    format="PNG"
+                )
+                logo_buffer.seek(0)
+
+                pdf.drawImage(
+                    ImageReader(logo_buffer),
+                    left,
+                    height - 100,
+                    width=55,
+                    height=55,
+                    preserveAspectRatio=True,
+                    anchor="c",
+                    mask="auto"
+                )
+        except Exception:
+            pass
 
     pdf.setFont(
         "Helvetica-Bold",
@@ -3314,50 +3555,56 @@ def create_report_overlay(
     # Student photo
     # -----------------------------------------------------
 
-    photo_path = student.get(
-        "photo_path"
-    )
+    photo_path = student.get("photo_path")
 
     if photo_path:
-
         try:
+            photo_bytes = download_storage_file(photo_path)
 
-            photo_bytes = (
-                sb.storage
-                .from_("school-assets")
-                .download(photo_path)
-            )
+            if photo_bytes:
+                from PIL import ImageOps
 
-            image = Image.open(
-                io.BytesIO(photo_bytes)
-            )
+                image = Image.open(
+                    io.BytesIO(photo_bytes)
+                ).convert("RGB")
 
-            image.thumbnail(
-                (
-                    int(photo_w),
-                    int(photo_h)
+                image = ImageOps.fit(
+                    image,
+                    (
+                        max(1, int(photo_w * 3)),
+                        max(1, int(photo_h * 3))
+                    ),
+                    method=Image.Resampling.LANCZOS
                 )
-            )
 
-            img_buffer = io.BytesIO()
+                img_buffer = io.BytesIO()
+                image.save(
+                    img_buffer,
+                    format="PNG"
+                )
+                img_buffer.seek(0)
 
-            image.save(
-                img_buffer,
-                format="PNG"
-            )
+                pdf.drawImage(
+                    ImageReader(img_buffer),
+                    photo_x,
+                    photo_y,
+                    width=photo_w,
+                    height=photo_h,
+                    preserveAspectRatio=False,
+                    mask="auto"
+                )
 
-            img_buffer.seek(0)
-
-            pdf.drawImage(
-                ImageReader(img_buffer),
-                photo_x,
-                photo_y,
-                width=photo_w,
-                height=photo_h,
-                preserveAspectRatio=True,
-                anchor="c",
-                mask="auto"
-            )
+                pdf.setStrokeColorRGB(
+                    0.45, 0.45, 0.45
+                )
+                pdf.rect(
+                    photo_x,
+                    photo_y,
+                    photo_w,
+                    photo_h,
+                    stroke=1,
+                    fill=0
+                )
 
         except Exception:
             pass
@@ -3368,10 +3615,11 @@ def create_report_overlay(
 
     table_top = table_y
 
-    subject_col = table_width * 0.50
-    max_col = table_width * 0.16
-    marks_col = table_width * 0.17
-    result_col = table_width * 0.17
+    subject_col = table_width * 0.40
+    max_col = table_width * 0.14
+    marks_col = table_width * 0.14
+    result_col = table_width * 0.14
+    grade_col = table_width * 0.18
 
     row_height = 21
 
@@ -3384,14 +3632,16 @@ def create_report_overlay(
         "Subject",
         "Max Marks",
         "Marks",
-        "Result"
+        "Result",
+        "Grade"
     ]
 
     x_positions = [
         table_x,
         table_x + subject_col,
         table_x + subject_col + max_col,
-        table_x + subject_col + max_col + marks_col
+        table_x + subject_col + max_col + marks_col,
+        table_x + subject_col + max_col + marks_col + result_col
     ]
 
     pdf.rect(
@@ -3401,10 +3651,8 @@ def create_report_overlay(
         row_height
     )
 
-    for i in range(1, 4):
-
+    for i in range(1, 5):
         x = x_positions[i]
-
         pdf.line(
             x,
             table_top,
@@ -3412,29 +3660,12 @@ def create_report_overlay(
             table_top - row_height
         )
 
-    pdf.drawString(
-        table_x + 5,
-        table_top - 14,
-        headers[0]
-    )
-
-    pdf.drawString(
-        x_positions[1] + 5,
-        table_top - 14,
-        headers[1]
-    )
-
-    pdf.drawString(
-        x_positions[2] + 5,
-        table_top - 14,
-        headers[2]
-    )
-
-    pdf.drawString(
-        x_positions[3] + 5,
-        table_top - 14,
-        headers[3]
-    )
+    for i, header in enumerate(headers):
+        pdf.drawString(
+            x_positions[i] + 5,
+            table_top - 14,
+            header
+        )
 
     y = table_top - row_height
 
@@ -3503,10 +3734,8 @@ def create_report_overlay(
             row_height
         )
 
-        for i in range(1, 4):
-
+        for i in range(1, 5):
             x = x_positions[i]
-
             pdf.line(
                 x,
                 y,
@@ -3514,10 +3743,20 @@ def create_report_overlay(
                 y + row_height
             )
 
+        row_percentage = (
+            (mark_number / max_number) * 100
+            if max_number
+            else 0
+        )
+
+        grade = grade_from_percentage(
+            row_percentage
+        )
+
         pdf.drawString(
             table_x + 5,
             y + 6,
-            str(subject_name)[:45]
+            str(subject_name)[:34]
         )
 
         pdf.drawString(
@@ -3536,6 +3775,12 @@ def create_report_overlay(
             x_positions[3] + 5,
             y + 6,
             result
+        )
+
+        pdf.drawString(
+            x_positions[4] + 5,
+            y + 6,
+            grade
         )
 
     # -----------------------------------------------------
@@ -3565,6 +3810,35 @@ def create_report_overlay(
         table_x + 220,
         summary_y,
         f"Percentage: {percentage:.2f}%"
+    )
+
+    overall_grade = grade_from_percentage(
+        percentage
+    )
+
+    pdf.drawString(
+        table_x + 390,
+        summary_y,
+        f"Grade: {overall_grade}"
+    )
+
+    attendance_y = summary_y - 20
+
+    pdf.setFont(
+        "Helvetica-Bold",
+        9
+    )
+
+    pdf.drawString(
+        table_x,
+        attendance_y,
+        f"Total Attendance: {int(total_attendance)}"
+    )
+
+    pdf.drawString(
+        table_x + 190,
+        attendance_y,
+        f"Present Days: {int(present_days)}"
     )
 
     # -----------------------------------------------------
@@ -3635,7 +3909,10 @@ def make_report_card_pdf(
     subjects,
     marks_rows,
     exam_name,
-    file_type
+    file_type,
+    total_attendance=0,
+    present_days=0,
+    school_logo_path=None
 ):
 
     overlay_bytes = create_report_overlay(
@@ -3644,7 +3921,10 @@ def make_report_card_pdf(
         subjects=subjects,
         marks_rows=marks_rows,
         exam_name=exam_name,
-        orientation=orientation
+        orientation=orientation,
+        total_attendance=total_attendance,
+        present_days=present_days,
+        school_logo_path=school_logo_path
     )
 
     overlay_doc = fitz.open(
@@ -3885,6 +4165,83 @@ def report_cards():
     selected_template = template_map[
         selected_template_label
     ]
+
+    current_logo_path = school_logo_from_template(
+        selected_template
+    )
+
+    with st.expander(
+        "🏫 School Logo (Left Side)",
+        expanded=False
+    ):
+        if current_logo_path:
+            current_logo_bytes = download_storage_file(
+                current_logo_path
+            )
+            if current_logo_bytes:
+                st.image(
+                    current_logo_bytes,
+                    width=90
+                )
+
+        uploaded_logo = st.file_uploader(
+            "Upload / Replace School Logo",
+            type=["png", "jpg", "jpeg"],
+            key="report_school_logo"
+        )
+
+        if uploaded_logo and st.button(
+            "💾 Save School Logo",
+            use_container_width=True,
+            key="save_report_school_logo"
+        ):
+            try:
+                ext = uploaded_logo.name.split(".")[-1].lower()
+                logo_path = (
+                    f"{school_id}/school-logo/"
+                    f"{uuid.uuid4().hex}.{ext}"
+                )
+
+                sb.storage.from_(
+                    "school-assets"
+                ).upload(
+                    logo_path,
+                    uploaded_logo.getvalue(),
+                    {
+                        "content-type": uploaded_logo.type,
+                        "upsert": "true"
+                    }
+                )
+
+                logo_config = get_template_config(
+                    selected_template
+                )
+                logo_config["school_logo_path"] = logo_path
+
+                (
+                    sb.table("print_templates")
+                    .update({
+                        "config_json": json.dumps(
+                            logo_config
+                        ),
+                        "updated_at":
+                            datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat()
+                    })
+                    .eq(
+                        "id",
+                        selected_template["id"]
+                    )
+                    .execute()
+                )
+
+                st.success("School logo saved.")
+                st.rerun()
+
+            except Exception as e:
+                st.error("Could not save school logo.")
+                st.code(str(e))
 
     orientation = (
         selected_template.get("orientation")
@@ -4229,7 +4586,24 @@ def report_cards():
                             exam_name,
 
                         file_type=
-                            file_type
+                            file_type,
+
+                        total_attendance=
+                            attendance_summary(
+                                selected_student["id"],
+                                school_id
+                            )[0],
+
+                        present_days=
+                            attendance_summary(
+                                selected_student["id"],
+                                school_id
+                            )[1],
+
+                        school_logo_path=
+                            school_logo_from_template(
+                                selected_template
+                            )
                     )
 
                     safe_name = (
@@ -4355,7 +4729,24 @@ def report_cards():
                                 exam_name,
 
                             file_type=
-                                file_type
+                                file_type,
+
+                            total_attendance=
+                                attendance_summary(
+                                    student["id"],
+                                    school_id
+                                )[0],
+
+                            present_days=
+                                attendance_summary(
+                                    student["id"],
+                                    school_id
+                                )[1],
+
+                            school_logo_path=
+                                school_logo_from_template(
+                                    selected_template
+                                )
                         )
 
                         safe_name = (
@@ -4529,6 +4920,9 @@ def dashboard():
         elif menu == "📝 Marks":
             bulk_marks()
 
+        elif menu == "📅 Attendance":
+            attendance()
+
         elif menu == "🖨️ Print Templates":
             print_templates()
 
@@ -4571,6 +4965,9 @@ def dashboard():
         elif menu == "📝 Marks":
             bulk_marks()
 
+        elif menu == "📅 Attendance":
+            attendance()
+
         elif menu == "🖨️ Print Templates":
             print_templates()
 
@@ -4612,6 +5009,9 @@ def dashboard():
 
         elif menu == "📝 Marks":
             bulk_marks()
+
+        elif menu == "📅 Attendance":
+            attendance()
 
         elif menu == "🖨️ Print Templates":
             print_templates()
