@@ -3650,16 +3650,17 @@ def create_report_overlay(
 
     table_top = table_y
 
-    subject_col = table_width * 0.40
-    max_col = table_width * 0.14
-    marks_col = table_width * 0.14
-    result_col = table_width * 0.14
-    grade_col = table_width * 0.18
+    # Keep every marks-related column comfortably visible.
+    subject_col = table_width * 0.38
+    max_col = table_width * 0.15
+    marks_col = table_width * 0.17
+    result_col = table_width * 0.15
+    grade_col = table_width * 0.15
 
     headers = [
         "Subject",
         "Max Marks",
-        "Marks",
+        "Marks Obtained",
         "Result",
         "Grade"
     ]
@@ -3672,25 +3673,25 @@ def create_report_overlay(
         table_x + subject_col + max_col + marks_col + result_col
     ]
 
-    # Dynamically shrink rows when there are many subjects so that
-    # every subject remains visible on the A4 report card.
     subject_count = max(1, len(marks_rows))
-    reserved_bottom = remarks_y + 75
+
+    # A4-safe dynamic row height. Do not make rows so small that
+    # marks/result/grade become unreadable.
     available_height = max(
-        120,
-        table_top - reserved_bottom - 38
+        300,
+        table_top - (remarks_y + 95)
     )
 
     row_height = min(
-        21,
+        20,
         max(
-            10,
+            13,
             available_height / (subject_count + 1)
         )
     )
 
-    header_font = 9 if row_height >= 15 else 7.5
-    body_font = 8.5 if row_height >= 15 else 7
+    header_font = 8 if row_height < 16 else 8.5
+    body_font = 7.5 if row_height < 16 else 8.5
 
     pdf.setFont(
         "Helvetica-Bold",
@@ -3712,12 +3713,28 @@ def create_report_overlay(
             table_top - row_height
         )
 
+    # Header alignment
+    header_centers = [
+        table_x + subject_col / 2,
+        x_positions[1] + max_col / 2,
+        x_positions[2] + marks_col / 2,
+        x_positions[3] + result_col / 2,
+        x_positions[4] + grade_col / 2
+    ]
+
     for i, header in enumerate(headers):
-        pdf.drawString(
-            x_positions[i] + 4,
-            table_top - row_height + max(3, row_height / 2 - 3),
-            header
-        )
+        if i == 0:
+            pdf.drawString(
+                table_x + 4,
+                table_top - row_height + max(3, row_height / 2 - 3),
+                header
+            )
+        else:
+            pdf.drawCentredString(
+                header_centers[i],
+                table_top - row_height + max(3, row_height / 2 - 3),
+                header
+            )
 
     y = table_top - row_height
 
@@ -3764,23 +3781,25 @@ def create_report_overlay(
         except Exception:
             passing_number = 0
 
-        result = (
-            "PASS"
-            if mark_value is not None and mark_number >= passing_number
-            else ("FAIL" if mark_value is not None else "-")
-        )
+        if mark_value is None:
+            result = "-"
+            grade = "-"
+        else:
+            result = (
+                "PASS"
+                if mark_number >= passing_number
+                else "FAIL"
+            )
 
-        row_percentage = (
-            (mark_number / max_number) * 100
-            if max_number and mark_value is not None
-            else 0
-        )
+            row_percentage = (
+                (mark_number / max_number) * 100
+                if max_number
+                else 0
+            )
 
-        grade = (
-            grade_from_percentage(row_percentage)
-            if mark_value is not None
-            else "-"
-        )
+            grade = grade_from_percentage(
+                row_percentage
+            )
 
         pdf.rect(
             table_x,
@@ -3802,37 +3821,38 @@ def create_report_overlay(
             (row_height - body_font) / 2
         )
 
-        # Keep long subject names visible instead of clipping them.
         subject_text = str(subject_name)
-        if len(subject_text) > 30:
-            subject_text = subject_text[:29] + "…"
+        if len(subject_text) > 31:
+            subject_text = subject_text[:30] + "…"
 
+        # Subject
         pdf.drawString(
             table_x + 4,
             baseline,
             subject_text
         )
 
-        pdf.drawString(
-            x_positions[1] + 4,
+        # All numeric/result/grade values are centered in their columns.
+        pdf.drawCentredString(
+            header_centers[1],
             baseline,
             f"{max_number:g}"
         )
 
-        pdf.drawString(
-            x_positions[2] + 4,
+        pdf.drawCentredString(
+            header_centers[2],
             baseline,
             mark_display
         )
 
-        pdf.drawString(
-            x_positions[3] + 4,
+        pdf.drawCentredString(
+            header_centers[3],
             baseline,
             result
         )
 
-        pdf.drawString(
-            x_positions[4] + 4,
+        pdf.drawCentredString(
+            header_centers[4],
             baseline,
             grade
         )
@@ -3854,14 +3874,18 @@ def create_report_overlay(
         9.5
     )
 
+    total_x = table_x
+    percentage_x = table_x + table_width * 0.43
+    grade_x = table_x + table_width * 0.76
+
     pdf.drawString(
-        table_x,
+        total_x,
         summary_y,
         f"Total Marks: {total_marks:g} / {total_max:g}"
     )
 
     pdf.drawString(
-        table_x + table_width * 0.43,
+        percentage_x,
         summary_y,
         f"Percentage: {percentage:.2f}%"
     )
@@ -3871,7 +3895,7 @@ def create_report_overlay(
     )
 
     pdf.drawString(
-        table_x + table_width * 0.76,
+        grade_x,
         summary_y,
         f"Grade: {overall_grade}"
     )
@@ -3883,27 +3907,17 @@ def create_report_overlay(
         9
     )
 
-    # Three aligned fields: Total Attendance | Present Days | Percentage.
-    col_a = table_x
-    col_b = table_x + table_width * 0.34
-    col_c = table_x + table_width * 0.68
-
+    # Present Days is directly below the Percentage column.
     pdf.drawString(
-        col_a,
+        total_x,
         attendance_y,
         f"Total Attendance: {int(total_attendance)}"
     )
 
     pdf.drawString(
-        col_b,
+        percentage_x,
         attendance_y,
         f"Present Days: {int(present_days)}"
-    )
-
-    pdf.drawString(
-        col_c,
-        attendance_y,
-        f"Percentage: {percentage:.2f}%"
     )
 
     # -----------------------------------------------------
