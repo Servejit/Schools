@@ -13503,6 +13503,7 @@ def dashboard():
                 "📝 Exam / Assessment",
                 "📝 Marks",
                 "📅 Attendance",
+                "📢 Notices",
                 "🖨️ Print Templates",
                 "📄 Report Cards",
                 "📊 Reports",
