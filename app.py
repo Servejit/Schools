@@ -3906,8 +3906,8 @@ def bulk_marks():
     passing_marks = float(selected_subject.get("passing_marks") or 0)
 
     st.caption(
-        f"Maximum Marks: **{max_marks:g}** "
-        f"| Passing Marks: **{passing_marks:g}**"
+        f"Maximum Marks: **{max_marks:.2f}** "
+        f"| Passing Marks: **{passing_marks:.2f}**"
     )
 
     exam_options = get_exam_assessments(school_id)
@@ -4003,7 +4003,7 @@ def bulk_marks():
 
     st.markdown(f"### 📝 {subject_name} — {exam_name}")
     st.caption(
-        f"{len(students_for_class)} students | Maximum {max_marks:g} marks"
+        f"{len(students_for_class)} students | Maximum {max_marks:.2f} marks"
     )
 
     edited_df = st.data_editor(
@@ -4068,7 +4068,7 @@ def bulk_marks():
                 continue
 
             try:
-                mark_value = float(value)
+                mark_value = round(float(value), 2)
             except Exception:
                 errors.append(
                     f"{row['Student Name']}: Invalid marks."
@@ -4083,8 +4083,8 @@ def bulk_marks():
 
             if mark_value > max_marks:
                 errors.append(
-                    f"{row['Student Name']}: {mark_value:g} exceeds "
-                    f"maximum {max_marks:g}."
+                    f"{row['Student Name']}: {mark_value:.2f} exceeds "
+                    f"maximum {max_marks:.2f}."
                 )
                 continue
 
@@ -5719,7 +5719,7 @@ def create_report_overlay(
 
         try:
             mark_number = float(mark_value)
-            mark_display = f"{mark_number:g}"
+            mark_display = f"{mark_number:.2f}"
         except Exception:
             mark_number = 0
             mark_display = "-"
@@ -5794,7 +5794,7 @@ def create_report_overlay(
         pdf.drawCentredString(
             header_centers[1],
             baseline,
-            f"{max_number:g}"
+            f"{max_number:.2f}"
         )
 
         pdf.drawCentredString(
@@ -5839,7 +5839,7 @@ def create_report_overlay(
     pdf.drawString(
         total_x,
         summary_y,
-        f"Total Marks: {total_marks:g} / {total_max:g}"
+        f"Total Marks: {total_marks:.2f} / {total_max:.2f}"
     )
 
     pdf.drawString(
@@ -6633,7 +6633,7 @@ def restore_marks_from_backup(uploaded_file, school_id):
                 continue
 
             try:
-                mark_value = float(raw_marks)
+                mark_value = round(float(raw_marks), 2)
             except Exception:
                 skipped.append(
                     f"{sheet_name}: invalid marks for {student_id}/{subject_id}."
@@ -6651,8 +6651,8 @@ def restore_marks_from_backup(uploaded_file, school_id):
 
             if max_marks is not None and mark_value > float(max_marks):
                 skipped.append(
-                    f"{sheet_name}: {mark_value:g} exceeds maximum "
-                    f"{float(max_marks):g} for {student_id}/{subject_id}."
+                    f"{sheet_name}: {mark_value:.2f} exceeds maximum "
+                    f"{float(max_marks):.2f} for {student_id}/{subject_id}."
                 )
                 continue
             if mark_value < 0:
@@ -8202,7 +8202,7 @@ def create_report_overlay(
 
         try:
             mark_number = float(mark_value)
-            mark_display = f"{mark_number:g}"
+            mark_display = f"{mark_number:.2f}"
         except Exception:
             mark_number = 0
             mark_display = "-"
@@ -8277,7 +8277,7 @@ def create_report_overlay(
         pdf.drawCentredString(
             header_centers[1],
             baseline,
-            f"{max_number:g}"
+            f"{max_number:.2f}"
         )
 
         pdf.drawCentredString(
@@ -8322,7 +8322,7 @@ def create_report_overlay(
     pdf.drawString(
         total_x,
         summary_y,
-        f"Total Marks: {total_marks:g} / {total_max:g}"
+        f"Total Marks: {total_marks:.2f} / {total_max:.2f}"
     )
 
     pdf.drawString(
@@ -9202,7 +9202,7 @@ def restore_report_cards_from_excel(uploaded_file, school_id):
             continue
 
         try:
-            mark_value = float(raw_marks)
+            mark_value = round(float(raw_marks), 2)
         except Exception:
             skipped.append(
                 f"Invalid marks: {student_id}/{subject_id}/{exam_name}"
