@@ -8441,48 +8441,115 @@ def reports():
                 ) in allowed_pairs
             ]
 
-        # Admin/SuperAdmin can filter the school records before export.
-        class_options = sorted({
-            str(s.get("class_name") or "").strip()
-            for s in students_data
-            if str(s.get("class_name") or "").strip()
-        })
-        section_options = sorted({
-            str(s.get("section") or "").strip()
-            for s in students_data
-            if str(s.get("section") or "").strip()
-        })
+        # Teacher: only the Class Teacher's assigned class(es).
+        # Admin: all active classes from this Admin's own school, with
+        # a class dropdown. SuperAdmin keeps access to the school selected
+        # above and can also use the class dropdown.
+        filtered_students = students_data
 
-        fc1, fc2 = st.columns(2)
-        with fc1:
+        if role == "Teacher":
+            teacher_class_options = sorted({
+                (
+                    f"{x.get('class_name') or '-'}"
+                    f" | Section: {x.get('section') or '-'}"
+                )
+                for x in teacher_classes
+            })
+
+            if not teacher_class_options:
+                st.info("No class has been assigned to you as Class Teacher.")
+                return
+
+            selected_teacher_class = st.selectbox(
+                "🏫 My Class",
+                teacher_class_options,
+                key="reports_teacher_student_class"
+            )
+
+            selected_teacher_class_name = selected_teacher_class.split(" | Section: ", 1)[0]
+            selected_teacher_section = (
+                selected_teacher_class.split(" | Section: ", 1)[1]
+                if " | Section: " in selected_teacher_class
+                else "-"
+            )
+
+            filtered_students = [
+                s for s in filtered_students
+                if str(s.get("class_name") or "").strip() == selected_teacher_class_name
+                and str(s.get("section") or "").strip() == selected_teacher_section
+            ]
+
+        else:
+            # Admin/SuperAdmin: build the dropdown from the Classes table so
+            # every active class in the school is available even if it has
+            # no students yet.
+            try:
+                school_classes = (
+                    sb.table("classes")
+                    .select("id,class_name,section,academic_year,active")
+                    .eq("school_id", school_id)
+                    .eq("active", True)
+                    .order("class_name")
+                    .order("section")
+                    .execute()
+                    .data or []
+                )
+            except Exception as e:
+                st.error("Could not load school classes.")
+                st.code(str(e))
+                return
+
+            class_options = [
+                (
+                    f"{x.get('class_name') or '-'}"
+                    f" | Section: {x.get('section') or '-'}"
+                    f" | {x.get('academic_year') or '-'}"
+                )
+                for x in school_classes
+            ]
+
+            if not class_options:
+                st.info("No active classes are available in this school.")
+                return
+
             class_filter = st.selectbox(
                 "🏫 Class",
                 ["All Classes"] + class_options,
-                key="reports_student_records_class"
+                key="reports_admin_student_records_class"
             )
-        filtered_students = students_data
-        if class_filter != "All Classes":
-            filtered_students = [
-                s for s in filtered_students
-                if str(s.get("class_name") or "").strip() == class_filter
-            ]
 
-        filtered_section_options = sorted({
-            str(s.get("section") or "").strip()
-            for s in filtered_students
-            if str(s.get("section") or "").strip()
-        })
-        with fc2:
+            if class_filter != "All Classes":
+                selected_class_name = class_filter.split(" | Section: ", 1)[0]
+                remaining = class_filter.split(" | Section: ", 1)
+                selected_section = (
+                    remaining[1].split(" | ", 1)[0]
+                    if len(remaining) > 1
+                    else ""
+                )
+                filtered_students = [
+                    s for s in filtered_students
+                    if str(s.get("class_name") or "").strip() == selected_class_name
+                    and str(s.get("section") or "").strip() == selected_section
+                ]
+
+        # Optional section filter remains available for Admin/SuperAdmin
+        # after selecting a class, while Teacher access stays limited above.
+        if role != "Teacher":
+            filtered_section_options = sorted({
+                str(s.get("section") or "").strip()
+                for s in filtered_students
+                if str(s.get("section") or "").strip()
+            })
             section_filter = st.selectbox(
                 "📚 Section",
                 ["All Sections"] + filtered_section_options,
-                key="reports_student_records_section"
+                key="reports_admin_student_records_section"
             )
-        if section_filter != "All Sections":
-            filtered_students = [
-                s for s in filtered_students
-                if str(s.get("section") or "").strip() == section_filter
-            ]
+            if section_filter != "All Sections":
+                filtered_students = [
+                    s for s in filtered_students
+                    if str(s.get("section") or "").strip() == section_filter
+                ]
 
         search = st.text_input(
             "🔍 Search Student",
