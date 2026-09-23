@@ -275,44 +275,44 @@ def apply_role_theme():
     }}
 
     /* Golden flashing school notices */
-    .school-notice-card {
+    .school-notice-card {{
         background: #FFFDF0;
         border: 2px solid #D4AF37;
         border-radius: 14px;
         padding: 14px 16px;
         margin: 10px 0;
         box-shadow: 0 3px 12px rgba(212,175,55,.20);
-    }
-    .school-notice-heading {
+    }}
+    .school-notice-heading {{
         display: flex;
         align-items: center;
         gap: 12px;
         flex-wrap: wrap;
         margin-bottom: 8px;
-    }
-    .school-notice-flash {
+    }}
+    .school-notice-flash {{
         color: #D4AF37;
         font-size: 1.35rem;
         font-weight: 900;
         letter-spacing: 1.5px;
         text-shadow: 0 0 6px rgba(212,175,55,.65);
         animation: schoolNoticeGoldenFlash 1.15s infinite;
-    }
-    .school-notice-date {
+    }}
+    .school-notice-date {{
         color: #6B5500;
         font-weight: 700;
         font-size: 1rem;
-    }
-    .school-notice-message {
+    }}
+    .school-notice-message {{
         color: #2F2600;
         font-size: 1rem;
         line-height: 1.55;
         white-space: normal;
-    }
-    @keyframes schoolNoticeGoldenFlash {
-        0%, 100% { opacity: 1; text-shadow: 0 0 5px rgba(212,175,55,.45); }
-        50% { opacity: .35; text-shadow: 0 0 18px rgba(255,215,0,1); }
-    }
+    }}
+    @keyframes schoolNoticeGoldenFlash {{
+        0%, 100% {{ opacity: 1; text-shadow: 0 0 5px rgba(212,175,55,.45); }}
+        50% {{ opacity: .35; text-shadow: 0 0 18px rgba(255,215,0,1); }}
+    }}
 
     </style>""", unsafe_allow_html=True)
 
