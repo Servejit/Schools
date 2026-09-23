@@ -3411,6 +3411,8 @@ def bulk_marks():
                 "class_name,section,active"
             )
             .eq("school_id", school_id)
+            .eq("class_name", class_name)
+            .eq("section", section)
             .eq("active", True)
             .order("name")
             .execute()
@@ -3562,12 +3564,24 @@ def bulk_marks():
                 continue
 
             if existing:
-                updates.append({
-                    "id": existing["id"],
-                    "marks": mark_value,
-                    "max_marks": max_marks,
-                    "class_id": class_id
-                })
+                old_value = existing.get("marks")
+                old_num = None
+                if old_value is not None and not pd.isna(old_value):
+                    try:
+                        old_num = float(old_value)
+                    except Exception:
+                        old_num = None
+
+                # Do not write unchanged rows. This reduces database traffic
+                # and avoids unnecessary row/version churn for concurrent users.
+                if old_num is None or abs(old_num - mark_value) > 1e-9:
+                    updates.append({
+                        "id": existing["id"],
+                        "old_marks": old_num,
+                        "marks": mark_value,
+                        "max_marks": max_marks,
+                        "class_id": class_id
+                    })
             else:
                 records_to_insert.append({
                     "school_id": school_id,
@@ -3589,15 +3603,52 @@ def bulk_marks():
             if records_to_insert:
                 sb.table("marks").insert(records_to_insert).execute()
 
+            conflicts = []
+
             for update_row in updates:
-                sb.table("marks").update({
-                    "marks": update_row["marks"],
-                    "max_marks": update_row["max_marks"],
-                    "class_id": update_row["class_id"]
-                }).eq("id", update_row["id"]).execute()
+                query = (
+                    sb.table("marks")
+                    .update({
+                        "marks": update_row["marks"],
+                        "max_marks": update_row["max_marks"],
+                        "class_id": update_row["class_id"]
+                    })
+                    .eq("id", update_row["id"])
+                )
+
+                if update_row["old_marks"] is None:
+                    query = query.is_("marks", "null")
+                else:
+                    query = query.eq("marks", update_row["old_marks"])
+
+                result = query.select("id").execute()
+                if not result.data:
+                    conflicts.append(
+                        f"Student ID {update_row['id']}: "
+                        "this mark was changed by another user. Reload and review before saving."
+                    )
 
             for mark_id in deletes:
-                sb.table("marks").delete().eq("id", mark_id).execute()
+                result = (
+                    sb.table("marks")
+                    .delete()
+                    .eq("id", mark_id)
+                    .select("id")
+                    .execute()
+                )
+                if not result.data:
+                    conflicts.append(
+                        f"Mark record {mark_id}: it was already changed or removed by another user."
+                    )
+
+            if conflicts:
+                st.warning(
+                    "Some records were not changed because another user "
+                    "updated them at the same time."
+                )
+                for conflict in conflicts:
+                    st.warning(conflict)
+                return
 
             mark_saved(save_key, marks_save_values)
             st.success("✅ Marks saved successfully.")
@@ -3769,7 +3820,12 @@ def attendance():
             key=f"attendance_{sid}_{selected_date}"
         )
 
-        entries.append((sid, status == "Present", old.get("id")))
+        entries.append((
+            sid,
+            status == "Present",
+            old.get("id"),
+            old.get("present")
+        ))
 
     save_key = "save_attendance_button"
     show_save_message(save_key)
@@ -3780,14 +3836,30 @@ def attendance():
         key=save_key,
     ):
         try:
-            for sid, status, old_id in entries:
+            conflicts = []
+
+            for sid, status, old_id, old_present in entries:
                 if old_id:
-                    (
+                    # Skip unchanged attendance rows.
+                    if old_present is not None and bool(old_present) == bool(status):
+                        continue
+
+                    query = (
                         sb.table("attendance")
                         .update({"present": status})
                         .eq("id", old_id)
-                        .execute()
                     )
+
+                    if old_present is None:
+                        query = query.is_("present", "null")
+                    else:
+                        query = query.eq("present", bool(old_present))
+
+                    result = query.select("id").execute()
+                    if not result.data:
+                        conflicts.append(
+                            f"Student ID {sid}: attendance was changed by another user."
+                        )
                 else:
                     (
                         sb.table("attendance")
@@ -3799,6 +3871,15 @@ def attendance():
                         })
                         .execute()
                     )
+
+            if conflicts:
+                st.warning(
+                    "Some attendance records were not changed because another "
+                    "user updated them at the same time."
+                )
+                for conflict in conflicts:
+                    st.warning(conflict)
+                return
 
             mark_saved(save_key)
             st.success("Attendance saved successfully.")
@@ -8080,18 +8161,13 @@ def reports():
                 sb.table("students")
                 .select("id,name,admission_no,class_name,section")
                 .eq("school_id", school_id)
+                .eq("class_name", selected_class.get("class_name") or "")
+                .eq("section", selected_class.get("section") or "")
                 .eq("active", True)
                 .order("name")
                 .execute()
                 .data or []
             )
-            students_data = [
-                s for s in students_data
-                if str(s.get("class_name") or "").strip().lower()
-                == str(selected_class.get("class_name") or "").strip().lower()
-                and str(s.get("section") or "").strip().lower()
-                == str(selected_class.get("section") or "").strip().lower()
-            ]
 
             subjects_data = (
                 sb.table("subjects")
@@ -8361,11 +8437,23 @@ def reports():
     )
 
     try:
-        students_data = (
+        students_query = (
             sb.table("students")
             .select("id,name,admission_no,class_name,section")
             .eq("school_id", school_id)
             .eq("active", True)
+        )
+
+        if selected_label != "All Classes":
+            selected_report_class = class_map[selected_label]
+            students_query = (
+                students_query
+                .eq("class_name", selected_report_class.get("class_name") or "")
+                .eq("section", selected_report_class.get("section") or "")
+            )
+
+        students_data = (
+            students_query
             .order("name")
             .execute()
             .data or []
@@ -8383,16 +8471,6 @@ def reports():
         st.error("Could not load attendance report.")
         st.code(str(e))
         return
-
-    if selected_label != "All Classes":
-        cl = class_map[selected_label]
-        students_data = [
-            s for s in students_data
-            if str(s.get("class_name") or "").strip().lower()
-            == str(cl.get("class_name") or "").strip().lower()
-            and str(s.get("section") or "").strip().lower()
-            == str(cl.get("section") or "").strip().lower()
-        ]
 
     allowed_pairs = {
         (
