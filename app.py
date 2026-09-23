@@ -722,8 +722,10 @@ def users():
                 st.error("Only SuperAdmin or Admin can create an Admin+Teacher user.")
                 return
 
-            # Admin + Teacher accounts are limited to 3 active users per school.
-            if role == "Admin+Teacher":
+            # SuperAdmin has no Admin+Teacher limit.
+            # Each Admin can create/own at most 2 active Admin+Teacher users
+            # in that Admin's own school.
+            if role == "Admin+Teacher" and creator_role == "Admin":
                 try:
                     hybrid_count = (
                         sb.table("profiles")
@@ -731,11 +733,12 @@ def users():
                         .eq("school_id", school_map[selected_school])
                         .eq("role", "Admin+Teacher")
                         .eq("active", True)
+                        .eq("admin_teacher_created_by", st.session_state.user.id)
                         .execute()
                         .count or 0
                     )
-                    if hybrid_count >= 3:
-                        st.error("Maximum 3 active Admin + Teacher users are allowed in this school.")
+                    if hybrid_count >= 2:
+                        st.error("This Admin can have only 2 active Admin+Teacher users in this school.")
                         return
                 except Exception as e:
                     st.error("Could not verify the Admin + Teacher limit.")
@@ -750,7 +753,12 @@ def users():
                         "password": password,
                         "full_name": name.strip(),
                         "role": role,
-                        "school_id": school_map[selected_school]
+                        "school_id": school_map[selected_school],
+                        "admin_teacher_created_by": (
+                            st.session_state.user.id
+                            if role == "Admin+Teacher" and creator_role == "Admin"
+                            else None
+                        )
                     },
                     headers={
                         "Authorization": f"Bearer {token}",
@@ -958,18 +966,24 @@ def users():
                     key=f"user_status_{user_id}"
                 ):
                     try:
-                        if not active and user.get("role") == "Admin+Teacher":
+                        if (
+                            not active
+                            and user.get("role") == "Admin+Teacher"
+                            and role == "Admin"
+                            and str(user.get("admin_teacher_created_by") or "") == str(st.session_state.user.id)
+                        ):
                             hybrid_count = (
                                 sb.table("profiles")
                                 .select("id", count="exact")
                                 .eq("school_id", user.get("school_id"))
                                 .eq("role", "Admin+Teacher")
                                 .eq("active", True)
+                                .eq("admin_teacher_created_by", st.session_state.user.id)
                                 .execute()
                                 .count or 0
                             )
-                            if hybrid_count >= 3:
-                                st.error("Maximum 3 active Admin + Teacher users are already active in this school.")
+                            if hybrid_count >= 2:
+                                st.error("This Admin can have only 2 active Admin+Teacher users in this school.")
                                 continue
 
                         (
@@ -1242,7 +1256,11 @@ def users():
                             )
                             continue
 
-                        if edit_role == "Admin+Teacher" and current_role != "Admin+Teacher":
+                        if (
+                            edit_role == "Admin+Teacher"
+                            and current_role != "Admin+Teacher"
+                            and role == "Admin"
+                        ):
                             target_school_id = school_map[edit_school_label]
                             hybrid_count = (
                                 sb.table("profiles")
@@ -1250,12 +1268,12 @@ def users():
                                 .eq("school_id", target_school_id)
                                 .eq("role", "Admin+Teacher")
                                 .eq("active", True)
-                                .neq("id", user_id)
+                                .eq("admin_teacher_created_by", st.session_state.user.id)
                                 .execute()
                                 .count or 0
                             )
-                            if hybrid_count >= 3:
-                                st.error("Maximum 3 active Admin + Teacher users are allowed in this school.")
+                            if hybrid_count >= 2:
+                                st.error("This Admin can have only 2 active Admin+Teacher users in this school.")
                                 continue
 
                         (
@@ -1263,7 +1281,14 @@ def users():
                             .update({
                                 "full_name": edit_name.strip(),
                                 "role": edit_role,
-                                "school_id": school_map[edit_school_label]
+                                "school_id": school_map[edit_school_label],
+                                "admin_teacher_created_by": (
+                                    st.session_state.user.id
+                                    if edit_role == "Admin+Teacher"
+                                    and current_role != "Admin+Teacher"
+                                    and role == "Admin"
+                                    else user.get("admin_teacher_created_by")
+                                )
                             })
                             .eq("id", user_id)
                             .execute()
