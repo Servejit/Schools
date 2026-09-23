@@ -11148,22 +11148,21 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
             if not rows:
                 continue
 
-            # Top 10 is ranked by percentage (highest first), then marks.
-            # The first three positions receive medal symbols.
+            # Always start ranking at position 1. Even when there is only
+            # one student, that student is Rank 1 and receives 🥇.
+            # Positions 2 and 3 receive 🥈 and 🥉 respectively.
             top_rows = rows[:10]
             ranking_rows = []
+
             for index, row in enumerate(top_rows, start=1):
-                if index == 1:
-                    rank_display = "🥇 1"
-                elif index == 2:
-                    rank_display = "🥈 2"
-                elif index == 3:
-                    rank_display = "🥉 3"
-                else:
-                    rank_display = str(index)
+                medal = {
+                    1: "🥇",
+                    2: "🥈",
+                    3: "🥉"
+                }.get(index, "")
 
                 ranking_rows.append({
-                    "Rank": rank_display,
+                    "Rank": f"{medal} {index}".strip(),
                     "Student Name": row["Student Name"],
                     "Marks": (
                         f'{format_mark(row["Marks"])}/{format_mark(row["Maximum"])}'
@@ -11172,11 +11171,9 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 })
 
             st.markdown(f"#### 📚 {subject_name}")
-            st.dataframe(
-                pd.DataFrame(ranking_rows),
-                hide_index=True,
-                use_container_width=True
-            )
+            # st.table is used here so the medal text is rendered directly
+            # in the static leaderboard, including the one-student case.
+            st.table(pd.DataFrame(ranking_rows))
 
 
 def school_academic_status(school_id):
