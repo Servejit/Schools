@@ -11180,63 +11180,28 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
             st.markdown(f"#### 📚 {subject_name}")
 
-            # Render the leaderboard as HTML so medal emojis are always
-            # visible on the Streamlit frontend, including when there is
-            # only one student.
-            table_html = """
-            <table style="width:100%; border-collapse:collapse; margin-bottom:18px;">
-                <thead>
-                    <tr>
-                        <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Rank</th>
-                        <th style="text-align:left; padding:10px; border-bottom:2px solid #ddd;">Student Name</th>
-                        <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Class</th>
-                        <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Section</th>
-                        <th style="text-align:left; padding:10px; border-bottom:2px solid #ddd;">Father Name</th>
-                        <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Marks</th>
-                        <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Percentage</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """
-
+            # Native Streamlit rendering for medals. This avoids HTML-table
+            # emoji rendering issues on some mobile browsers.
             for item in ranking_rows:
                 rank_value = item["Rank"]
                 if rank_value.startswith("🥇"):
-                    rank_html = ":first_place_medal: **1**"
+                    rank_display = ":first_place_medal: **1**"
                 elif rank_value.startswith("🥈"):
-                    rank_html = ":second_place_medal: **2**"
+                    rank_display = ":second_place_medal: **2**"
                 elif rank_value.startswith("🥉"):
-                    rank_html = ":third_place_medal: **3**"
+                    rank_display = ":third_place_medal: **3**"
                 else:
-                    rank_html = f"**{rank_value}**"
+                    rank_display = f"**{rank_value}**"
 
-                table_html += f"""
-                    <tr>
-                        <td style="text-align:center; padding:10px; font-size:20px; border-bottom:1px solid #eee;">{rank_html}</td>
-                        <td style="padding:10px; border-bottom:1px solid #eee;">{item["Student Name"]}</td>
-                        <td style="text-align:center; padding:10px; border-bottom:1px solid #eee;">{item["Class"]}</td>
-                        <td style="text-align:center; padding:10px; border-bottom:1px solid #eee;">{item["Section"]}</td>
-                        <td style="padding:10px; border-bottom:1px solid #eee;">{item["Father Name"]}</td>
-                        <td style="text-align:center; padding:10px; border-bottom:1px solid #eee;">{item["Marks"]}</td>
-                        <td style="text-align:center; padding:10px; border-bottom:1px solid #eee;">{item["Percentage"]}</td>
-                    </tr>
-                """
-
-            table_html += """
-                </tbody>
-            </table>
-            """
-
-            # Use Streamlit's native Markdown emoji shortcodes so the
-            # medals are rendered by Streamlit itself, not by browser HTML.
-            st.markdown(table_html.replace(
-                ":first_place_medal:", "🥇"
-            ).replace(
-                ":second_place_medal:", "🥈"
-            ).replace(
-                ":third_place_medal:", "🥉"
-            ), unsafe_allow_html=True)
-
+                st.markdown(
+                    f'**{rank_display}** &nbsp;&nbsp; '
+                    f'**{item["Student Name"]}** &nbsp;&nbsp; '
+                    f'**Class:** {item["Class"]} &nbsp;&nbsp; '
+                    f'**Section:** {item["Section"]} &nbsp;&nbsp; '
+                    f'**Father:** {item["Father Name"]} &nbsp;&nbsp; '
+                    f'**Marks:** {item["Marks"]} &nbsp;&nbsp; '
+                    f'**Percentage:** {item["Percentage"]}'
+                )
 
 def school_academic_status(school_id):
     st.subheader("💎 School Academic Status")
