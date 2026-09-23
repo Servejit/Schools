@@ -119,6 +119,14 @@ as $$
           and c.id = p_class_id
           and s.active = true
           and c.active = true
+          and exists (
+              select 1
+              from public.profiles p
+              where p.id = (select auth.uid())
+                and p.role = 'Student'
+                and p.school_id = p_school_id
+                and p.active = true
+          )
     );
 $$;
 
