@@ -171,6 +171,7 @@ def get_active_theme_role():
             "🎓 Students",
             "📝 Marks",
             "📅 Attendance",
+            "📢 Notices",
             "📄 Report Cards",
             "📊 Reports",
         }
@@ -13077,21 +13078,43 @@ def show_dashboard_notices(school_id, title="📢 Notices"):
 
 
 def class_teacher_notices(profile):
-    """Class Teacher can publish notices for their assigned class(es)."""
+    """Class Teacher, Admin+Teacher and SuperAdmin can publish notices."""
+    role = profile.get("role")
     school_id = profile.get("school_id")
     teacher_id = st.session_state.user.id
+
+    if role == "SuperAdmin":
+        try:
+            schools = (sb.table("schools").select("id,name").eq("active", True).order("name").execute().data or [])
+        except Exception:
+            schools = []
+        if not schools:
+            st.warning("No active school is available.")
+            return
+        school_options = {str(x.get("name") or x.get("id")): x.get("id") for x in schools}
+        selected_school_label = st.selectbox("🏫 School", list(school_options.keys()), key="superadmin_notice_school")
+        school_id = school_options[selected_school_label]
+
+    if not school_id:
+        st.info("Your account is not assigned to a school.")
+        return
 
     if not school_id:
         st.info("Your account is not assigned to a school.")
         return
 
     try:
-        assigned_classes = (
+        classes_query = (
             sb.table("classes")
             .select("id,class_name,section,academic_year")
             .eq("school_id", school_id)
-            .eq("class_teacher_id", teacher_id)
             .eq("active", True)
+        )
+        if role not in {"Admin+Teacher", "SuperAdmin"}:
+            classes_query = classes_query.eq("class_teacher_id", teacher_id)
+
+        assigned_classes = (
+            classes_query
             .order("class_name")
             .order("section")
             .execute()
@@ -13324,6 +13347,9 @@ def dashboard():
         elif menu == "📅 Attendance":
             attendance()
 
+        elif menu == "📢 Notices":
+            class_teacher_notices(profile)
+
         elif menu == "🖨️ Print Templates":
             print_templates()
 
@@ -13356,6 +13382,7 @@ def dashboard():
                 "🎓 Students",
                 "📝 Marks",
                 "📅 Attendance",
+                "📢 Notices",
                 "📄 Report Cards",
                 "📊 Reports",
             }
@@ -13407,6 +13434,7 @@ def dashboard():
                     "🎓 Students",
                     "📝 Marks",
                     "📅 Attendance",
+                    "📢 Notices",
                     "📄 Report Cards",
                     "📊 Reports",
                 }
