@@ -644,7 +644,7 @@ def users():
 
         # SuperAdmin can create users in any active school.
         # Admin can create users only inside their own school.
-        if st.session_state.profile.get("role") == "Admin":
+        if st.session_state.profile.get("role") in ["Admin", "Admin+Teacher"]:
             admin_school_id = str(st.session_state.profile.get("school_id") or "")
             admin_school_label = next(
                 (
@@ -675,9 +675,16 @@ def users():
             key="create_user_password"
         )
 
+        creator_role = st.session_state.profile.get("role")
+        create_role_options = ["Admin", "Teacher", "Student", "Parent"]
+
+        # Only SuperAdmin/Admin may create a new Admin+Teacher.
+        if creator_role in ["SuperAdmin", "Admin"]:
+            create_role_options.insert(1, "Admin+Teacher")
+
         role = st.selectbox(
             "Role",
-            ["Admin", "Admin+Teacher", "Teacher", "Student", "Parent"],
+            create_role_options,
             key="create_user_role"
         )
 
@@ -707,6 +714,12 @@ def users():
 
             if not token:
                 st.error("Session expired. Logout and login again.")
+                return
+
+            # Only SuperAdmin/Admin are authorized to assign the
+            # Admin+Teacher role. The Edge Function enforces this too.
+            if role == "Admin+Teacher" and creator_role not in ["SuperAdmin", "Admin"]:
+                st.error("Only SuperAdmin or Admin can create an Admin+Teacher user.")
                 return
 
             # Admin + Teacher accounts are limited to 3 active users per school.
@@ -979,14 +992,16 @@ def users():
                     key=f"edit_user_name_{user_id}"
                 )
 
-                role_options = [
-                    "Admin",
-                    "Teacher",
-                    "Student",
-                    "Parent"
-                ]
-
                 current_role = user.get("role")
+
+                role_options = ["Admin", "Teacher", "Student", "Parent"]
+
+                # Only SuperAdmin/Admin can assign the Admin+Teacher role.
+                # Keep an existing Admin+Teacher value visible when a
+                # non-authorized admin-like user is editing it, so it is
+                # not accidentally changed just by opening the form.
+                if role in ["SuperAdmin", "Admin"] or current_role == "Admin+Teacher":
+                    role_options.insert(1, "Admin+Teacher")
                 edit_role = st.selectbox(
                     "Role",
                     role_options,
@@ -1215,6 +1230,18 @@ def users():
                         continue
 
                     try:
+                        # Only SuperAdmin/Admin may change another user's role
+                        # to Admin+Teacher.
+                        if (
+                            edit_role == "Admin+Teacher"
+                            and current_role != "Admin+Teacher"
+                            and role not in ["SuperAdmin", "Admin"]
+                        ):
+                            st.error(
+                                "Only SuperAdmin or Admin can assign the Admin+Teacher role."
+                            )
+                            continue
+
                         if edit_role == "Admin+Teacher" and current_role != "Admin+Teacher":
                             target_school_id = school_map[edit_school_label]
                             hybrid_count = (
