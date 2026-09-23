@@ -4033,9 +4033,8 @@ def print_templates():
                     .execute()
                 )
 
-                st.success(
-                    "✅ A4 template uploaded successfully."
-                )
+                mark_saved(save_key)
+                st.success("✅ Saved successfully.")
 
                 st.rerun()
 
