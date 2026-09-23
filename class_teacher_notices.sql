@@ -227,4 +227,51 @@ using (
           and p.active = true
     )
 );
+-- Direct Student notice RPC. This uses SECURITY DEFINER so Student
+-- dashboards do not depend on the client-side SELECT RLS path.
+create or replace function public.get_student_notices(
+    p_school_id uuid
+)
+returns table (
+    id uuid,
+    notice_date date,
+    message text,
+    created_at timestamptz
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+    select
+        n.id,
+        n.notice_date,
+        n.message,
+        n.created_at
+    from public.school_notices n
+    where n.school_id = p_school_id
+      and exists (
+          select 1
+          from public.students s
+          join public.classes c
+            on c.school_id = s.school_id
+           and lower(trim(c.class_name)) =
+               lower(trim(s.class_name))
+           and lower(trim(coalesce(c.section, ''))) =
+               lower(trim(coalesce(s.section, '')))
+          where s.user_id = (select auth.uid())
+            and s.school_id = p_school_id
+            and c.id = n.class_id
+            and s.active = true
+            and c.active = true
+      )
+    order by n.notice_date desc, n.created_at desc;
+$$;
+
+revoke all on function public.get_student_notices(uuid)
+from public;
+
+grant execute on function public.get_student_notices(uuid)
+to authenticated;
+
 
