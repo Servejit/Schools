@@ -75,6 +75,34 @@ if (
         pass
 
 
+
+# =========================================================
+# SAVE BUTTON STATE
+# =========================================================
+def _save_state_signature():
+    values = {}
+    for k, v in st.session_state.items():
+        if k.startswith("_save_") or "password" in k.lower():
+            continue
+        if isinstance(v, (str, int, float, bool, type(None), list, tuple, dict)):
+            values[k] = v
+    try:
+        return json.dumps(values, sort_keys=True, default=str)
+    except Exception:
+        return repr(values)
+
+def save_enabled(key):
+    return st.session_state.get("_save_sig_" + key) != _save_state_signature()
+
+def mark_saved(key):
+    st.session_state["_save_sig_" + key] = _save_state_signature()
+    st.session_state["_save_msg_" + key] = "Saved successfully."
+
+def show_save_message(key):
+    msg = st.session_state.pop("_save_msg_" + key, None)
+    if msg:
+        st.success("✅ " + msg)
+
 # =========================================================
 # LOGOUT
 # =========================================================
@@ -339,9 +367,12 @@ def schools():
                     key=f"school_edit_address_{school_id}"
                 )
 
+                save_key = f"school_save_{school_id}"
+                show_save_message(save_key)
                 if st.button(
                     "Save",
-                    key=f"school_save_{school_id}"
+                    key=save_key,
+                    disabled=not save_enabled(save_key)
                 ):
 
                     try:
@@ -372,6 +403,7 @@ def schools():
                             .execute()
                         )
 
+                        mark_saved(save_key)
                         st.success("School updated.")
                         st.rerun()
 
@@ -945,10 +977,13 @@ def users():
                         "Each permission is an exact Class + Subject combination."
                     )
 
+                save_key = f"save_user_{user_id}"
+                show_save_message(save_key)
                 if st.button(
                     "💾 Save User Changes",
-                    key=f"save_user_{user_id}",
-                    use_container_width=True
+                    key=save_key,
+                    use_container_width=True,
+                    disabled=not save_enabled(save_key)
                 ):
 
                     if not edit_name.strip():
@@ -1057,6 +1092,7 @@ def users():
                                 .execute()
                             )
 
+                        mark_saved(save_key)
                         st.session_state["saved_user_changes"] = True
                         st.rerun()
 
@@ -1108,8 +1144,11 @@ def exam_assessment_settings():
             key="new_exam_assessment_name"
         ).strip()
 
+        save_key = "save_exam_assessment"
+        show_save_message(save_key)
         if st.button("💾 Save Exam / Assessment", type="primary",
-                     use_container_width=True, key="save_exam_assessment"):
+                     use_container_width=True, key=save_key,
+                     disabled=not save_enabled(save_key)):
             if not new_name:
                 st.warning("Enter an Exam / Assessment name.")
                 return
@@ -1123,6 +1162,7 @@ def exam_assessment_settings():
                 sb.table("exam_assessments").insert({
                     "school_id": school_id, "name": new_name, "active": True
                 }).execute()
+                mark_saved(save_key)
                 st.success("Exam / Assessment saved successfully.")
                 st.rerun()
             except Exception as e:
@@ -2124,10 +2164,13 @@ def students():
                     key=f"edit_user_{student_id}"
                 )
 
+                save_key = f"save_student_{student_id}"
+                show_save_message(save_key)
                 if st.button(
                     "💾 Save Changes",
-                    key=f"save_student_{student_id}",
-                    use_container_width=True
+                    key=save_key,
+                    use_container_width=True,
+                    disabled=not save_enabled(save_key)
                 ):
 
                     if role == "Teacher" and (
@@ -2235,9 +2278,8 @@ def students():
                             .execute()
                         )
 
-                        st.success(
-                            "Student updated successfully."
-                        )
+                        mark_saved(save_key)
+                        st.success("Student updated successfully.")
 
                         st.rerun()
 
@@ -2609,10 +2651,13 @@ def classes_subjects():
                     key=f"assign_teacher_{class_id}"
                 )
 
+                save_key = f"save_teacher_{class_id}"
+                show_save_message(save_key)
                 if st.button(
                     "💾 Save Class Teacher",
-                    key=f"save_teacher_{class_id}",
-                    use_container_width=True
+                    key=save_key,
+                    use_container_width=True,
+                    disabled=not save_enabled(save_key)
                 ):
                     try:
                         (
@@ -2629,6 +2674,7 @@ def classes_subjects():
                             .execute()
                         )
 
+                        mark_saved(save_key)
                         st.session_state["saved_class_changes"] = True
                         st.rerun()
 
@@ -2680,9 +2726,12 @@ def classes_subjects():
                             key=f"edit_class_teacher_{class_id}"
                         )
     
+                    save_key = f"save_class_{class_id}"
+                    show_save_message(save_key)
                     if st.button(
                         "💾 Save Class",
-                        key=f"save_class_{class_id}"
+                        key=save_key,
+                        disabled=not save_enabled(save_key)
                     ):
     
                         try:
@@ -2885,10 +2934,13 @@ def classes_subjects():
 
                         with b1:
 
+                            save_key = f"save_subject_{subject_id}"
+                            show_save_message(save_key)
                             if st.button(
                                 "💾 Save Subject",
-                                key=f"save_subject_{subject_id}",
-                                use_container_width=True
+                                key=save_key,
+                                use_container_width=True,
+                                disabled=not save_enabled(save_key)
                             ):
 
                                 if edit_pass > edit_max:
@@ -3741,6 +3793,7 @@ def attendance():
                         .execute()
                     )
 
+            mark_saved(save_key)
             st.success("Attendance saved successfully.")
             st.rerun()
 
@@ -6564,6 +6617,7 @@ def report_cards():
                             .execute()
                         )
 
+                        mark_saved(save_key)
                         st.success("Logo size saved successfully.")
                         st.rerun()
 
