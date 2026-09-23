@@ -1,5 +1,8 @@
 -- Premium feature access control
--- SuperAdmin controls premium features for each Admin.
+-- SuperAdmin controls Admin Premium.
+-- Admin can enable Subject-wise Premium for Parents/Students.
+-- Parent/Student access is checked through a SECURITY DEFINER RPC because
+-- they should not receive direct SELECT access to premium_feature_access.
 
 create table if not exists public.premium_feature_access (
     id uuid primary key default gen_random_uuid(),
@@ -55,8 +58,17 @@ with check (
         select 1
         from public.profiles p
         where p.id = auth.uid()
-          and p.role = 'SuperAdmin'
           and p.active = true
+          and (
+              p.role = 'SuperAdmin'
+              or (
+                  p.role = 'Admin'
+                  and p.id = premium_feature_access.admin_id
+                  and p.school_id = premium_feature_access.school_id
+                  and premium_feature_access.feature_key =
+                      'subject_wise_premium_parent_student'
+              )
+          )
     )
 );
 
@@ -69,8 +81,17 @@ using (
         select 1
         from public.profiles p
         where p.id = auth.uid()
-          and p.role = 'SuperAdmin'
           and p.active = true
+          and (
+              p.role = 'SuperAdmin'
+              or (
+                  p.role = 'Admin'
+                  and p.id = premium_feature_access.admin_id
+                  and p.school_id = premium_feature_access.school_id
+                  and premium_feature_access.feature_key =
+                      'subject_wise_premium_parent_student'
+              )
+          )
     )
 )
 with check (
@@ -78,8 +99,17 @@ with check (
         select 1
         from public.profiles p
         where p.id = auth.uid()
-          and p.role = 'SuperAdmin'
           and p.active = true
+          and (
+              p.role = 'SuperAdmin'
+              or (
+                  p.role = 'Admin'
+                  and p.id = premium_feature_access.admin_id
+                  and p.school_id = premium_feature_access.school_id
+                  and premium_feature_access.feature_key =
+                      'subject_wise_premium_parent_student'
+              )
+          )
     )
 );
 
@@ -92,7 +122,42 @@ using (
         select 1
         from public.profiles p
         where p.id = auth.uid()
-          and p.role = 'SuperAdmin'
           and p.active = true
+          and p.role = 'SuperAdmin'
     )
 );
+
+create or replace function public.parent_student_subject_wise_premium_enabled(
+    p_school_id uuid
+)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+    select exists (
+        select 1
+        from public.profiles a
+        join public.premium_feature_access admin_premium
+          on admin_premium.school_id = a.school_id
+         and admin_premium.admin_id = a.id
+         and admin_premium.feature_key = 'school_academic_status'
+         and admin_premium.active = true
+        join public.premium_feature_access parent_permission
+          on parent_permission.school_id = a.school_id
+         and parent_permission.admin_id = a.id
+         and parent_permission.feature_key =
+             'subject_wise_premium_parent_student'
+         and parent_permission.active = true
+        where a.school_id = p_school_id
+          and a.role = 'Admin'
+          and a.active = true
+    );
+$$;
+
+revoke all on function public.parent_student_subject_wise_premium_enabled(uuid)
+from public;
+
+grant execute on function public.parent_student_subject_wise_premium_enabled(uuid)
+to authenticated;
