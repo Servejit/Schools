@@ -11180,31 +11180,77 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
             st.markdown(f"#### 📚 {subject_name}")
 
-            # Top 10 leaderboard with a dedicated Rank column.
-            # st.table renders Markdown inside cells, including emoji shortcodes.
-            display_rows = []
+            # Top 10 leaderboard. Rank is the first column.
+            # Use a real HTML table with both the requested emoji and a
+            # CSS medal fallback, so the medal remains visible on devices
+            # whose emoji font does not render 🥇/🥈/🥉.
+            table_html = """
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr>
+                        <th style="padding:10px; text-align:center;">Rank</th>
+                        <th style="padding:10px; text-align:left;">Student Name</th>
+                        <th style="padding:10px; text-align:center;">Class</th>
+                        <th style="padding:10px; text-align:center;">Section</th>
+                        <th style="padding:10px; text-align:left;">Father Name</th>
+                        <th style="padding:10px; text-align:center;">Marks</th>
+                        <th style="padding:10px; text-align:center;">Percentage</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
+
             for item in ranking_rows:
                 rank_number = str(item["Rank"]).split()[-1]
+
                 if rank_number == "1":
-                    rank_display = ":material/workspace_premium: **1**"
+                    medal = (
+                        '<span style="font-size:24px; font-family:'
+                        '"Noto Color Emoji","Segoe UI Emoji",sans-serif;">🥇</span> '
+                        '<span style="display:inline-flex;align-items:center;'
+                        'justify-content:center;width:28px;height:28px;'
+                        'border-radius:50%;background:#FFD700;color:#000;'
+                        'font-weight:700;">1</span>'
+                    )
                 elif rank_number == "2":
-                    rank_display = ":material/workspace_premium: **2**"
+                    medal = (
+                        '<span style="font-size:24px; font-family:'
+                        '"Noto Color Emoji","Segoe UI Emoji",sans-serif;">🥈</span> '
+                        '<span style="display:inline-flex;align-items:center;'
+                        'justify-content:center;width:28px;height:28px;'
+                        'border-radius:50%;background:#C0C0C0;color:#000;'
+                        'font-weight:700;">2</span>'
+                    )
                 elif rank_number == "3":
-                    rank_display = ":material/workspace_premium: **3**"
+                    medal = (
+                        '<span style="font-size:24px; font-family:'
+                        '"Noto Color Emoji","Segoe UI Emoji",sans-serif;">🥉</span> '
+                        '<span style="display:inline-flex;align-items:center;'
+                        'justify-content:center;width:28px;height:28px;'
+                        'border-radius:50%;background:#CD7F32;color:#fff;'
+                        'font-weight:700;">3</span>'
+                    )
                 else:
-                    rank_display = f"**{rank_number}**"
+                    medal = f'<b>{rank_number}</b>'
 
-                display_rows.append({
-                    "Rank": rank_display,
-                    "Student Name": item["Student Name"],
-                    "Class": item["Class"],
-                    "Section": item["Section"],
-                    "Father Name": item["Father Name"],
-                    "Marks": item["Marks"],
-                    "Percentage": item["Percentage"],
-                })
+                table_html += f"""
+                    <tr>
+                        <td style="padding:10px;text-align:center;border-bottom:1px solid #ddd;">{medal}</td>
+                        <td style="padding:10px;border-bottom:1px solid #ddd;">{item["Student Name"]}</td>
+                        <td style="padding:10px;text-align:center;border-bottom:1px solid #ddd;">{item["Class"]}</td>
+                        <td style="padding:10px;text-align:center;border-bottom:1px solid #ddd;">{item["Section"]}</td>
+                        <td style="padding:10px;border-bottom:1px solid #ddd;">{item["Father Name"]}</td>
+                        <td style="padding:10px;text-align:center;border-bottom:1px solid #ddd;">{item["Marks"]}</td>
+                        <td style="padding:10px;text-align:center;border-bottom:1px solid #ddd;">{item["Percentage"]}</td>
+                    </tr>
+                """
 
-            st.table(pd.DataFrame(display_rows))
+            table_html += """
+                </tbody>
+            </table>
+            """
+
+            st.html(table_html)
 
 def school_academic_status(school_id):
     st.subheader("💎 School Academic Status")
