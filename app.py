@@ -1180,9 +1180,9 @@ def exam_assessment_settings():
         if st.button("💾 Save Exam / Assessment", type="primary",
                      use_container_width=True, key=save_key,
                      ):
-                         if not save_enabled(save_key):
-                             st.info("ℹ️ Already Saved.")
-                             st.stop()
+            if not save_enabled(save_key):
+                st.info("ℹ️ Already Saved.")
+                st.stop()
             if not new_name:
                 st.warning("Enter an Exam / Assessment name.")
                 return
