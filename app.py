@@ -11180,21 +11180,29 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
             st.markdown(f"#### 📚 {subject_name}")
 
-            # Native Streamlit rendering for medals. This avoids HTML-table
-            # emoji rendering issues on some mobile browsers.
+            # Use text-based medal symbols in addition to the emoji so the
+            # first three positions remain unmistakable even if the browser
+            # does not have a color-emoji font.
+            medal_labels = {
+                1: "🥇 GOLD MEDAL",
+                2: "🥈 SILVER MEDAL",
+                3: "🥉 BRONZE MEDAL",
+            }
+
             for item in ranking_rows:
-                rank_value = item["Rank"]
-                if rank_value.startswith("🥇"):
-                    rank_display = "🥇 **1**"
-                elif rank_value.startswith("🥈"):
-                    rank_display = "🥈 **2**"
-                elif rank_value.startswith("🥉"):
-                    rank_display = "🥉 **3**"
+                rank_text = item["Rank"]
+                try:
+                    rank_number = int(rank_text.split()[-1])
+                except Exception:
+                    rank_number = 0
+
+                if rank_number in medal_labels:
+                    rank_display = medal_labels[rank_number]
                 else:
-                    rank_display = f"**{rank_value}**"
+                    rank_display = str(rank_number)
 
                 st.markdown(
-                    f'{rank_display} &nbsp;&nbsp; '
+                    f'**{rank_display}** &nbsp;&nbsp; '
                     f'**{item["Student Name"]}** &nbsp;&nbsp; '
                     f'**Class:** {item["Class"]} &nbsp;&nbsp; '
                     f'**Section:** {item["Section"]} &nbsp;&nbsp; '
