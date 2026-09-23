@@ -1143,6 +1143,77 @@ def users():
                 )
 
                 # -----------------------------------------
+                # PARENT → STUDENT LINKING
+                # -----------------------------------------
+                selected_parent_student_ids = []
+                if edit_role == "Parent":
+                    edit_school_id = school_map[edit_school_label]
+
+                    try:
+                        parent_student_rows = (
+                            sb.table("students")
+                            .select(
+                                "id,name,admission_no,class_name,section,active"
+                            )
+                            .eq("school_id", edit_school_id)
+                            .eq("active", True)
+                            .order("name")
+                            .execute()
+                            .data or []
+                        )
+                    except Exception:
+                        parent_student_rows = []
+
+                    try:
+                        current_parent_links = (
+                            sb.table("parent_student_links")
+                            .select("student_id")
+                            .eq("parent_id", user_id)
+                            .execute()
+                            .data or []
+                        )
+                    except Exception:
+                        current_parent_links = []
+
+                    current_parent_student_ids = {
+                        str(x.get("student_id"))
+                        for x in current_parent_links
+                        if x.get("student_id")
+                    }
+
+                    parent_student_options = {}
+                    for student_row in parent_student_rows:
+                        label = (
+                            f"{student_row.get('name') or 'Student'}"
+                            f" — Admission: {student_row.get('admission_no') or '-'}"
+                            f" — Class: {student_row.get('class_name') or '-'}"
+                            f" — Section: {student_row.get('section') or '-'}"
+                        )
+                        parent_student_options[label] = student_row["id"]
+
+                    selected_parent_student_labels = st.multiselect(
+                        "👨‍👩‍👧 Parent — Linked Student(s)",
+                        list(parent_student_options.keys()),
+                        default=[
+                            label
+                            for label, student_id_value in parent_student_options.items()
+                            if str(student_id_value) in current_parent_student_ids
+                        ],
+                        key=f"parent_student_links_{user_id}"
+                    )
+
+                    selected_parent_student_ids = [
+                        parent_student_options[label]
+                        for label in selected_parent_student_labels
+                        if label in parent_student_options
+                    ]
+
+                    st.caption(
+                        "Select one or multiple students/children for this Parent. "
+                        "The Parent will only see the linked students' permitted data."
+                    )
+
+                # -----------------------------------------
                 # TEACHER CLASS / SUBJECT ASSIGNMENTS
                 # -----------------------------------------
                 if edit_role in ["Teacher", "Admin+Teacher"]:
@@ -1389,6 +1460,32 @@ def users():
                             .eq("id", user_id)
                             .execute()
                         )
+
+                        # Save Parent → Student links.
+                        if edit_role == "Parent":
+                            edit_school_id = school_map[edit_school_label]
+
+                            (
+                                sb.table("parent_student_links")
+                                .delete()
+                                .eq("parent_id", user_id)
+                                .execute()
+                            )
+
+                            new_parent_links = [
+                                {
+                                    "parent_id": user_id,
+                                    "student_id": student_id_value
+                                }
+                                for student_id_value in selected_parent_student_ids
+                            ]
+
+                            if new_parent_links:
+                                (
+                                    sb.table("parent_student_links")
+                                    .insert(new_parent_links)
+                                    .execute()
+                                )
 
                         # Save teacher assignments only when the user is a Teacher.
                         if edit_role in ["Teacher", "Admin+Teacher"]:
@@ -12817,48 +12914,25 @@ def dashboard():
             current_user_id = str(st.session_state.user.id)
             current_email = str(profile.get("email") or "").strip().lower()
 
+            linked_ids = []
             try:
-                # Use * so this remains compatible with schools that already
-                # have a parent-link column under a different name.
-                parent_students = (
-                    sb.table("students")
-                    .select("*")
-                    .eq("school_id", school_id)
-                    .eq("active", True)
+                # Parent ↔ Student relationships are stored separately from
+                # students.user_id. A parent can therefore be linked to one
+                # or multiple children without affecting Student login.
+                parent_links = (
+                    sb.table("parent_student_links")
+                    .select("student_id")
+                    .eq("parent_id", current_user_id)
                     .execute()
                     .data or []
                 )
+                linked_ids = [
+                    row.get("student_id")
+                    for row in parent_links
+                    if row.get("student_id")
+                ]
             except Exception:
-                parent_students = []
-
-            linked_ids = []
-            possible_id_fields = [
-                "parent_user_id",
-                "parent_id",
-                "parent_profile_id",
-                "guardian_user_id",
-                "guardian_id"
-            ]
-            possible_email_fields = [
-                "parent_email",
-                "guardian_email"
-            ]
-
-            for row in parent_students:
-                matched = False
-                for field in possible_id_fields:
-                    if field in row and row.get(field):
-                        if str(row.get(field)) == current_user_id:
-                            matched = True
-                            break
-                if not matched:
-                    for field in possible_email_fields:
-                        if field in row and row.get(field):
-                            if str(row.get(field)).strip().lower() == current_email:
-                                matched = True
-                                break
-                if matched:
-                    linked_ids.append(row.get("id"))
+                linked_ids = []
 
             if linked_ids:
                 subject_wise_premium_view(
