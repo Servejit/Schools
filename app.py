@@ -11170,6 +11170,7 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                         f'<div class="premium-gold-name">✨ {top_student_name}</div>',
                         unsafe_allow_html=True
                     )
+
             st.markdown(f"#### 📚 {subject_name}")
                 st.dataframe(
                     pd.DataFrame(filtered),
