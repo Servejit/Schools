@@ -105,7 +105,7 @@ language sql
 security definer
 set search_path = public
 stable
-as $$
+as $
     select exists (
         select 1
         from public.students s
@@ -119,16 +119,8 @@ as $$
           and c.id = p_class_id
           and s.active = true
           and c.active = true
-          and exists (
-              select 1
-              from public.profiles p
-              where p.id = (select auth.uid())
-                and p.role = 'Student'
-                and p.school_id = p_school_id
-                and p.active = true
-          )
     );
-$$;
+$;
 
 revoke all on function public.student_notice_access(uuid, uuid)
 from public;
