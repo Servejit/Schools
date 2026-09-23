@@ -10840,23 +10840,12 @@ def premium_feature_management():
     if _current_school_id:
         show_save_message(f"save_parent_student_premium_{_current_school_id}")
 
-    """Manage Premium access hierarchy.
-
-    SuperAdmin -> controls Admin Premium access.
-    Admin -> when its own Premium access is active, can allow the
-    complete Subject-wise Premium feature for Parents and Students.
-    Parents/Students never receive the general Marks Percentage Premium
-    analysis (<30/<40/<50 or full percentage analysis).
-    """
+    """Manage Premium access permissions."""
     role = st.session_state.profile.get("role")
     school_id = st.session_state.profile.get("school_id")
 
     if role == "SuperAdmin":
         st.header("💎 Premium Feature Management")
-        st.caption(
-            "SuperAdmin controls Premium access for Admin users. "
-            "Parents/Students can never receive the general Marks Percentage Premium analysis."
-        )
 
         try:
             schools_data = (
@@ -10906,10 +10895,6 @@ def premium_feature_management():
             return
 
         st.subheader("💎 Admin Premium Access")
-        st.caption(
-            "An Admin can use the complete Premium feature only when "
-            "SuperAdmin has activated it for that Admin."
-        )
 
         for admin in school_admins:
             admin_id = admin["id"]
@@ -11014,10 +10999,6 @@ def premium_feature_management():
                         st.error("Could not save premium feature setting.")
                         st.code(str(e))
 
-        st.info(
-            "Parents/Students can receive only the Subject-wise Premium feature "
-            "after the Admin's own Premium access is active and the Admin permits it."
-        )
         return
 
     if role == "Admin":
@@ -11038,10 +11019,6 @@ def premium_feature_management():
 
         st.header("💎 Premium Features")
         st.subheader("👨‍👩‍👧 Parent / Student Access")
-        st.caption(
-            "Because your Admin Premium access is active, you can permit "
-            "Parents and Students to use the complete Subject-wise Premium feature."
-        )
 
         feature_key = "subject_wise_premium_parent_student"
         try:
@@ -11062,14 +11039,6 @@ def premium_feature_management():
 
         st.write(
             "### 📚 Subject-wise Premium"
-        )
-        st.caption(
-            "Includes full Subject-wise Premium access: Topper, "
-            ">70%, >80% and >90% subject-wise analysis."
-        )
-        st.caption(
-            "Parents/Students will NOT receive the general Marks Percentage "
-            "Premium analysis such as <30%, <40%, <50%, or full percentage analysis."
         )
 
         new_active = st.toggle(
