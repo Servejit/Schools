@@ -106,6 +106,21 @@ sb = get_supabase_client()
 
 
 # =========================================================
+# MARK FORMAT
+# =========================================================
+# Marks are rounded to a maximum of 2 decimal places, but unnecessary
+# trailing zeros are never displayed: 88 -> 88, 88.5 -> 88.5, 88.25 -> 88.25.
+def format_mark(value):
+    try:
+        number = round(float(value), 2)
+        if number == int(number):
+            return str(int(number))
+        return f"{number:.2f}".rstrip("0").rstrip(".")
+    except (TypeError, ValueError):
+        return str(value) if value is not None else ""
+
+
+# =========================================================
 # SAVE STATUS
 # =========================================================
 def mark_saved(key, values=None):
@@ -4083,8 +4098,8 @@ def bulk_marks():
 
             if mark_value > max_marks:
                 errors.append(
-                    f"{row['Student Name']}: {mark_value:.2f} exceeds "
-                    f"maximum {max_marks:.2f}."
+                    f"{row['Student Name']}: {format_mark(mark_value)} exceeds "
+                    f"maximum {format_mark(max_marks)}."
                 )
                 continue
 
@@ -5719,7 +5734,7 @@ def create_report_overlay(
 
         try:
             mark_number = float(mark_value)
-            mark_display = f"{mark_number:.2f}"
+            mark_display = format_mark(mark_number)
         except Exception:
             mark_number = 0
             mark_display = "-"
@@ -5794,7 +5809,7 @@ def create_report_overlay(
         pdf.drawCentredString(
             header_centers[1],
             baseline,
-            f"{max_number:.2f}"
+            format_mark(max_number)
         )
 
         pdf.drawCentredString(
@@ -5839,7 +5854,7 @@ def create_report_overlay(
     pdf.drawString(
         total_x,
         summary_y,
-        f"Total Marks: {total_marks:.2f} / {total_max:.2f}"
+        f"Total Marks: {format_mark(total_marks)} / {format_mark(total_max)}"
     )
 
     pdf.drawString(
@@ -6652,7 +6667,7 @@ def restore_marks_from_backup(uploaded_file, school_id):
             if max_marks is not None and mark_value > float(max_marks):
                 skipped.append(
                     f"{sheet_name}: {mark_value:.2f} exceeds maximum "
-                    f"{float(max_marks):.2f} for {student_id}/{subject_id}."
+                    f"{format_mark(float(max_marks))} for {student_id}/{subject_id}."
                 )
                 continue
             if mark_value < 0:
@@ -8202,7 +8217,7 @@ def create_report_overlay(
 
         try:
             mark_number = float(mark_value)
-            mark_display = f"{mark_number:.2f}"
+            mark_display = format_mark(mark_number)
         except Exception:
             mark_number = 0
             mark_display = "-"
@@ -8277,7 +8292,7 @@ def create_report_overlay(
         pdf.drawCentredString(
             header_centers[1],
             baseline,
-            f"{max_number:.2f}"
+            format_mark(max_number)
         )
 
         pdf.drawCentredString(
@@ -8322,7 +8337,7 @@ def create_report_overlay(
     pdf.drawString(
         total_x,
         summary_y,
-        f"Total Marks: {total_marks:.2f} / {total_max:.2f}"
+        f"Total Marks: {format_mark(total_marks)} / {format_mark(total_max)}"
     )
 
     pdf.drawString(
