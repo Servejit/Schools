@@ -13759,10 +13759,7 @@ def dashboard():
                                                 st.error("Could not generate the Report Card.")
                                                 st.code(str(e))
 
-        elif school_id:
-            st.info("📄 Report Card access has not been enabled by Admin.")
-
-        else:
+        elif not school_id:
             st.info("Your Parent account is not linked to a school yet.")
 
         st.divider()
