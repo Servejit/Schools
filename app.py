@@ -11161,9 +11161,9 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
             for index, row in enumerate(top_rows, start=1):
                 medal = {
-                    1: "🥇",
-                    2: "🥈",
-                    3: "🥉"
+                    1: "\\U0001F947",
+                    2: "\\U0001F948",
+                    3: "\\U0001F949"
                 }.get(index, "")
 
                 ranking_rows.append({
@@ -11196,8 +11196,12 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 except Exception:
                     rank_number = 0
 
-                if rank_number in medal_labels:
-                    rank_display = medal_labels[rank_number]
+                if rank_number == 1:
+                    rank_display = chr(0x1F947) + " 1"
+                elif rank_number == 2:
+                    rank_display = chr(0x1F948) + " 2"
+                elif rank_number == 3:
+                    rank_display = chr(0x1F949) + " 3"
                 else:
                     rank_display = str(rank_number)
 
