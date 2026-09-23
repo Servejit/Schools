@@ -11171,9 +11171,49 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 })
 
             st.markdown(f"#### 📚 {subject_name}")
-            # st.table is used here so the medal text is rendered directly
-            # in the static leaderboard, including the one-student case.
-            st.table(pd.DataFrame(ranking_rows))
+
+            # Render the leaderboard as HTML so medal emojis are always
+            # visible on the Streamlit frontend, including when there is
+            # only one student.
+            table_html = """
+            <table style="width:100%; border-collapse:collapse; margin-bottom:18px;">
+                <thead>
+                    <tr>
+                        <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Rank</th>
+                        <th style="text-align:left; padding:10px; border-bottom:2px solid #ddd;">Student Name</th>
+                        <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Marks</th>
+                        <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Percentage</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
+
+            for item in ranking_rows:
+                rank_value = item["Rank"]
+                if rank_value.startswith("🥇"):
+                    rank_html = "🥇 <b>1</b>"
+                elif rank_value.startswith("🥈"):
+                    rank_html = "🥈 <b>2</b>"
+                elif rank_value.startswith("🥉"):
+                    rank_html = "🥉 <b>3</b>"
+                else:
+                    rank_html = f"<b>{rank_value}</b>"
+
+                table_html += f"""
+                    <tr>
+                        <td style="text-align:center; padding:10px; font-size:20px; border-bottom:1px solid #eee;">{rank_html}</td>
+                        <td style="padding:10px; border-bottom:1px solid #eee;">{item["Student Name"]}</td>
+                        <td style="text-align:center; padding:10px; border-bottom:1px solid #eee;">{item["Marks"]}</td>
+                        <td style="text-align:center; padding:10px; border-bottom:1px solid #eee;">{item["Percentage"]}</td>
+                    </tr>
+                """
+
+            table_html += """
+                </tbody>
+            </table>
+            """
+
+            st.markdown(table_html, unsafe_allow_html=True)
 
 
 def school_academic_status(school_id):
