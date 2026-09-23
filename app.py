@@ -399,8 +399,10 @@ def schools():
                 if st.button(
                     "Save",
                     key=save_key,
-                    disabled=not save_enabled(save_key)
                 ):
+                    if not save_enabled(save_key):
+                        st.info("ℹ️ Already Saved.")
+                        st.stop()
 
                     try:
 
@@ -1010,8 +1012,10 @@ def users():
                     "💾 Save User Changes",
                     key=save_key,
                     use_container_width=True,
-                    disabled=not save_enabled(save_key)
                 ):
+                    if not save_enabled(save_key):
+                        st.info("ℹ️ Already Saved.")
+                        st.stop()
 
                     if not edit_name.strip():
                         st.warning("Full Name is required.")
@@ -1175,7 +1179,10 @@ def exam_assessment_settings():
         show_save_message(save_key)
         if st.button("💾 Save Exam / Assessment", type="primary",
                      use_container_width=True, key=save_key,
-                     disabled=not save_enabled(save_key)):
+                     ):
+                         if not save_enabled(save_key):
+                             st.info("ℹ️ Already Saved.")
+                             st.stop()
             if not new_name:
                 st.warning("Enter an Exam / Assessment name.")
                 return
@@ -2197,8 +2204,10 @@ def students():
                     "💾 Save Changes",
                     key=save_key,
                     use_container_width=True,
-                    disabled=not save_enabled(save_key)
                 ):
+                    if not save_enabled(save_key):
+                        st.info("ℹ️ Already Saved.")
+                        st.stop()
 
                     if role == "Teacher" and (
                         str(student.get("class_name") or "").strip().lower(),
@@ -2684,8 +2693,10 @@ def classes_subjects():
                     "💾 Save Class Teacher",
                     key=save_key,
                     use_container_width=True,
-                    disabled=not save_enabled(save_key)
                 ):
+                    if not save_enabled(save_key):
+                        st.info("ℹ️ Already Saved.")
+                        st.stop()
                     try:
                         (
                             sb.table("classes")
@@ -2758,8 +2769,10 @@ def classes_subjects():
                     if st.button(
                         "💾 Save Class",
                         key=save_key,
-                        disabled=not save_enabled(save_key)
                     ):
+                        if not save_enabled(save_key):
+                            st.info("ℹ️ Already Saved.")
+                            st.stop()
     
                         try:
     
@@ -2968,8 +2981,10 @@ def classes_subjects():
                                 "💾 Save Subject",
                                 key=save_key,
                                 use_container_width=True,
-                                disabled=not save_enabled(save_key)
                             ):
+                                if not save_enabled(save_key):
+                                    st.info("ℹ️ Already Saved.")
+                                    st.stop()
 
                                 if edit_pass > edit_max:
 
@@ -3546,8 +3561,10 @@ def bulk_marks():
         type="primary",
         use_container_width=True,
         key=save_key,
-        disabled=not save_enabled(save_key)
     ):
+        if not save_enabled(save_key):
+            st.info("ℹ️ Already Saved.")
+            st.stop()
 
         errors = []
         records_to_insert = []
@@ -3806,8 +3823,10 @@ def attendance():
         type="primary",
         use_container_width=True,
         key=save_key,
-        disabled=not save_enabled(save_key)
     ):
+        if not save_enabled(save_key):
+            st.info("ℹ️ Already Saved.")
+            st.stop()
         try:
             for sid, status, old_id in entries:
                 if old_id:
@@ -3981,8 +4000,10 @@ def print_templates():
             type="primary",
             use_container_width=True,
             key=save_key,
-            disabled=not save_enabled(save_key)
         ):
+            if not save_enabled(save_key):
+                st.info("ℹ️ Already Saved.")
+                st.stop()
 
             if not template_name.strip():
 
@@ -4482,8 +4503,10 @@ def attendance():
         type="primary",
         use_container_width=True,
         key=save_key,
-        disabled=not save_enabled(save_key)
     ):
+        if not save_enabled(save_key):
+            st.info("ℹ️ Already Saved.")
+            st.stop()
         try:
             for sid, status, old_id in entries:
                 if old_id:
@@ -6635,8 +6658,10 @@ def report_cards():
                     "💾 Save Logo Size",
                     use_container_width=True,
                     key=save_key,
-                    disabled=not save_enabled(save_key)
                 ):
+                    if not save_enabled(save_key):
+                        st.info("ℹ️ Already Saved.")
+                        st.stop()
                     try:
                         logo_config = get_template_config(
                             selected_template
@@ -6693,8 +6718,10 @@ def report_cards():
                 use_container_width=True,
                 type="primary",
                 key=save_key,
-                disabled=not save_enabled(save_key)
             ):
+                if not save_enabled(save_key):
+                    st.info("ℹ️ Already Saved.")
+                    st.stop()
                 try:
                     ext = uploaded_logo.name.split(".")[-1].lower()
                     logo_path = (
