@@ -17,7 +17,7 @@ function json(data: unknown, status = 200) {
   });
 }
 
-// Deployment marker: Admin + SuperAdmin user creation enabled.\nDeno.serve(async (req) => {
+// Admin + SuperAdmin user creation enabled.\nDeno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
