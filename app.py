@@ -13773,7 +13773,7 @@ def dashboard():
 
         try:
 
-            student = (
+            student_query = (
                 sb.table("students")
                 .select(
                     "id,school_id,user_id,name,"
@@ -13787,8 +13787,12 @@ def dashboard():
                     st.session_state.user.id
                 )
                 .maybe_single()
-                .execute()
-                .data
+            )
+            student_response = student_query.execute()
+            student = (
+                getattr(student_response, "data", None)
+                if student_response is not None
+                else None
             )
 
             if student:
