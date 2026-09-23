@@ -652,7 +652,7 @@ def users():
 
         role = st.selectbox(
             "Role",
-            ["Admin", "Teacher", "Student", "Parent"],
+            ["Admin", "Admin+Teacher", "Teacher", "Student", "Parent"],
             key="create_user_role"
         )
 
@@ -683,6 +683,26 @@ def users():
             if not token:
                 st.error("Session expired. Logout and login again.")
                 return
+
+            # Admin + Teacher accounts are limited to 3 active users per school.
+            if role == "Admin+Teacher":
+                try:
+                    hybrid_count = (
+                        sb.table("profiles")
+                        .select("id", count="exact")
+                        .eq("school_id", school_map[selected_school])
+                        .eq("role", "Admin+Teacher")
+                        .eq("active", True)
+                        .execute()
+                        .count or 0
+                    )
+                    if hybrid_count >= 3:
+                        st.error("Maximum 3 active Admin + Teacher users are allowed in this school.")
+                        return
+                except Exception as e:
+                    st.error("Could not verify the Admin + Teacher limit.")
+                    st.code(str(e))
+                    return
 
             try:
                 response = requests.post(
@@ -781,7 +801,7 @@ def users():
 
     filter_role = st.selectbox(
         "👤 Select Role",
-        ["All Roles", "Admin", "Teacher", "Student", "Parent"],
+        ["All Roles", "Admin", "Admin+Teacher", "Teacher", "Student", "Parent"],
         key="users_filter_role"
     )
 
@@ -793,7 +813,7 @@ def users():
             u for u in filtered_users
             if str(u.get("school_id") or "") == str(selected_filter_school_id)
         ]
-    elif role == "Admin":
+    elif role in ["Admin", "Admin+Teacher"]:
         admin_school_id = st.session_state.profile.get("school_id")
         filtered_users = [
             u for u in filtered_users
@@ -900,6 +920,20 @@ def users():
                     key=f"user_status_{user_id}"
                 ):
                     try:
+                        if not active and user.get("role") == "Admin+Teacher":
+                            hybrid_count = (
+                                sb.table("profiles")
+                                .select("id", count="exact")
+                                .eq("school_id", user.get("school_id"))
+                                .eq("role", "Admin+Teacher")
+                                .eq("active", True)
+                                .execute()
+                                .count or 0
+                            )
+                            if hybrid_count >= 3:
+                                st.error("Maximum 3 active Admin + Teacher users are already active in this school.")
+                                continue
+
                         (
                             sb.table("profiles")
                             .update({"active": not active})
@@ -952,7 +986,7 @@ def users():
                 )
 
                 # Admin cannot move a user to another school.
-                if role == "Admin":
+                if role in ["Admin", "Admin+Teacher"]:
                     admin_school_id = str(
                         st.session_state.profile.get("school_id") or ""
                     )
@@ -987,7 +1021,7 @@ def users():
                 # -----------------------------------------
                 # TEACHER CLASS / SUBJECT ASSIGNMENTS
                 # -----------------------------------------
-                if edit_role == "Teacher":
+                if edit_role in ["Teacher", "Admin+Teacher"]:
 
                     edit_school_id = school_map[edit_school_label]
 
@@ -1156,6 +1190,22 @@ def users():
                         continue
 
                     try:
+                        if edit_role == "Admin+Teacher" and current_role != "Admin+Teacher":
+                            target_school_id = school_map[edit_school_label]
+                            hybrid_count = (
+                                sb.table("profiles")
+                                .select("id", count="exact")
+                                .eq("school_id", target_school_id)
+                                .eq("role", "Admin+Teacher")
+                                .eq("active", True)
+                                .neq("id", user_id)
+                                .execute()
+                                .count or 0
+                            )
+                            if hybrid_count >= 3:
+                                st.error("Maximum 3 active Admin + Teacher users are allowed in this school.")
+                                continue
+
                         (
                             sb.table("profiles")
                             .update({
@@ -1168,7 +1218,7 @@ def users():
                         )
 
                         # Save teacher assignments only when the user is a Teacher.
-                        if edit_role == "Teacher":
+                        if edit_role in ["Teacher", "Admin+Teacher"]:
 
                             edit_school_id = school_map[edit_school_label]
 
@@ -1292,7 +1342,7 @@ def get_exam_assessments(school_id, active_only=True):
 def exam_assessment_settings():
     st.header("📝 Exam / Assessment Settings")
     role = st.session_state.profile.get("role")
-    if role not in ["SuperAdmin", "Admin"]:
+    if role not in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         st.error("Only Admin can manage Exam / Assessment names.")
         return
 
@@ -1601,7 +1651,7 @@ def students():
     # Teachers can only view/change students belonging to classes
     # where they are assigned as the Class Teacher.
     assigned_class_keys = None
-    if role == "Teacher":
+    if role in ["Teacher", "Admin+Teacher"]:
         try:
             assigned_classes = (
                 sb.table("classes")
@@ -1768,7 +1818,7 @@ def students():
             key="add_student_button"
         ):
 
-            if role == "Teacher":
+            if role in ["Teacher", "Admin+Teacher"]:
                 entered_class_key = (
                     str(class_name or "").strip().lower(),
                     str(section or "").strip().lower()
@@ -1887,7 +1937,7 @@ def students():
         st.code(str(e))
         return
 
-    if role == "Teacher" and assigned_class_keys is not None:
+    if role in ["Teacher", "Admin+Teacher"] and assigned_class_keys is not None:
         student_data = [
             student
             for student in student_data
@@ -1971,7 +2021,7 @@ def students():
     # Teachers should not see every student card on the dashboard.
     # They select one or more students from a dropdown (multiselect
     # displays checkbox options) and can also Select All.
-    if role == "Teacher":
+    if role in ["Teacher", "Admin+Teacher"]:
 
         student_labels = {}
         for student in student_data:
@@ -2462,7 +2512,7 @@ def students():
                     use_container_width=True,
                 ):
 
-                    if role == "Teacher" and (
+                    if role in ["Teacher", "Admin+Teacher"] and (
                         str(student.get("class_name") or "").strip().lower(),
                         str(student.get("section") or "").strip().lower()
                     ) not in assigned_class_keys:
@@ -2631,7 +2681,7 @@ def classes_subjects():
         return
 
     # Teachers can see only classes where they are the Class Teacher.
-    if role == "Teacher":
+    if role in ["Teacher", "Admin+Teacher"]:
         class_data = [
             x for x in class_data
             if str(x.get("class_teacher_id")) == str(st.session_state.user.id)
@@ -3502,7 +3552,7 @@ def bulk_marks():
 
     role = st.session_state.profile.get("role")
 
-    if role not in ["SuperAdmin", "Admin", "Teacher"]:
+    if role not in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
         st.error("You do not have permission to enter marks.")
         return
 
@@ -3534,7 +3584,7 @@ def bulk_marks():
         return
 
     # Teachers see only classes for which they have a subject assignment.
-    if role == "Teacher":
+    if role in ["Teacher", "Admin+Teacher"]:
         try:
             teacher_assignments = (
                 sb.table("teacher_subject_assignments")
@@ -3618,7 +3668,7 @@ def bulk_marks():
         return
 
     # Teachers see only the subjects assigned to them in the selected class.
-    if role == "Teacher":
+    if role in ["Teacher", "Admin+Teacher"]:
         assigned_subject_ids = {
             str(x.get("subject_id"))
             for x in teacher_assignments
@@ -3970,7 +4020,7 @@ def attendance():
 
     role = st.session_state.profile.get("role")
 
-    if role not in ["SuperAdmin", "Admin", "Teacher"]:
+    if role not in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
         st.error("You do not have permission to manage attendance.")
         return
 
@@ -4006,7 +4056,7 @@ def attendance():
     # Class Teacher can see/fill attendance only for classes assigned
     # to them as Class Teacher. Admin/SuperAdmin retain full access.
     assigned_class_rows = []
-    if role == "Teacher":
+    if role in ["Teacher", "Admin+Teacher"]:
         try:
             assigned_class_rows = (
                 sb.table("classes")
@@ -4071,7 +4121,7 @@ def attendance():
     selected_class_row = class_lookup.get(selected_class)
 
     if selected_class != "All Classes":
-        if role == "Teacher" and selected_class_row:
+        if role in ["Teacher", "Admin+Teacher"] and selected_class_row:
             target_name = str(selected_class_row.get("class_name") or "").strip().lower()
             target_section = str(selected_class_row.get("section") or "").strip().lower()
             students_data = [
@@ -4674,7 +4724,7 @@ def attendance():
 
     role = st.session_state.profile.get("role")
 
-    if role not in ["SuperAdmin", "Admin", "Teacher"]:
+    if role not in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
         st.error("You do not have permission to manage attendance.")
         return
 
@@ -4710,7 +4760,7 @@ def attendance():
     # Class Teacher can see/fill attendance only for classes assigned
     # to them as Class Teacher. Admin/SuperAdmin retain full access.
     assigned_class_rows = []
-    if role == "Teacher":
+    if role in ["Teacher", "Admin+Teacher"]:
         try:
             assigned_class_rows = (
                 sb.table("classes")
@@ -4775,7 +4825,7 @@ def attendance():
     selected_class_row = class_lookup.get(selected_class)
 
     if selected_class != "All Classes":
-        if role == "Teacher" and selected_class_row:
+        if role in ["Teacher", "Admin+Teacher"] and selected_class_row:
             target_name = str(selected_class_row.get("class_name") or "").strip().lower()
             target_section = str(selected_class_row.get("section") or "").strip().lower()
             students_data = [
@@ -7254,7 +7304,7 @@ def report_cards():
         st.code(str(e))
         return
 
-    if role == "Teacher":
+    if role in ["Teacher", "Admin+Teacher"]:
         try:
             teacher_report_classes = (
                 sb.table("classes")
@@ -7307,7 +7357,7 @@ def report_cards():
 
         st.warning(
             "No active students found in your assigned Class Teacher class(es)."
-            if role == "Teacher"
+            if role in ["Teacher", "Admin+Teacher"]
             else "No active students found."
         )
 
@@ -8348,7 +8398,7 @@ def reports():
     st.header("📊 Reports")
 
     role = st.session_state.profile.get("role")
-    if role not in ["SuperAdmin", "Admin", "Teacher"]:
+    if role not in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
         st.error("You do not have permission to view reports.")
         return
 
@@ -8363,7 +8413,7 @@ def reports():
         "Subject Summary",
         "Attendance Summary"
     ]
-    if role == "Admin" and premium_feature_enabled(
+    if role in ["Admin", "Admin+Teacher"] and premium_feature_enabled(
         school_id,
         st.session_state.user.id,
         "school_academic_status"
@@ -8410,7 +8460,7 @@ def reports():
             return
 
         # Class Teacher sees only students from classes assigned to them.
-        if role == "Teacher":
+        if role in ["Teacher", "Admin+Teacher"]:
             try:
                 teacher_classes = (
                     sb.table("classes")
@@ -8447,7 +8497,7 @@ def reports():
         # above and can also use the class dropdown.
         filtered_students = students_data
 
-        if role == "Teacher":
+        if role in ["Teacher", "Admin+Teacher"]:
             teacher_class_options = sorted({
                 (
                     f"{x.get('class_name') or '-'}"
@@ -8534,7 +8584,7 @@ def reports():
 
         # Optional section filter remains available for Admin/SuperAdmin
         # after selecting a class, while Teacher access stays limited above.
-        if role != "Teacher":
+        if role not in ["Teacher", "Admin+Teacher"]:
             filtered_section_options = sorted({
                 str(s.get("section") or "").strip()
                 for s in filtered_students
@@ -8614,7 +8664,7 @@ def reports():
         return
 
     teacher_assignments = []
-    if role == "Teacher":
+    if role in ["Teacher", "Admin+Teacher"]:
         try:
             teacher_assignments = (
                 sb.table("teacher_subject_assignments")
@@ -8717,7 +8767,7 @@ def reports():
             st.code(str(e))
             return
 
-        if role == "Teacher":
+        if role in ["Teacher", "Admin+Teacher"]:
             allowed = {
                 str(x.get("subject_id"))
                 for x in teacher_assignments
@@ -8888,7 +8938,7 @@ def reports():
             st.code(str(e))
             return
 
-        if role == "Teacher":
+        if role in ["Teacher", "Admin+Teacher"]:
             allowed = {
                 str(x.get("subject_id"))
                 for x in teacher_assignments
@@ -9002,7 +9052,7 @@ def reports():
         )
         for x in class_data
     }
-    if role == "Teacher":
+    if role in ["Teacher", "Admin+Teacher"]:
         students_data = [
             s for s in students_data
             if (
@@ -9057,7 +9107,7 @@ def dashboard():
     # Keep the Class Teacher's assigned class name(s) visible
     # at every Teacher working place because all Teacher modules
     # are rendered from this dashboard.
-    if role == "Teacher":
+    if role in ["Teacher", "Admin+Teacher"]:
         try:
             teacher_working_classes = (
                 sb.table("classes")
@@ -9219,7 +9269,7 @@ def dashboard():
     # ADMIN
     # =====================================================
 
-    elif role == "Admin":
+    elif role in ["Admin", "Admin+Teacher"]:
 
         st.title("🛠️ Admin Dashboard")
 
@@ -9277,7 +9327,7 @@ def dashboard():
     # TEACHER
     # =====================================================
 
-    elif role == "Teacher":
+    elif role in ["Teacher", "Admin+Teacher"]:
 
         st.title("👨‍🏫 Teacher Dashboard")
 
