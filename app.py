@@ -11184,7 +11184,43 @@ def student_report_card_view(school_id, student_id):
 
     # If Report Cards are disabled for Parents/Students, show nothing.
     # Do not expose the Admin permission state or any internal message.
-    if not parent_report_card_enabled(school_id):
+    # Use the same Admin-controlled permission as Parents. Support both
+    # existing RPC names because older school databases may still expose the
+    # plural function while newer ones use the singular function.
+    report_access = False
+    for rpc_name in ("parent_report_card_enabled", "parent_report_cards_enabled"):
+        try:
+            result = sb.rpc(
+                rpc_name,
+                {"p_school_id": school_id}
+            ).execute()
+            data = getattr(result, "data", None)
+            if isinstance(data, bool):
+                report_access = data
+            elif isinstance(data, list) and data:
+                first = data[0]
+                report_access = bool(
+                    first if isinstance(first, bool)
+                    else (
+                        first.get("enabled")
+                        or first.get("parent_report_card_enabled")
+                        or first.get("parent_report_cards_enabled")
+                        or first.get("result")
+                    ) if isinstance(first, dict) else first
+                )
+            elif isinstance(data, dict):
+                report_access = bool(
+                    data.get("enabled")
+                    or data.get("parent_report_card_enabled")
+                    or data.get("parent_report_cards_enabled")
+                    or data.get("result")
+                )
+            if report_access:
+                break
+        except Exception:
+            continue
+
+    if not report_access:
         return
 
     st.subheader("📄 My Report Cards")
