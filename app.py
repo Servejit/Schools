@@ -13821,12 +13821,9 @@ def dashboard():
 
         st.title("🎓 Student Dashboard")
 
-        show_dashboard_notices(
-            profile.get("school_id"),
-            "📢 Notices",
-            student_mode=True
-        )
-
+        # Load the Student record first.  The Student's actual school is
+        # the authoritative school for notices; do not depend only on the
+        # profile's school_id because older Student profiles may not have it.
         student = None
 
         try:
@@ -14017,6 +14014,15 @@ def dashboard():
             (student or {}).get("school_id")
             or profile.get("school_id")
         )
+
+        # Student notices must use the same class-linked notice access
+        # regardless of whether the profile school_id is populated.
+        if student_school_id:
+            show_dashboard_notices(
+                student_school_id,
+                "📢 Notices",
+                student_mode=True
+            )
 
         if student_school_id and subject_wise_parent_student_premium_enabled(
             student_school_id
