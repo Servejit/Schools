@@ -4152,6 +4152,17 @@ def bulk_marks():
                     st.warning(conflict)
                 return
 
+            try:
+                fresh_backup = build_marks_backup_workbook(school_id)
+                fresh_stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                st.session_state["_marks_backup_bytes"] = fresh_backup
+                st.session_state["_marks_backup_filename"] = (
+                    f"Marks_Backup_{str(exam_name).replace('/', '_').replace(' ', '_')}_{fresh_stamp}.xlsx"
+                )
+            except Exception:
+                # Saving marks must not fail just because backup generation fails.
+                pass
+
             mark_saved(save_key, marks_save_values)
             st.success("✅ Marks saved successfully.")
             st.rerun()
@@ -6021,6 +6032,645 @@ def make_report_card_pdf(
     return output
 
 
+
+# =========================================================
+# MARKS BACKUP / RECOVERY / RESULT WEIGHTAGE
+# =========================================================
+
+def build_marks_backup_workbook(school_id):
+    """Create a complete Excel backup of the school's exam marks."""
+    school = (
+        sb.table("schools")
+        .select("id,name,code")
+        .eq("id", school_id)
+        .maybe_single()
+        .execute()
+        .data
+    ) or {}
+
+    exams = get_exam_assessments(school_id, active_only=False)
+
+    students = (
+        sb.table("students")
+        .select("id,name,admission_no,class_name,section,school_id")
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+
+    subjects = (
+        sb.table("subjects")
+        .select(
+            "id,school_id,class_id,name,subject_name,code,"
+            "max_marks,passing_marks,active"
+        )
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+
+    marks = (
+        sb.table("marks")
+        .select(
+            "id,school_id,student_id,subject_id,exam_name,"
+            "marks,max_marks,class_id"
+        )
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+
+    student_map = {str(x["id"]): x for x in students}
+    subject_map = {str(x["id"]): x for x in subjects}
+
+    wb = Workbook()
+    info_ws = wb.active
+    info_ws.title = "Backup_Info"
+
+    info_rows = [
+        ["School ID", str(school_id)],
+        ["School Name", school.get("name") or ""],
+        ["School Code", school.get("code") or ""],
+        ["Backup Created", datetime.datetime.now(datetime.timezone.utc).isoformat()],
+        ["Backup Purpose", "Marks backup and recovery"],
+        ["Restore Rule", "Rows in exam sheets are matched by Student ID + Subject ID + Exam Name"],
+    ]
+
+    for row in info_rows:
+        info_ws.append(row)
+
+    for cell in info_ws[1]:
+        cell.font = Font(bold=True)
+
+    # Always include all existing exam names, including inactive exams.
+    exam_names = []
+    for exam in exams:
+        name = str(exam.get("name") or "").strip()
+        if name and name not in exam_names:
+            exam_names.append(name)
+
+    # Also include marks whose exam name may no longer be in exam_assessments.
+    for mark in marks:
+        name = str(mark.get("exam_name") or "").strip()
+        if name and name not in exam_names:
+            exam_names.append(name)
+
+    if not exam_names:
+        exam_names = ["Marks"]
+
+    used_sheet_names = set()
+    for exam_name in exam_names:
+        base = exam_name[:31] or "Exam"
+        sheet_name = base
+        counter = 2
+        while sheet_name in used_sheet_names or sheet_name == "Backup_Info":
+            suffix = f"_{counter}"
+            sheet_name = (base[:31-len(suffix)] + suffix)[:31]
+            counter += 1
+        used_sheet_names.add(sheet_name)
+
+        ws = wb.create_sheet(sheet_name)
+        headers = [
+            "School ID", "Exam Name", "Student ID", "Student Name",
+            "Admission No.", "Class", "Section", "Subject ID",
+            "Subject Name", "Subject Code", "Class ID",
+            "Marks", "Maximum Marks", "Passing Marks"
+        ]
+        ws.append(headers)
+
+        exam_marks = [
+            m for m in marks
+            if str(m.get("exam_name") or "").strip() == exam_name
+        ]
+
+        for mark in exam_marks:
+            student = student_map.get(str(mark.get("student_id")), {})
+            subject = subject_map.get(str(mark.get("subject_id")), {})
+
+            ws.append([
+                str(school_id),
+                exam_name,
+                str(mark.get("student_id") or ""),
+                student.get("name") or "",
+                student.get("admission_no") or "",
+                student.get("class_name") or "",
+                student.get("section") or "",
+                str(mark.get("subject_id") or ""),
+                subject.get("subject_name") or subject.get("name") or "",
+                subject.get("code") or "",
+                str(mark.get("class_id") or subject.get("class_id") or ""),
+                mark.get("marks"),
+                mark.get("max_marks")
+                    if mark.get("max_marks") is not None
+                    else subject.get("max_marks"),
+                subject.get("passing_marks"),
+            ])
+
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+        for column in ws.columns:
+            max_len = 0
+            col_letter = column[0].column_letter
+            for cell in column[:300]:
+                value = "" if cell.value is None else str(cell.value)
+                max_len = max(max_len, len(value))
+            ws.column_dimensions[col_letter].width = min(max(max_len + 2, 12), 32)
+
+    # Add student and subject master data to make the backup self-contained.
+    for title, rows, headers in [
+        (
+            "Students",
+            students,
+            ["Student ID", "Name", "Admission No.", "Class", "Section"]
+        ),
+        (
+            "Subjects",
+            subjects,
+            ["Subject ID", "Subject Name", "Code", "Class ID", "Maximum Marks", "Passing Marks", "Active"]
+        ),
+    ]:
+        ws = wb.create_sheet(title)
+        ws.append(headers)
+        for item in rows:
+            if title == "Students":
+                ws.append([
+                    str(item.get("id") or ""),
+                    item.get("name") or "",
+                    item.get("admission_no") or "",
+                    item.get("class_name") or "",
+                    item.get("section") or "",
+                ])
+            else:
+                ws.append([
+                    str(item.get("id") or ""),
+                    item.get("subject_name") or item.get("name") or "",
+                    item.get("code") or "",
+                    str(item.get("class_id") or ""),
+                    item.get("max_marks"),
+                    item.get("passing_marks"),
+                    item.get("active"),
+                ])
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.getvalue()
+
+
+def restore_marks_from_backup(uploaded_file, school_id):
+    """Restore marks from a previously generated workbook."""
+    workbook = pd.read_excel(
+        uploaded_file,
+        sheet_name=None,
+        engine="openpyxl"
+    )
+
+    info = workbook.get("Backup_Info")
+    if info is None or info.empty:
+        raise ValueError("This is not a valid School Marks Backup file.")
+
+    info_map = {}
+    for _, row in info.iterrows():
+        if len(row) >= 2:
+            key = str(row.iloc[0]).strip()
+            info_map[key] = row.iloc[1]
+
+    backup_school_id = str(info_map.get("School ID") or "").strip()
+    if backup_school_id and backup_school_id != str(school_id):
+        raise ValueError(
+            "This backup belongs to another school. "
+            "Restore was stopped for safety."
+        )
+
+    students = (
+        sb.table("students")
+        .select("id,school_id")
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+    subjects = (
+        sb.table("subjects")
+        .select("id,school_id,max_marks")
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+    existing = (
+        sb.table("marks")
+        .select(
+            "id,student_id,subject_id,exam_name,marks,max_marks,class_id"
+        )
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+
+    valid_students = {str(x["id"]) for x in students}
+    valid_subjects = {str(x["id"]): x for x in subjects}
+    existing_map = {
+        (
+            str(x.get("student_id")),
+            str(x.get("subject_id")),
+            str(x.get("exam_name") or "").strip()
+        ): x
+        for x in existing
+    }
+
+    updates = []
+    inserts = []
+    skipped = []
+    restored = 0
+
+    for sheet_name, df in workbook.items():
+        if sheet_name in {"Backup_Info", "Students", "Subjects"}:
+            continue
+        if df is None or df.empty:
+            continue
+
+        normalized = {
+            str(c).strip().lower(): c
+            for c in df.columns
+        }
+        required = ["student id", "subject id", "marks"]
+        if any(x not in normalized for x in required):
+            skipped.append(
+                f"{sheet_name}: missing required columns."
+            )
+            continue
+
+        for _, row in df.iterrows():
+            student_id = str(row.get(normalized["student id"]) or "").strip()
+            subject_id = str(row.get(normalized["subject id"]) or "").strip()
+            raw_marks = row.get(normalized["marks"])
+
+            exam_col = normalized.get("exam name")
+            class_col = normalized.get("class id")
+            max_col = normalized.get("maximum marks")
+
+            exam_name = (
+                str(row.get(exam_col) or sheet_name).strip()
+                if exam_col else sheet_name
+            )
+
+            if not student_id or not subject_id:
+                continue
+            if student_id not in valid_students:
+                skipped.append(
+                    f"{sheet_name}: unknown Student ID {student_id}."
+                )
+                continue
+            if subject_id not in valid_subjects:
+                skipped.append(
+                    f"{sheet_name}: unknown Subject ID {subject_id}."
+                )
+                continue
+            if raw_marks is None or pd.isna(raw_marks) or str(raw_marks).strip() == "":
+                continue
+
+            try:
+                mark_value = float(raw_marks)
+            except Exception:
+                skipped.append(
+                    f"{sheet_name}: invalid marks for {student_id}/{subject_id}."
+                )
+                continue
+
+            subject_info = valid_subjects[subject_id]
+            max_marks = subject_info.get("max_marks")
+            if max_col:
+                try:
+                    if not pd.isna(row.get(max_col)):
+                        max_marks = float(row.get(max_col))
+                except Exception:
+                    pass
+
+            if max_marks is not None and mark_value > float(max_marks):
+                skipped.append(
+                    f"{sheet_name}: {mark_value:g} exceeds maximum "
+                    f"{float(max_marks):g} for {student_id}/{subject_id}."
+                )
+                continue
+            if mark_value < 0:
+                skipped.append(
+                    f"{sheet_name}: negative marks for {student_id}/{subject_id}."
+                )
+                continue
+
+            class_id = None
+            if class_col:
+                value = row.get(class_col)
+                if value is not None and not pd.isna(value):
+                    class_id = str(value).strip() or None
+
+            key = (student_id, subject_id, exam_name)
+            old = existing_map.get(key)
+
+            if old:
+                updates.append({
+                    "id": old["id"],
+                    "marks": mark_value,
+                    "max_marks": max_marks,
+                    "class_id": class_id or old.get("class_id")
+                })
+            else:
+                inserts.append({
+                    "school_id": school_id,
+                    "student_id": student_id,
+                    "subject_id": subject_id,
+                    "exam_name": exam_name,
+                    "marks": mark_value,
+                    "max_marks": max_marks,
+                    "class_id": class_id
+                })
+            restored += 1
+
+    for item in inserts:
+        sb.table("marks").insert(item).execute()
+
+    for item in updates:
+        sb.table("marks").update({
+            "marks": item["marks"],
+            "max_marks": item["max_marks"],
+            "class_id": item["class_id"]
+        }).eq("id", item["id"]).execute()
+
+    return restored, len(inserts), len(updates), skipped
+
+
+def get_school_academic_year(school_id):
+    try:
+        rows = (
+            sb.table("classes")
+            .select("academic_year")
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .order("academic_year", desc=True)
+            .limit(1)
+            .execute()
+            .data or []
+        )
+        if rows and rows[0].get("academic_year"):
+            return str(rows[0]["academic_year"])
+    except Exception:
+        pass
+    return ""
+
+
+def get_exam_result_weights(school_id, academic_year):
+    try:
+        rows = (
+            sb.table("exam_result_weights")
+            .select("exam_id,weight_percent")
+            .eq("school_id", school_id)
+            .eq("academic_year", academic_year)
+            .execute()
+            .data or []
+        )
+        return {
+            str(x.get("exam_id")): float(x.get("weight_percent") or 0)
+            for x in rows
+        }
+    except Exception:
+        return {}
+
+
+def marks_backup_and_result_tools(school_id):
+    role = st.session_state.profile.get("role")
+
+    if role not in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+        return
+
+    st.subheader("📦 Marks Backup, Recovery & Result Weightage")
+
+    # A backup can be downloaded after every successful marks save.
+    pending_bytes = st.session_state.pop("_marks_backup_bytes", None)
+    pending_name = st.session_state.pop(
+        "_marks_backup_filename",
+        None
+    )
+    if pending_bytes:
+        st.success("✅ A fresh backup was created after the last marks update.")
+        st.download_button(
+            "⬇️ Download Fresh Backup",
+            data=pending_bytes,
+            file_name=pending_name or "School_Marks_Backup.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key="fresh_marks_backup_download"
+        )
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.markdown("### 📥 Excel Backup")
+        if st.button(
+            "📊 Create / Download Complete Marks Backup",
+            use_container_width=True,
+            key="create_marks_backup"
+        ):
+            try:
+                backup_bytes = build_marks_backup_workbook(school_id)
+                safe_date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                school_name = str(
+                    st.session_state.get("selected_school_name") or "School"
+                ).replace("/", "_").replace("\\", "_").replace(" ", "_")
+                st.session_state["_manual_marks_backup_bytes"] = backup_bytes
+                st.session_state["_manual_marks_backup_filename"] = (
+                    f"{school_name}_Marks_Backup_{safe_date}.xlsx"
+                )
+                st.rerun()
+            except Exception as e:
+                st.error("Could not create marks backup.")
+                st.code(str(e))
+
+        manual_bytes = st.session_state.pop(
+            "_manual_marks_backup_bytes",
+            None
+        )
+        manual_name = st.session_state.pop(
+            "_manual_marks_backup_filename",
+            None
+        )
+        if manual_bytes:
+            st.download_button(
+                "⬇️ Download Complete Marks Backup",
+                data=manual_bytes,
+                file_name=manual_name or "School_Marks_Backup.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="manual_marks_backup_download"
+            )
+
+    with c2:
+        st.markdown("### ♻️ Recover Marks")
+        uploaded_backup = st.file_uploader(
+            "Upload a previous Marks Backup Excel",
+            type=["xlsx"],
+            key="marks_restore_upload"
+        )
+
+        if uploaded_backup:
+            if st.button(
+                "🔍 Validate Backup",
+                use_container_width=True,
+                key="validate_marks_backup"
+            ):
+                try:
+                    sheets = pd.read_excel(
+                        uploaded_backup,
+                        sheet_name=None,
+                        engine="openpyxl"
+                    )
+                    summary = []
+                    for name, df in sheets.items():
+                        if name not in {"Backup_Info", "Students", "Subjects"}:
+                            summary.append({
+                                "Exam / Sheet": name,
+                                "Rows": int(len(df))
+                            })
+                    st.session_state["_validated_backup_name"] = uploaded_backup.name
+                    st.session_state["_validated_backup_summary"] = summary
+                    st.success("Backup validated. Review the rows below before restoring.")
+                except Exception as e:
+                    st.error("This Excel file could not be validated.")
+                    st.code(str(e))
+
+        summary = st.session_state.get("_validated_backup_summary")
+        if summary:
+            st.dataframe(
+                pd.DataFrame(summary),
+                hide_index=True,
+                use_container_width=True
+            )
+            if st.button(
+                "♻️ Restore Marks From This Backup",
+                type="primary",
+                use_container_width=True,
+                key="restore_marks_backup"
+            ):
+                try:
+                    restored, inserted, updated, skipped = restore_marks_from_backup(
+                        uploaded_backup,
+                        school_id
+                    )
+                    st.success(
+                        f"Restored {restored} mark rows "
+                        f"({inserted} new, {updated} updated)."
+                    )
+                    if skipped:
+                        st.warning(
+                            f"{len(skipped)} rows were skipped. "
+                            "Check the details below."
+                        )
+                        for item in skipped[:30]:
+                            st.caption(item)
+                    st.session_state.pop("_validated_backup_summary", None)
+                    st.rerun()
+                except Exception as e:
+                    st.error("Could not restore the backup.")
+                    st.code(str(e))
+
+    st.divider()
+    st.markdown("### ⚖️ Exam Result Weightage")
+
+    exams = get_exam_assessments(school_id, active_only=True)
+    academic_year = get_school_academic_year(school_id)
+
+    if not exams:
+        st.info("Create exams first in Exam / Assessment.")
+        return
+
+    if not academic_year:
+        st.warning("Academic Session is not available in the school's active classes.")
+        return
+
+    current_weights = get_exam_result_weights(school_id, academic_year)
+    weight_table = []
+    for exam in exams:
+        weight_table.append({
+            "Exam": exam.get("name") or "",
+            "Exam ID": str(exam.get("id")),
+            "Weight %": current_weights.get(str(exam.get("id")), 0.0)
+        })
+
+    weight_df = pd.DataFrame(weight_table)
+    edited_weights = st.data_editor(
+        weight_df,
+        hide_index=True,
+        use_container_width=True,
+        disabled=["Exam", "Exam ID"],
+        column_config={
+            "Weight %": st.column_config.NumberColumn(
+                "Weight %",
+                min_value=0.0,
+                max_value=100.0,
+                step=1.0,
+                format="%.2f"
+            )
+        },
+        key=f"exam_weight_editor_{school_id}_{academic_year}"
+    )
+
+    total_weight = float(
+        pd.to_numeric(
+            edited_weights["Weight %"],
+            errors="coerce"
+        ).fillna(0).sum()
+    )
+    if abs(total_weight - 100.0) > 0.01:
+        st.warning(
+            f"Current weight total is {total_weight:g}%. "
+            "Use 100% when these exams together make the final result."
+        )
+    else:
+        st.success("✅ Weight total is 100%.")
+
+    if st.button(
+        "💾 Save Exam Weightage",
+        type="primary",
+        use_container_width=True,
+        key="save_exam_weights"
+    ):
+        try:
+            # This table is intentionally school/session scoped.
+            # If it has not been created yet, the app tells the Admin exactly what is needed.
+            for _, row in edited_weights.iterrows():
+                exam_id = str(row["Exam ID"])
+                weight = float(row["Weight %"] or 0)
+                sb.table("exam_result_weights").upsert({
+                    "school_id": school_id,
+                    "academic_year": academic_year,
+                    "exam_id": exam_id,
+                    "weight_percent": weight,
+                    "updated_at": datetime.datetime.now(
+                        datetime.timezone.utc
+                    ).isoformat()
+                }).execute()
+
+            mark_saved("save_exam_weights")
+            st.success("✅ Exam weightage saved successfully.")
+            st.rerun()
+        except Exception as e:
+            st.error(
+                "Could not save exam weightage. "
+                "Run the exam_result_weights SQL setup first if this is the first time."
+            )
+            st.code(str(e))
+
+    st.caption(
+        "Example: PT-1 10%, PT-2 10%, Half Yearly 30%, Annual 50%. "
+        "Raw exam marks are never changed; weightage is used only for the final result."
+    )
+
+
 # =========================================================
 # REPORT CARD GENERATOR
 # =========================================================
@@ -7008,6 +7658,7 @@ def report_cards():
     if role not in [
         "SuperAdmin",
         "Admin",
+        "Admin+Teacher",
         "Teacher"
     ]:
 
@@ -7023,6 +7674,13 @@ def report_cards():
 
     if not school_id:
         return
+
+    # -----------------------------------------------------
+    # MARKS BACKUP / RECOVERY / WEIGHTAGE
+    # -----------------------------------------------------
+    marks_backup_and_result_tools(school_id)
+
+    st.divider()
 
     # -----------------------------------------------------
     # SCHOOL
