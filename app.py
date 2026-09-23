@@ -591,6 +591,10 @@ def users():
 
     st.header("👥 User Management")
 
+    # Persistent save confirmation: show after Streamlit reruns as well,
+    # so Parent → Student linkage changes remain visibly confirmed.
+    show_save_message("parent_student_links")
+
     try:
         school_data = (
             sb.table("schools")
@@ -827,7 +831,10 @@ def users():
                                     for student_id in selected_student_ids
                                 ]).execute()
 
-                            st.success("✅ Parent → Student links saved successfully.")
+                            # Persist the confirmation across the rerun so the
+                            # saved linkage is visibly confirmed after the database
+                            # write completes.
+                            mark_saved("parent_student_links")
                             st.rerun()
                         except Exception as e:
                             st.error("Could not save Parent → Student links.")
