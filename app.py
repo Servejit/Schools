@@ -11180,28 +11180,31 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
             st.markdown(f"#### 📚 {subject_name}")
 
-            # Top 10 leaderboard: Rank is the first column.
-            # The first three ranks receive medal emojis.
+            # Top 10 leaderboard with a dedicated Rank column.
+            # st.table renders Markdown inside cells, including emoji shortcodes.
+            display_rows = []
             for item in ranking_rows:
                 rank_number = str(item["Rank"]).split()[-1]
                 if rank_number == "1":
-                    rank_display = chr(0x1F947) + " 1"
+                    rank_display = ":first_place_medal: **1**"
                 elif rank_number == "2":
-                    rank_display = chr(0x1F948) + " 2"
+                    rank_display = ":second_place_medal: **2**"
                 elif rank_number == "3":
-                    rank_display = chr(0x1F949) + " 3"
+                    rank_display = ":third_place_medal: **3**"
                 else:
-                    rank_display = rank_number
+                    rank_display = f"**{rank_number}**"
 
-                st.markdown(
-                    f'**Rank:** {rank_display} &nbsp;&nbsp; '
-                    f'**Student Name:** {item["Student Name"]} &nbsp;&nbsp; '
-                    f'**Class:** {item["Class"]} &nbsp;&nbsp; '
-                    f'**Section:** {item["Section"]} &nbsp;&nbsp; '
-                    f'**Father Name:** {item["Father Name"]} &nbsp;&nbsp; '
-                    f'**Marks:** {item["Marks"]} &nbsp;&nbsp; '
-                    f'**Percentage:** {item["Percentage"]}'
-                )
+                display_rows.append({
+                    "Rank": rank_display,
+                    "Student Name": item["Student Name"],
+                    "Class": item["Class"],
+                    "Section": item["Section"],
+                    "Father Name": item["Father Name"],
+                    "Marks": item["Marks"],
+                    "Percentage": item["Percentage"],
+                })
+
+            st.table(pd.DataFrame(display_rows))
 
 def school_academic_status(school_id):
     st.subheader("💎 School Academic Status")
