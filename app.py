@@ -13078,31 +13078,46 @@ def show_dashboard_notices(school_id, title="📢 Notices"):
 
 
 def class_teacher_notices(profile):
-    """Class Teacher, Admin+Teacher and SuperAdmin can publish notices."""
+    """Send notices to selected classes or all classes."""
     role = profile.get("role")
     school_id = profile.get("school_id")
     teacher_id = st.session_state.user.id
 
+    # SuperAdmin can choose the school first.
     if role == "SuperAdmin":
         try:
-            schools = (sb.table("schools").select("id,name").eq("active", True).order("name").execute().data or [])
+            schools = (
+                sb.table("schools")
+                .select("id,name")
+                .eq("active", True)
+                .order("name")
+                .execute()
+                .data or []
+            )
         except Exception:
             schools = []
+
         if not schools:
             st.warning("No active school is available.")
             return
-        school_options = {str(x.get("name") or x.get("id")): x.get("id") for x in schools}
-        selected_school_label = st.selectbox("🏫 School", list(school_options.keys()), key="superadmin_notice_school")
+
+        school_options = {
+            str(x.get("name") or x.get("id")): x.get("id")
+            for x in schools
+        }
+        selected_school_label = st.selectbox(
+            "🏫 School",
+            list(school_options.keys()),
+            key="superadmin_notice_school"
+        )
         school_id = school_options[selected_school_label]
 
     if not school_id:
         st.info("Your account is not assigned to a school.")
         return
 
-    if not school_id:
-        st.info("Your account is not assigned to a school.")
-        return
-
+    # Load active classes. Admin/Admin+Teacher/SuperAdmin can use
+    # any active class; Teacher can use only their Class Teacher class.
     try:
         classes_query = (
             sb.table("classes")
@@ -13110,8 +13125,12 @@ def class_teacher_notices(profile):
             .eq("school_id", school_id)
             .eq("active", True)
         )
-        if role not in {"Admin+Teacher", "SuperAdmin"}:
-            classes_query = classes_query.eq("class_teacher_id", teacher_id)
+
+        if role == "Teacher":
+            classes_query = classes_query.eq(
+                "class_teacher_id",
+                teacher_id
+            )
 
         assigned_classes = (
             classes_query
@@ -13121,21 +13140,23 @@ def class_teacher_notices(profile):
             .data or []
         )
     except Exception as e:
-        st.error("Could not load your Class Teacher classes.")
+        st.error("Could not load classes.")
         st.code(str(e))
         return
 
     if not assigned_classes:
-        st.warning("No class has been assigned to you as Class Teacher yet.")
+        if role == "Teacher":
+            st.warning("No class has been assigned to you as Class Teacher yet.")
+        else:
+            st.warning("No active class is available in this school.")
         return
 
     show_save_message("class_teacher_notice")
 
     st.subheader("📢 Send Notice to Parents & Students")
     st.caption(
-        "The notice will automatically appear on the dashboards of the "
-        "Parents linked to students in the selected class and the Students "
-        "of that class."
+        "Admin and Admin+Teacher can select multiple classes or All Classes. "
+        "Teacher can send only to their own Class Teacher class."
     )
 
     class_options = {
@@ -13147,12 +13168,44 @@ def class_teacher_notices(profile):
         for x in assigned_classes
     }
 
-    selected_label = st.selectbox(
-        "🏫 Class / Section",
-        list(class_options.keys()),
-        key="class_teacher_notice_class"
-    )
-    selected_class = class_options[selected_label]
+    can_select_multiple = role in {"Admin", "Admin+Teacher", "SuperAdmin"}
+
+    if can_select_multiple:
+        all_classes_label = "🌐 All Classes"
+        selection_options = [all_classes_label] + list(class_options.keys())
+
+        selected_labels = st.multiselect(
+            "🏫 Class / Section",
+            selection_options,
+            default=[],
+            key="class_teacher_notice_classes",
+            placeholder="Select one or more classes, or All Classes"
+        )
+
+        if all_classes_label in selected_labels:
+            selected_classes = assigned_classes
+            st.info(
+                f"🌐 All Classes selected — notice will be sent to "
+                f"{len(selected_classes)} active classes."
+            )
+        else:
+            selected_classes = [
+                class_options[label]
+                for label in selected_labels
+                if label in class_options
+            ]
+
+        if selected_classes:
+            st.caption(
+                f"Selected classes: {len(selected_classes)}"
+            )
+    else:
+        selected_label = st.selectbox(
+            "🏫 Class / Section",
+            list(class_options.keys()),
+            key="class_teacher_notice_class"
+        )
+        selected_classes = [class_options[selected_label]]
 
     notice_date = st.date_input(
         "📅 Notice Dated",
@@ -13175,26 +13228,42 @@ def class_teacher_notices(profile):
     ):
         clean_message = message.strip()
 
+        if not selected_classes:
+            st.warning("Please select at least one class.")
+            return
+
         if not clean_message:
             st.warning("Please write the notice message.")
             return
 
         try:
-            sb.table("school_notices").insert({
-                "school_id": school_id,
-                "class_id": selected_class["id"],
-                "teacher_id": teacher_id,
-                "notice_date": notice_date.isoformat(),
-                "message": clean_message
-            }).execute()
+            notice_rows = [
+                {
+                    "school_id": school_id,
+                    "class_id": selected_class["id"],
+                    "teacher_id": teacher_id,
+                    "notice_date": notice_date.isoformat(),
+                    "message": clean_message
+                }
+                for selected_class in selected_classes
+            ]
+
+            sb.table("school_notices").insert(
+                notice_rows
+            ).execute()
 
             mark_saved("class_teacher_notice")
-            st.success("✅ Notice sent successfully.")
+            st.success(
+                f"✅ Notice sent successfully to "
+                f"{len(notice_rows)} class"
+                f"{'es' if len(notice_rows) != 1 else ''}."
+            )
             st.rerun()
 
         except Exception as e:
             st.error("Could not send the notice.")
             st.code(str(e))
+
 
 # =========================================================
 # DASHBOARD# =========================================================
