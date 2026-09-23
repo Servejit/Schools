@@ -10834,6 +10834,12 @@ def premium_feature_enabled(school_id, admin_id, feature_key):
 
 
 def premium_feature_management():
+    # Persist Premium save confirmations across Streamlit reruns.
+    show_save_message("premium_feature_setting")
+    _current_school_id = str(st.session_state.profile.get("school_id") or "")
+    if _current_school_id:
+        show_save_message(f"save_parent_student_premium_{_current_school_id}")
+
     """Manage Premium access hierarchy.
 
     SuperAdmin -> controls Admin Premium access.
@@ -11099,7 +11105,6 @@ def premium_feature_management():
                     )
 
                 mark_saved(f"save_parent_student_premium_{school_id}")
-                st.success("✅ Saved successfully.")
                 st.rerun()
             except Exception as e:
                 st.error(
