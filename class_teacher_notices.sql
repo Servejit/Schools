@@ -227,8 +227,7 @@ using (
           and p.active = true
     )
 );
--- Direct Student notice RPC. This uses SECURITY DEFINER so Student
--- dashboards do not depend on the client-side SELECT RLS path.
+-- Direct Student notice RPC using the authenticated Student.
 create or replace function public.get_student_notices(
     p_school_id uuid
 )
@@ -243,11 +242,7 @@ security definer
 set search_path = public
 stable
 as $$
-    select
-        n.id,
-        n.notice_date,
-        n.message,
-        n.created_at
+    select n.id, n.notice_date, n.message, n.created_at
     from public.school_notices n
     where n.school_id = p_school_id
       and exists (
@@ -255,8 +250,7 @@ as $$
           from public.students s
           join public.classes c
             on c.school_id = s.school_id
-           and lower(trim(c.class_name)) =
-               lower(trim(s.class_name))
+           and lower(trim(c.class_name)) = lower(trim(s.class_name))
            and lower(trim(coalesce(c.section, ''))) =
                lower(trim(coalesce(s.section, '')))
           where s.user_id = (select auth.uid())
@@ -268,10 +262,52 @@ as $$
     order by n.notice_date desc, n.created_at desc;
 $$;
 
-revoke all on function public.get_student_notices(uuid)
+revoke all on function public.get_student_notices(uuid) from public;
+grant execute on function public.get_student_notices(uuid) to authenticated;
+
+-- Explicit Student-record RPC.
+-- The application supplies the Student record ID after authenticating the
+-- Student. The function still verifies that the Student record belongs to
+-- the current authenticated user, so another student's notices cannot be read.
+create or replace function public.get_student_notices_by_student(
+    p_school_id uuid,
+    p_student_id uuid
+)
+returns table (
+    id uuid,
+    notice_date date,
+    message text,
+    created_at timestamptz
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+    select n.id, n.notice_date, n.message, n.created_at
+    from public.school_notices n
+    join public.classes c
+      on c.id = n.class_id
+     and c.school_id = n.school_id
+    where n.school_id = p_school_id
+      and c.active = true
+      and exists (
+          select 1
+          from public.students s
+          where s.id = p_student_id
+            and s.user_id = (select auth.uid())
+            and s.school_id = p_school_id
+            and s.active = true
+            and lower(trim(c.class_name)) = lower(trim(s.class_name))
+            and lower(trim(coalesce(c.section, ''))) =
+                lower(trim(coalesce(s.section, '')))
+      )
+    order by n.notice_date desc, n.created_at desc;
+$$;
+
+revoke all on function public.get_student_notices_by_student(uuid, uuid)
 from public;
 
-grant execute on function public.get_student_notices(uuid)
+grant execute on function public.get_student_notices_by_student(uuid, uuid)
 to authenticated;
-
 
