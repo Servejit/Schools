@@ -13070,8 +13070,8 @@ def _notice_html(message):
     return safe
 
 
-def show_dashboard_notices(school_id, title="📢 Notices", student_mode=False):
-    """Show dashboard notices. Student mode always uses the Student RPC."""
+def show_dashboard_notices(school_id, title="📢 Notices", student_mode=False, student_id=None):
+    """Show notices for Parents/Students with a secure class-linked path."""
     if not school_id:
         return
 
@@ -13079,10 +13079,23 @@ def show_dashboard_notices(school_id, title="📢 Notices", student_mode=False):
 
     try:
         if student_mode:
-            rpc_response = sb.rpc(
-                "get_student_notices",
-                {"p_school_id": school_id}
-            ).execute()
+            # Prefer the explicit Student record ID. This avoids depending on
+            # auth.uid() inside the RPC and uses the same class mapping as
+            # the student's actual database record.
+            if student_id:
+                rpc_response = sb.rpc(
+                    "get_student_notices_by_student",
+                    {
+                        "p_school_id": school_id,
+                        "p_student_id": student_id
+                    }
+                ).execute()
+            else:
+                rpc_response = sb.rpc(
+                    "get_student_notices",
+                    {"p_school_id": school_id}
+                ).execute()
+
             notice_rows = (
                 getattr(rpc_response, "data", None)
                 if rpc_response is not None
@@ -13108,10 +13121,9 @@ def show_dashboard_notices(school_id, title="📢 Notices", student_mode=False):
     if not notice_rows:
         return
 
-    # One notice sent to multiple classes is stored as one row per class.
-    # Parents/Students should see the same notice only once.
     unique_notices = []
     seen_notice_keys = set()
+
     for notice in notice_rows:
         notice_key = (
             str(notice.get("notice_date") or ""),
@@ -13127,6 +13139,7 @@ def show_dashboard_notices(school_id, title="📢 Notices", student_mode=False):
 
     for notice in unique_notices:
         notice_date = notice.get("notice_date") or ""
+
         try:
             display_date = datetime.datetime.strptime(
                 str(notice_date), "%Y-%m-%d"
@@ -13146,7 +13159,6 @@ def show_dashboard_notices(school_id, title="📢 Notices", student_mode=False):
             ''',
             unsafe_allow_html=True
         )
-
 
 def class_teacher_notices(profile):
     """Send notices and allow authorized staff to delete old notices."""
@@ -14017,11 +14029,12 @@ def dashboard():
 
         # Student notices must use the same class-linked notice access
         # regardless of whether the profile school_id is populated.
-        if student_school_id:
+        if student_school_id and student:
             show_dashboard_notices(
                 student_school_id,
                 "📢 Notices",
-                student_mode=True
+                student_mode=True,
+                student_id=student.get("id")
             )
 
         if student_school_id and subject_wise_parent_student_premium_enabled(
