@@ -2437,8 +2437,75 @@ def classes_subjects():
 
     st.divider()
 
+    # -----------------------------------------------------
+    # ADMIN / SUPERADMIN CLASS SELECTION
+    # -----------------------------------------------------
+    # Do not display every class card at once. First select the
+    # class/section, then Select All or individual classes.
+    if role in ["SuperAdmin", "Admin"]:
+        class_filter_options = ["All Classes"] + [
+            f"{x.get('class_name') or '-'} | Section: {x.get('section') or '-'} | {x.get('academic_year') or '-'}"
+            for x in class_data
+        ]
+
+        class_filter = st.selectbox(
+            "🏫 Select Class",
+            class_filter_options,
+            key=f"{role.lower()}_class_subject_class_filter"
+        )
+
+        class_labels_for_selection = {
+            f"{x.get('class_name') or '-'} | Section: {x.get('section') or '-'} | {x.get('academic_year') or '-'}": x
+            for x in class_data
+        }
+
+        filtered_class_data = class_data
+        if class_filter != "All Classes":
+            filtered_class_data = [class_labels_for_selection[class_filter]]
+
+        class_select_labels = {
+            f"{x.get('class_name') or '-'} | Section: {x.get('section') or '-'} | {x.get('academic_year') or '-'}": x
+            for x in filtered_class_data
+        }
+
+        select_all_classes_key = f"{role.lower()}_class_subject_select_all"
+        selected_classes_key = f"{role.lower()}_class_subject_selected"
+        previous_classes_key = selected_classes_key + "_previous"
+
+        select_all_classes = st.checkbox(
+            "☑️ Select All Classes",
+            key=select_all_classes_key
+        )
+        previous_select_all_classes = st.session_state.get(previous_classes_key, False)
+
+        if select_all_classes and not previous_select_all_classes:
+            st.session_state[selected_classes_key] = list(class_select_labels.keys())
+        elif not select_all_classes and previous_select_all_classes:
+            st.session_state[selected_classes_key] = []
+
+        st.session_state[previous_classes_key] = select_all_classes
+
+        selected_class_labels = st.multiselect(
+            "📚 Select Classes",
+            list(class_select_labels.keys()),
+            placeholder="Select one or more classes",
+            key=selected_classes_key
+        )
+
+        class_data = [
+            class_select_labels[label]
+            for label in selected_class_labels
+            if label in class_select_labels
+        ]
+
+        st.caption(f"Selected {len(class_data)} class(es).")
+
+        if not class_data:
+            st.info("Select class(es) from the dropdown above to view or modify them.")
+            return
+
     st.caption(
-        f"Total Classes: {len(class_data)}"
+        f"Total Selected Classes: {len(class_data)}"
     )
 
     for class_item in class_data:
@@ -2915,9 +2982,50 @@ def classes_subjects():
 
                                     st.code(str(e))
 
+            if role in ["SuperAdmin", "Admin"] and subject_data:
+                subject_labels = {}
+                for sub in subject_data:
+                    sub_display = sub.get("subject_name") or sub.get("name") or "Subject"
+                    subject_labels[f"{sub_display} | Code: {sub.get('code') or '-'}"] = sub
+
+                subject_select_all_key = f"{role.lower()}_subject_select_all_{class_id}"
+                subject_selected_key = f"{role.lower()}_selected_subjects_{class_id}"
+                subject_previous_key = subject_selected_key + "_previous"
+
+                select_all_subjects = st.checkbox(
+                    "☑️ Select All Subjects",
+                    key=subject_select_all_key
+                )
+                previous_select_all_subjects = st.session_state.get(subject_previous_key, False)
+
+                if select_all_subjects and not previous_select_all_subjects:
+                    st.session_state[subject_selected_key] = list(subject_labels.keys())
+                elif not select_all_subjects and previous_select_all_subjects:
+                    st.session_state[subject_selected_key] = []
+
+                st.session_state[subject_previous_key] = select_all_subjects
+
+                selected_subject_labels = st.multiselect(
+                    "📖 Select Subjects",
+                    list(subject_labels.keys()),
+                    placeholder="Select one or more subjects",
+                    key=subject_selected_key
+                )
+
+                subject_data = [
+                    subject_labels[label]
+                    for label in selected_subject_labels
+                    if label in subject_labels
+                ]
+
+                st.caption(f"Selected {len(subject_data)} subject(s).")
+
+                if not subject_data:
+                    st.info("Select subject(s) from the dropdown above to view or modify them.")
+
             if not subject_data:
                 st.caption(
-                    "No subjects added for this class."
+                    "No subjects selected/added for this class."
                 )
 
             with st.expander("➕ Add Subject"):
