@@ -9348,6 +9348,43 @@ def report_cards():
             use_container_width=True,
             key=f"download_report_cards_excel_{school_id}"
         )
+        # Google Drive backup: save the exact same Report Card Excel bytes.
+        # This never deletes older Google Drive backups.
+        if st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
+            try:
+                if st.button(
+                    "☁️ Backup this exact Excel to Google Drive",
+                    use_container_width=True,
+                    key=f"backup_report_cards_google_{school_id}"
+                ):
+                    google_services = get_google_services()
+                    if google_services:
+                        drive_service = google_services[1]
+                        from googleapiclient.http import MediaIoBaseUpload
+                        media = MediaIoBaseUpload(
+                            io.BytesIO(report_excel_bytes),
+                            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            resumable=False
+                        )
+                        drive_file = drive_service.files().create(
+                            body={
+                                "name": report_excel_name,
+                                "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            },
+                            media_body=media,
+                            fields="id,name,webViewLink"
+                        ).execute()
+                        st.success(
+                            f"✅ Exact Report Card Excel backed up to Google Drive: {drive_file.get('name','')}"
+                        )
+                    else:
+                        st.error("Google Drive connection could not be created. Check GOOGLE_SERVICE_ACCOUNT_JSON.")
+            except Exception as e:
+                st.error("Google Drive backup failed.")
+                st.code(str(e))
+        else:
+            st.info("Google Drive backup will be available after GOOGLE_SERVICE_ACCOUNT_JSON is added to Streamlit Secrets.")
+
         st.success(
             "✅ Excel includes Exam_Wise, Class_Wise, Students_Wise, "
             "Subjects_Wise, Total_All, Attendance and the full "
