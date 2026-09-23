@@ -118,20 +118,37 @@ def _save_state_signature(key=None):
     except Exception:
         return repr(values)
 
-def save_enabled(key):
-    current = _save_state_signature(key)
+def _save_values_signature(values):
+    if isinstance(values, pd.DataFrame):
+        return values.to_json(orient="split", date_format="iso")
+    try:
+        return json.dumps(values, sort_keys=True, default=str)
+    except Exception:
+        return repr(values)
+
+def save_enabled(key, values=None):
+    current = (
+        _save_values_signature(values)
+        if values is not None
+        else _save_state_signature(key)
+    )
     signature_key = "_save_sig_" + key
 
-    # First render establishes the current values as the saved baseline.
-    # This means clicking Save without making any change shows "Already Saved".
+    # For explicit form values, establish the first rendered values as the
+    # database/saved baseline. Later changes enable the save operation.
     if signature_key not in st.session_state:
         st.session_state[signature_key] = current
         return False
 
     return st.session_state.get(signature_key) != current
 
-def mark_saved(key):
-    st.session_state["_save_sig_" + key] = _save_state_signature(key)
+def mark_saved(key, values=None):
+    current = (
+        _save_values_signature(values)
+        if values is not None
+        else _save_state_signature(key)
+    )
+    st.session_state["_save_sig_" + key] = current
     st.session_state["_save_msg_" + key] = "Saved successfully."
 
 def show_save_message(key):
@@ -3564,6 +3581,9 @@ def bulk_marks():
     st.divider()
 
     save_key = "save_all_marks"
+    # Marks are edited in a DataFrame, so compare the editor's actual values
+    # with the values loaded from Supabase rather than relying on widget state.
+    marks_save_values = edited_df[["Student ID", "Marks"]].copy()
     show_save_message(save_key)
     if st.button(
         "💾 Save All Marks",
@@ -3571,7 +3591,7 @@ def bulk_marks():
         use_container_width=True,
         key=save_key,
     ):
-        if not save_enabled(save_key):
+        if not save_enabled(save_key, marks_save_values):
             st.info("ℹ️ Already Saved.")
             st.stop()
 
@@ -3654,6 +3674,7 @@ def bulk_marks():
             for mark_id in deletes:
                 sb.table("marks").delete().eq("id", mark_id).execute()
 
+            mark_saved(save_key, marks_save_values)
             st.success("✅ Marks saved successfully.")
             st.rerun()
 
