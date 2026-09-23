@@ -1519,6 +1519,45 @@ def upload_student_file(
 # STUDENT MANAGEMENT
 # =========================================================
 
+def make_student_records_excel(student_rows):
+    """Create an Excel workbook containing all student record fields."""
+    columns = [
+        "id", "school_id", "user_id", "name", "admission_no", "class_name",
+        "section", "date_of_birth", "gender", "father_name", "parent_name",
+        "parent_phone", "remarks", "photo_path", "teacher_signature_path",
+        "principal_signature_path", "active", "created_at", "updated_at",
+    ]
+    headers = [
+        "Student ID", "School ID", "User ID", "Student Name", "Admission No.",
+        "Class", "Section", "Date of Birth", "Gender", "Father Name",
+        "Parent Name", "Parent Phone", "Remarks", "Photo Path",
+        "Teacher Signature Path", "Principal Signature Path", "Active",
+        "Created At", "Updated At",
+    ]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Student Records"
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    for row in student_rows:
+        ws.append([
+            row.get(column, "") if row.get(column, "") is not None else ""
+            for column in columns
+        ])
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+    widths = [38, 38, 38, 25, 18, 12, 12, 16, 12, 24, 24, 18, 35, 45, 45, 45, 12, 24, 24]
+    for index, width in enumerate(widths, start=1):
+        from openpyxl.utils import get_column_letter
+        ws.column_dimensions[get_column_letter(index)].width = width
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.getvalue()
+
+
 def students():
 
     st.header("🎓 Student Management")
@@ -1851,6 +1890,28 @@ def students():
                 ).lower()
             )
         ]
+
+    # -----------------------------------------------------
+    # EXCEL EXPORT
+    # -----------------------------------------------------
+    st.divider()
+    ex1, ex2 = st.columns([3, 1])
+    with ex1:
+        st.subheader("📥 Student Records Excel")
+        st.caption(
+            "Downloads all student information entered in Student Management "
+            "for the students currently visible to you."
+        )
+    with ex2:
+        excel_bytes = make_student_records_excel(student_data)
+        st.download_button(
+            "⬇️ Download Excel",
+            data=excel_bytes,
+            file_name="Student_Records.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key=f"download_student_records_{role}_{school_id}",
+        )
 
     # -----------------------------------------------------
     # STUDENT SELECTION
