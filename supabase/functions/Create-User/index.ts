@@ -168,25 +168,28 @@ function json(data: unknown, status = 200) {
       );
     }
 
-    // Admin + Teacher is a hybrid role limited to 3 ACTIVE users per school.
-    if (requestedRole === "Admin+Teacher") {
+    // SuperAdmin can create unlimited Admin+Teacher users.
+    // Each Admin can create/own at most 2 ACTIVE Admin+Teacher users
+    // in that Admin's own school.
+    if (requestedRole === "Admin+Teacher" && callerRole === "Admin") {
       const { count: hybridCount, error: hybridCountError } = await adminClient
         .from("profiles")
         .select("id", { count: "exact", head: true })
         .eq("school_id", requestedSchoolId)
         .eq("role", "Admin+Teacher")
-        .eq("active", true);
+        .eq("active", true)
+        .eq("admin_teacher_created_by", caller.id);
 
       if (hybridCountError) {
         return json(
-          { error: "Could not verify the Admin + Teacher limit.", details: hybridCountError.message },
+          { error: "Could not verify your Admin + Teacher limit.", details: hybridCountError.message },
           500,
         );
       }
 
-      if ((hybridCount ?? 0) >= 3) {
+      if ((hybridCount ?? 0) >= 2) {
         return json(
-          { error: "Maximum 3 active Admin + Teacher users are allowed in this school." },
+          { error: "This Admin can have only 2 active Admin+Teacher users in this school." },
           400,
         );
       }
@@ -249,6 +252,10 @@ function json(data: unknown, status = 200) {
       role: requestedRole,
       active: true,
       school_id: requestedSchoolId,
+      admin_teacher_created_by:
+        requestedRole === "Admin+Teacher" && callerRole === "Admin"
+          ? caller.id
+          : null,
     };
 
     const { error: profileUpsertError } = await adminClient
