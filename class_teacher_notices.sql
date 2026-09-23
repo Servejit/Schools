@@ -31,14 +31,30 @@ security definer
 set search_path = public
 stable
 as $$
-    select exists (
-        select 1
-        from public.classes c
-        where c.id = p_class_id
-          and c.school_id = p_school_id
-          and c.class_teacher_id = (select auth.uid())
-          and c.active = true
-    );
+    select
+        exists (
+            select 1
+            from public.profiles p
+            where p.id = (select auth.uid())
+              and p.role = 'SuperAdmin'
+              and p.active = true
+        )
+        or exists (
+            select 1
+            from public.profiles p
+            where p.id = (select auth.uid())
+              and p.school_id = p_school_id
+              and p.role = 'Admin+Teacher'
+              and p.active = true
+        )
+        or exists (
+            select 1
+            from public.classes c
+            where c.id = p_class_id
+              and c.school_id = p_school_id
+              and c.class_teacher_id = (select auth.uid())
+              and c.active = true
+        );
 $$;
 
 revoke all on function public.class_teacher_notice_insert_allowed(uuid, uuid)
