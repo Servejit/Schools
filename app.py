@@ -3539,7 +3539,10 @@ def bulk_marks():
                 or str(value).strip() == ""
             ):
                 if existing:
-                    deletes.append(existing["id"])
+                    deletes.append({
+                        "id": existing["id"],
+                        "old_marks": existing.get("marks")
+                    })
                 continue
 
             try:
@@ -3628,17 +3631,23 @@ def bulk_marks():
                         "this mark was changed by another user. Reload and review before saving."
                     )
 
-            for mark_id in deletes:
-                result = (
+            for delete_row in deletes:
+                query = (
                     sb.table("marks")
                     .delete()
-                    .eq("id", mark_id)
-                    .select("id")
-                    .execute()
+                    .eq("id", delete_row["id"])
                 )
+
+                old_delete_value = delete_row.get("old_marks")
+                if old_delete_value is None:
+                    query = query.is_("marks", "null")
+                else:
+                    query = query.eq("marks", old_delete_value)
+
+                result = query.select("id").execute()
                 if not result.data:
                     conflicts.append(
-                        f"Mark record {mark_id}: it was already changed or removed by another user."
+                        f"Mark record {delete_row['id']}: it was already changed or removed by another user."
                     )
 
             if conflicts:
