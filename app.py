@@ -13055,7 +13055,7 @@ def show_dashboard_notices(school_id, title="📢 Notices"):
     # Parents/Students should see the same notice only once.
     unique_notices = []
     seen_notice_keys = set()
-    for notice in unique_notices:
+    for notice in notice_rows:
         notice_key = (
             str(notice.get("notice_date") or ""),
             str(notice.get("message") or "").strip(),
@@ -13068,7 +13068,7 @@ def show_dashboard_notices(school_id, title="📢 Notices"):
     st.divider()
     st.subheader(title)
 
-    for notice in notice_rows:
+    for notice in unique_notices:
         notice_date = notice.get("notice_date") or ""
         try:
             display_date = datetime.datetime.strptime(
@@ -13092,7 +13092,7 @@ def show_dashboard_notices(school_id, title="📢 Notices"):
 
 
 def class_teacher_notices(profile):
-    """Send notices to selected classes or all classes."""
+    """Send notices and allow authorized staff to delete old notices."""
     role = profile.get("role")
     school_id = profile.get("school_id")
     teacher_id = st.session_state.user.id
@@ -13213,9 +13213,7 @@ def class_teacher_notices(profile):
             ]
 
         if selected_classes:
-            st.caption(
-                f"Selected classes: {len(selected_classes)}"
-            )
+            st.caption(f"Selected classes: {len(selected_classes)}")
     else:
         selected_label = st.selectbox(
             "🏫 Class / Section",
@@ -13280,10 +13278,113 @@ def class_teacher_notices(profile):
             st.error("Could not send the notice.")
             st.code(str(e))
 
+    # -----------------------------------------------------
+    # DELETE OLD NOTICES
+    # -----------------------------------------------------
+    if role in {"Admin", "Admin+Teacher", "Teacher", "SuperAdmin"}:
+        st.divider()
+        st.subheader("🗑️ Delete Old Notices")
+        st.caption(
+            "Admin/Admin+Teacher can delete school notices. "
+            "Teacher can delete notices sent by themselves. "
+            "Deleting a notice removes it from all classes to which that same notice was sent."
+        )
 
-# =========================================================
-# DASHBOARD# =========================================================
+        try:
+            notice_query = (
+                sb.table("school_notices")
+                .select("id,school_id,teacher_id,notice_date,message,created_at")
+                .eq("school_id", school_id)
+                .order("notice_date", desc=True)
+                .order("created_at", desc=True)
+            )
 
+            if role == "Teacher":
+                notice_query = notice_query.eq(
+                    "teacher_id",
+                    teacher_id
+                )
+
+            notice_rows_for_delete = (
+                notice_query
+                .execute()
+                .data or []
+            )
+        except Exception as e:
+            notice_rows_for_delete = []
+            st.error("Could not load old notices.")
+            st.code(str(e))
+
+        if not notice_rows_for_delete:
+            st.info("No notices are available to delete.")
+        else:
+            # Group rows created for the same notice sent to multiple classes.
+            notice_groups = {}
+            for notice in notice_rows_for_delete:
+                group_key = (
+                    str(notice.get("notice_date") or ""),
+                    str(notice.get("message") or "").strip(),
+                    str(notice.get("teacher_id") or ""),
+                )
+                notice_groups.setdefault(group_key, []).append(notice)
+
+            for group_index, group_rows in enumerate(notice_groups.values()):
+                first_notice = group_rows[0]
+                raw_date = first_notice.get("notice_date") or ""
+                try:
+                    display_date = datetime.datetime.strptime(
+                        str(raw_date), "%Y-%m-%d"
+                    ).strftime("%d-%m-%Y")
+                except Exception:
+                    display_date = str(raw_date)
+
+                group_message = str(
+                    first_notice.get("message") or ""
+                ).strip()
+
+                sender_text = ""
+                if role in {"Admin", "Admin+Teacher", "SuperAdmin"}:
+                    sender_text = (
+                        f" | {len(group_rows)} class"
+                        f"{'es' if len(group_rows) != 1 else ''}"
+                    )
+
+                with st.container(border=True):
+                    st.markdown(
+                        f"**📢 NOTICE — Dated {display_date}{sender_text}**"
+                    )
+                    st.write(group_message)
+
+                    if st.button(
+                        "🗑️ Delete This Notice",
+                        key=f"delete_school_notice_{school_id}_{group_index}"
+                    ):
+                        try:
+                            notice_ids = [
+                                x.get("id")
+                                for x in group_rows
+                                if x.get("id")
+                            ]
+
+                            if not notice_ids:
+                                st.warning("Notice record not found.")
+                                continue
+
+                            (
+                                sb.table("school_notices")
+                                .delete()
+                                .in_("id", notice_ids)
+                                .execute()
+                            )
+
+                            st.session_state["_notice_deleted_message"] = (
+                                "Notice deleted successfully."
+                            )
+                            st.rerun()
+
+                        except Exception as e:
+                            st.error("Could not delete the notice.")
+                            st.code(str(e))
 def dashboard():
 
     profile = st.session_state.profile
