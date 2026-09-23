@@ -1532,8 +1532,9 @@ def make_student_records_excel(student_rows, selected_fields):
         "Date of Birth": "date_of_birth",
         "Gender": "gender",
         "Father Name": "father_name",
-        "Parent Name": "parent_name",
+        "Mother Name": "mother_name",
         "Parent Phone": "parent_phone",
+        "Address": "address",
         "Remarks": "remarks",
         "Photo Path": "photo_path",
         "Teacher Signature Path": "teacher_signature_path",
@@ -1568,8 +1569,8 @@ def make_student_records_excel(student_rows, selected_fields):
         "Student ID": 38, "School ID": 38, "User ID": 38,
         "Student Name": 25, "Admission No.": 18, "Class": 12,
         "Section": 12, "Date of Birth": 16, "Gender": 12,
-        "Father Name": 24, "Parent Name": 24, "Parent Phone": 18,
-        "Remarks": 35, "Photo Path": 45, "Teacher Signature Path": 45,
+        "Father Name": 24, "Mother Name": 24, "Parent Phone": 18,
+        "Address": 40, "Photo Path": 45, "Teacher Signature Path": 45,
         "Principal Signature Path": 45, "Active": 12,
         "Created At": 24, "Updated At": 24,
     }
@@ -1706,9 +1707,19 @@ def students():
             key="student_add_father_name"
         )
 
+        mother_name = st.text_input(
+            "Mother Name",
+            key="student_add_mother_name"
+        )
+
         parent_phone = st.text_input(
             "Parent Phone",
             key="student_add_parent_phone"
+        )
+
+        address = st.text_area(
+            "Address",
+            key="student_add_address"
         )
 
         remarks = st.text_area(
@@ -1802,7 +1813,9 @@ def students():
                     "gender": gender,
                     "father_name": father_name.strip(),
                     "parent_name": father_name.strip(),
+                    "mother_name": mother_name.strip(),
                     "parent_phone": parent_phone.strip(),
+                    "address": address.strip(),
                     "remarks": remarks.strip(),
                     "active": True
                 }
@@ -1860,7 +1873,7 @@ def students():
                 "id,school_id,user_id,name,"
                 "admission_no,class_name,section,"
                 "date_of_birth,gender,father_name,"
-                "parent_name,parent_phone,remarks,"
+                "parent_name,mother_name,parent_phone,address,remarks,"
                 "photo_path,teacher_signature_path,"
                 "principal_signature_path,active,"
                 "created_at,updated_at"
@@ -1923,15 +1936,10 @@ def students():
     st.divider()
     st.subheader("📥 Student Records Excel")
     st.caption(
-        "Select exactly which student-record fields you want in the downloaded Excel. "
-        "Teachers only get records they are allowed to see; Admin/SuperAdmin get the "
-        "currently filtered students."
+        "Excel contains only the required student information."
     )
 
     export_fields = [
-        "Student ID",
-        "School ID",
-        "User ID",
         "Student Name",
         "Admission No.",
         "Class",
@@ -1939,76 +1947,23 @@ def students():
         "Date of Birth",
         "Gender",
         "Father Name",
-        "Parent Name",
+        "Mother Name",
         "Parent Phone",
-        "Remarks",
-        "Photo Path",
-        "Teacher Signature Path",
-        "Principal Signature Path",
-        "Active",
-        "Created At",
-        "Updated At",
+        "Address",
     ]
 
-    export_defaults = [
-        "Student Name",
-        "Admission No.",
-        "Class",
-        "Section",
-        "Date of Birth",
-        "Gender",
-        "Father Name",
-        "Parent Name",
-        "Parent Phone",
-        "Remarks",
-    ]
-
-    export_select_all_key = f"student_export_select_all_{role}_{school_id}"
-    export_clear_key = f"student_export_clear_all_{role}_{school_id}"
-
-    ec1, ec2 = st.columns(2)
-    with ec1:
-        if st.button(
-            "☑️ Select All Fields",
-            use_container_width=True,
-            key=export_select_all_key
-        ):
-            st.session_state[f"student_export_fields_{role}_{school_id}"] = export_fields.copy()
-    with ec2:
-        if st.button(
-            "⬜ Clear All Fields",
-            use_container_width=True,
-            key=export_clear_key
-        ):
-            st.session_state[f"student_export_fields_{role}_{school_id}"] = []
-
-    export_state_key = f"student_export_fields_{role}_{school_id}"
-    if export_state_key not in st.session_state:
-        st.session_state[export_state_key] = export_defaults.copy()
-
-    selected_export_fields = st.multiselect(
-        "☑️ Select fields for Excel output",
-        export_fields,
-        default=st.session_state[export_state_key],
-        key=export_state_key,
-        help="Tick/select only the information you want to download."
+    excel_bytes = make_student_records_excel(
+        student_data,
+        export_fields
     )
-
-    if not selected_export_fields:
-        st.warning("Select at least one field before downloading.")
-    else:
-        excel_bytes = make_student_records_excel(
-            student_data,
-            selected_export_fields
-        )
-        st.download_button(
-            "⬇️ Download Selected Student Records Excel",
-            data=excel_bytes,
-            file_name="Student_Records.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-            key=f"download_student_records_{role}_{school_id}",
-        )
+    st.download_button(
+        "⬇️ Download Student Records Excel",
+        data=excel_bytes,
+        file_name="Student_Records.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+        key=f"download_student_records_{role}_{school_id}",
+    )
 
     # -----------------------------------------------------
     # STUDENT SELECTION
@@ -2379,10 +2334,22 @@ def students():
                     key=f"edit_father_name_{student_id}"
                 )
 
+                edit_mother_name = st.text_input(
+                    "Mother Name",
+                    value=student.get("mother_name") or "",
+                    key=f"edit_mother_name_{student_id}"
+                )
+
                 edit_parent_phone = st.text_input(
                     "Parent Phone",
                     value=student.get("parent_phone") or "",
                     key=f"edit_parent_phone_{student_id}"
+                )
+
+                edit_address = st.text_area(
+                    "Address",
+                    value=student.get("address") or "",
+                    key=f"edit_address_{student_id}"
                 )
 
                 edit_remarks = st.text_area(
@@ -2550,8 +2517,14 @@ def students():
                             "parent_name":
                                 edit_father_name.strip(),
 
+                            "mother_name":
+                                edit_mother_name.strip(),
+
                             "parent_phone":
                                 edit_parent_phone.strip(),
+
+                            "address":
+                                edit_address.strip(),
 
                             "remarks":
                                 edit_remarks.strip(),
@@ -8526,58 +8499,34 @@ def reports():
         st.info(f"👥 {len(filtered_students)} student(s) available for export.")
 
         export_fields = [
-            "Student ID", "School ID", "User ID", "Student Name",
-            "Admission No.", "Class", "Section", "Date of Birth", "Gender",
-            "Father Name", "Parent Name", "Parent Phone", "Remarks",
-            "Photo Path", "Teacher Signature Path", "Principal Signature Path",
-            "Active", "Created At", "Updated At"
+            "Student Name",
+            "Admission No.",
+            "Class",
+            "Section",
+            "Date of Birth",
+            "Gender",
+            "Father Name",
+            "Mother Name",
+            "Parent Phone",
+            "Address",
         ]
-        default_fields = {
-            "Student Name", "Admission No.", "Class", "Section",
-            "Date of Birth", "Gender", "Father Name", "Parent Phone",
-            "Remarks"
-        }
 
-        state_key = f"reports_student_export_fields_{role}_{school_id}"
-        if state_key not in st.session_state:
-            st.session_state[state_key] = set(default_fields)
-
-        b1, b2 = st.columns(2)
-        with b1:
-            if st.button(
-                "☑️ Select All Fields",
-                key=f"reports_student_export_all_{role}_{school_id}",
-                use_container_width=True
-            ):
-                st.session_state[state_key] = set(export_fields)
-                st.rerun()
-        with b2:
-            if st.button(
-                "⬜ Clear All Fields",
-                key=f"reports_student_export_clear_{role}_{school_id}",
-                use_container_width=True
-            ):
-                st.session_state[state_key] = set()
-                st.rerun()
-
-        st.markdown("**☑️ Tick the information you want in Excel:**")
-        selected_fields = []
-        field_cols = st.columns(3)
-        for i, field in enumerate(export_fields):
-            with field_cols[i % 3]:
-                checked = st.checkbox(
-                    field,
-                    value=field in st.session_state[state_key],
-                    key=f"reports_student_export_field_{role}_{school_id}_{i}"
-                )
-                if checked:
-                    selected_fields.append(field)
-
-        st.session_state[state_key] = set(selected_fields)
-
-        if not selected_fields:
-            st.warning("Please tick at least one field.")
+        if not filtered_students:
+            st.warning("No student records match the selected filters.")
             return
+
+        excel_bytes = make_student_records_excel(
+            filtered_students,
+            export_fields
+        )
+        st.download_button(
+            "⬇️ Download Student Records Excel",
+            data=excel_bytes,
+            file_name="Student_Records.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key=f"reports_student_records_download_{role}_{school_id}"
+        )
 
         if not filtered_students:
             st.warning("No student records match the selected filters.")
