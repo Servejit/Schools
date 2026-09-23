@@ -13051,6 +13051,20 @@ def show_dashboard_notices(school_id, title="📢 Notices"):
     if not notice_rows:
         return
 
+    # One notice sent to multiple classes is stored as one row per class.
+    # Parents/Students should see the same notice only once.
+    unique_notices = []
+    seen_notice_keys = set()
+    for notice in unique_notices:
+        notice_key = (
+            str(notice.get("notice_date") or ""),
+            str(notice.get("message") or "").strip(),
+        )
+        if notice_key in seen_notice_keys:
+            continue
+        seen_notice_keys.add(notice_key)
+        unique_notices.append(notice)
+
     st.divider()
     st.subheader(title)
 
