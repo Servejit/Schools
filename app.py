@@ -11180,39 +11180,53 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
             st.markdown(f"#### 📚 {subject_name}")
 
-            # Top 10 leaderboard with a dedicated Rank column.
-            # Use SVG images for medals. This is independent of the phone/browser
-            # emoji font and is supported by Streamlit ImageColumn.
+            # Top 10 leaderboard. Rank is the first column.
+            # Create real PNG medal images so no emoji font, HTML, SVG,
+            # Markdown, or SQL support is required.
             import base64
-            from html import escape
 
-            def medal_svg(rank):
-                if rank == 1:
-                    fill = "#FFD700"
-                    text_color = "#000000"
-                elif rank == 2:
-                    fill = "#C0C0C0"
-                    text_color = "#000000"
-                elif rank == 3:
-                    fill = "#CD7F32"
-                    text_color = "#FFFFFF"
-                else:
-                    return ""
+            def medal_png_data(rank):
+                if rank not in (1, 2, 3):
+                    return str(rank)
 
-                svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
-                    <circle cx="36" cy="36" r="31" fill="{fill}" stroke="#666" stroke-width="2"/>
-                    <text x="36" y="45" text-anchor="middle"
-                          font-family="Arial,sans-serif" font-size="28"
-                          font-weight="700" fill="{text_color}">{rank}</text>
-                </svg>'''
-                encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
-                return "data:image/svg+xml;base64," + encoded
+                from PIL import Image, ImageDraw, ImageFont
+                image = Image.new("RGBA", (80, 80), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(image)
+
+                fill = {
+                    1: (255, 215, 0, 255),
+                    2: (192, 192, 192, 255),
+                    3: (205, 127, 50, 255),
+                }[rank]
+
+                draw.ellipse((5, 5, 75, 75), fill=fill, outline=(80, 80, 80, 255), width=2)
+
+                try:
+                    font = ImageFont.truetype("DejaVuSans-Bold.ttf", 34)
+                except Exception:
+                    font = ImageFont.load_default()
+
+                text = str(rank)
+                bbox = draw.textbbox((0, 0), text, font=font)
+                tw = bbox[2] - bbox[0]
+                th = bbox[3] - bbox[1]
+                draw.text(
+                    ((80 - tw) / 2, (80 - th) / 2 - 3),
+                    text,
+                    fill=(0, 0, 0, 255) if rank != 3 else (255, 255, 255, 255),
+                    font=font,
+                )
+
+                buffer = io.BytesIO()
+                image.save(buffer, format="PNG")
+                encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+                return "data:image/png;base64," + encoded
 
             display_rows = []
             for item in ranking_rows:
                 rank_number = int(str(item["Rank"]).split()[-1])
                 display_rows.append({
-                    "Rank": medal_svg(rank_number) if rank_number <= 3 else str(rank_number),
+                    "Rank": medal_png_data(rank_number),
                     "Student Name": item["Student Name"],
                     "Class": item["Class"],
                     "Section": item["Section"],
@@ -11229,7 +11243,7 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                     "Rank": st.column_config.ImageColumn(
                         "Rank",
                         width="small",
-                        help="🥇 1, 🥈 2, 🥉 3"
+                        help="Gold 1, Silver 2, Bronze 3",
                     ),
                     "Student Name": st.column_config.TextColumn("Student Name"),
                     "Class": st.column_config.TextColumn("Class"),
