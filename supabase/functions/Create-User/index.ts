@@ -156,6 +156,18 @@ function json(data: unknown, status = 200) {
       );
     }
 
+    // Only SuperAdmin/Admin may assign the Admin+Teacher role.
+    // Admin+Teacher users may still create other normal users, but they
+    // cannot create or promote another user to Admin+Teacher.
+    if (requestedRole === "Admin+Teacher" &&
+        callerRole !== "SuperAdmin" &&
+        callerRole !== "Admin") {
+      return json(
+        { error: "Only an active SuperAdmin or Admin can assign the Admin+Teacher role." },
+        403,
+      );
+    }
+
     // Admin + Teacher is a hybrid role limited to 3 ACTIVE users per school.
     if (requestedRole === "Admin+Teacher") {
       const { count: hybridCount, error: hybridCountError } = await adminClient
