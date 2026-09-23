@@ -533,9 +533,111 @@ def users():
             return []
 
     # -----------------------------------------------------
+    # USER LIST FILTER / SELECT
+    # -----------------------------------------------------
+    role = st.session_state.profile.get("role")
+
+    if role == "SuperAdmin":
+        filter_school_options = ["All Schools"] + list(school_map.keys())
+        filter_school = st.selectbox(
+            "🏫 Select School",
+            filter_school_options,
+            key="users_filter_school"
+        )
+    else:
+        filter_school = list(school_map.keys())[0]
+
+    filter_role = st.selectbox(
+        "👤 Select Role",
+        ["All Roles", "Admin", "Teacher", "Student", "Parent"],
+        key="users_filter_role"
+    )
+
+    filtered_users = list(user_data)
+
+    if role == "SuperAdmin" and filter_school != "All Schools":
+        selected_filter_school_id = school_map[filter_school]
+        filtered_users = [
+            u for u in filtered_users
+            if str(u.get("school_id") or "") == str(selected_filter_school_id)
+        ]
+    elif role == "Admin":
+        admin_school_id = st.session_state.profile.get("school_id")
+        filtered_users = [
+            u for u in filtered_users
+            if str(u.get("school_id") or "") == str(admin_school_id)
+        ]
+
+    if filter_role != "All Roles":
+        filtered_users = [
+            u for u in filtered_users
+            if u.get("role") == filter_role
+        ]
+
+    user_labels = {}
+    for u in filtered_users:
+        label = (
+            f"{u.get('full_name') or 'User'}"
+            f" — {u.get('email') or '-'}"
+            f" — {u.get('role') or '-'}"
+        )
+        user_labels[label] = u
+
+    if not user_labels:
+        st.info("No users found for the selected filters.")
+        return
+
+    select_all_key = (
+        "superadmin_user_select_all"
+        if role == "SuperAdmin"
+        else "admin_user_select_all"
+    )
+    selected_users_key = (
+        "superadmin_selected_users"
+        if role == "SuperAdmin"
+        else "admin_selected_users"
+    )
+    previous_key = selected_users_key + "_previous"
+
+    select_all_users = st.checkbox(
+        "☑️ Select All Users",
+        key=select_all_key
+    )
+
+    previous_select_all = st.session_state.get(previous_key, False)
+
+    if select_all_users and not previous_select_all:
+        st.session_state[selected_users_key] = list(user_labels.keys())
+    elif not select_all_users and previous_select_all:
+        st.session_state[selected_users_key] = []
+
+    st.session_state[previous_key] = select_all_users
+
+    selected_user_labels = st.multiselect(
+        "👥 Select Users",
+        list(user_labels.keys()),
+        placeholder="Select one or more users",
+        key=selected_users_key
+    )
+
+    selected_users = [
+        user_labels[label]
+        for label in selected_user_labels
+        if label in user_labels
+    ]
+
+    st.caption(
+        f"Selected {len(selected_users)} of {len(filtered_users)} user(s)."
+    )
+
+    if not selected_users:
+        st.info("Select user(s) from the dropdown above to modify or manage them.")
+        return
+
+    # -----------------------------------------------------
     # MODIFY USERS
     # -----------------------------------------------------
-    for user in user_data:
+    for user in selected_users:
 
         user_id = user["id"]
         active = user.get("active", True)
