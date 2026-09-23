@@ -119,7 +119,16 @@ def _save_state_signature(key=None):
         return repr(values)
 
 def save_enabled(key):
-    return st.session_state.get("_save_sig_" + key) != _save_state_signature(key)
+    current = _save_state_signature(key)
+    signature_key = "_save_sig_" + key
+
+    # First render establishes the current values as the saved baseline.
+    # This means clicking Save without making any change shows "Already Saved".
+    if signature_key not in st.session_state:
+        st.session_state[signature_key] = current
+        return False
+
+    return st.session_state.get(signature_key) != current
 
 def mark_saved(key):
     st.session_state["_save_sig_" + key] = _save_state_signature(key)
