@@ -1564,10 +1564,118 @@ def students():
         display_students = selected_students
 
     else:
-        st.caption(
-            f"Showing {len(student_data)} student(s)"
+        # Admin/SuperAdmin should not see every student card at once.
+        # First filter by Class and Section, then choose Select All or
+        # individual students from the dropdown.
+        class_options = sorted({
+            str(s.get("class_name") or "").strip()
+            for s in student_data
+            if str(s.get("class_name") or "").strip()
+        })
+
+        class_filter = st.selectbox(
+            "🏫 Select Class",
+            ["All Classes"] + class_options,
+            key="admin_student_class_filter"
         )
-        display_students = student_data
+
+        filtered_students = student_data
+
+        if class_filter != "All Classes":
+            filtered_students = [
+                s for s in filtered_students
+                if str(s.get("class_name") or "").strip() == class_filter
+            ]
+
+        section_options = sorted({
+            str(s.get("section") or "").strip()
+            for s in filtered_students
+            if str(s.get("section") or "").strip()
+        })
+
+        section_filter = st.selectbox(
+            "📚 Select Section",
+            ["All Sections"] + section_options,
+            key="admin_student_section_filter"
+        )
+
+        if section_filter != "All Sections":
+            filtered_students = [
+                s for s in filtered_students
+                if str(s.get("section") or "").strip() == section_filter
+            ]
+
+        st.caption(
+            f"Found {len(filtered_students)} student(s) after Class/Section filter."
+        )
+
+        student_labels = {}
+        for student in filtered_students:
+            label = (
+                f"{student.get('name') or 'Student'}"
+                f" — Admission: {student.get('admission_no') or '-'}"
+                f" — {student.get('class_name') or '-'}"
+                f"/{student.get('section') or '-'}"
+            )
+            student_labels[label] = student
+
+        if not student_labels:
+            st.info("No students found for the selected Class/Section.")
+            return
+
+        select_all_key = (
+            "superadmin_student_select_all"
+            if role == "SuperAdmin"
+            else "admin_student_select_all"
+        )
+        selected_key = (
+            "superadmin_selected_students"
+            if role == "SuperAdmin"
+            else "admin_selected_students"
+        )
+        previous_key = selected_key + "_previous"
+
+        select_all = st.checkbox(
+            "☑️ Select All Students",
+            key=select_all_key
+        )
+
+        previous_select_all = st.session_state.get(
+            previous_key,
+            False
+        )
+
+        if select_all and not previous_select_all:
+            st.session_state[selected_key] = list(student_labels.keys())
+        elif not select_all and previous_select_all:
+            st.session_state[selected_key] = []
+
+        st.session_state[previous_key] = select_all
+
+        selected_labels = st.multiselect(
+            "🎓 Select Students",
+            list(student_labels.keys()),
+            placeholder="Select one or more students",
+            key=selected_key
+        )
+
+        selected_students = [
+            student_labels[label]
+            for label in selected_labels
+            if label in student_labels
+        ]
+
+        st.caption(
+            f"Selected {len(selected_students)} of {len(filtered_students)} student(s)."
+        )
+
+        if not selected_students:
+            st.info(
+                "Select student(s) from the dropdown above to view or modify their details."
+            )
+            return
+
+        display_students = selected_students
 
     for student in display_students:
 
