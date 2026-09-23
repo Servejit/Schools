@@ -8395,7 +8395,7 @@ def reports():
                 sb.table("students")
                 .select(
                     "id,school_id,user_id,name,admission_no,class_name,section,"
-                    "date_of_birth,gender,father_name,parent_name,parent_phone,"
+                    "date_of_birth,gender,father_name,mother_name,parent_name,parent_phone,address,"
                     "remarks,photo_path,teacher_signature_path,"
                     "principal_signature_path,active,created_at,updated_at"
                 )
@@ -8528,22 +8528,6 @@ def reports():
             key=f"reports_student_records_download_{role}_{school_id}"
         )
 
-        if not filtered_students:
-            st.warning("No student records match the selected filters.")
-            return
-
-        excel_bytes = make_student_records_excel(
-            filtered_students,
-            selected_fields
-        )
-        st.download_button(
-            "⬇️ Download Selected Student Records Excel",
-            data=excel_bytes,
-            file_name="Student_Records_Selected.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-            key=f"reports_student_records_download_{role}_{school_id}"
-        )
         return
 
     try:
