@@ -11186,11 +11186,11 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
             for item in ranking_rows:
                 rank_number = str(item["Rank"]).split()[-1]
                 if rank_number == "1":
-                    rank_display = ":first_place_medal: **1**"
+                    rank_display = ":material/workspace_premium: **1**"
                 elif rank_number == "2":
-                    rank_display = ":second_place_medal: **2**"
+                    rank_display = ":material/workspace_premium: **2**"
                 elif rank_number == "3":
-                    rank_display = ":third_place_medal: **3**"
+                    rank_display = ":material/workspace_premium: **3**"
                 else:
                     rank_display = f"**{rank_number}**"
 
