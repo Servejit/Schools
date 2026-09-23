@@ -7292,8 +7292,14 @@ def sync_school_marks_to_google(school_id):
         sheets_service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id,
             body={
-                "requests": [
-                    {"addSheet": {"properties": {"title": log_name}}
+                "requests": [{
+                    "addSheet": {
+                        "properties": {
+                            "title": log_name
+                        }
+                    }
+                }]
+            }
                 ]
             }
         ).execute()
