@@ -7122,6 +7122,55 @@ def _google_target_emails(school_id):
     return emails
 
 
+def backup_report_cards_excel_to_google(school_id, filename, excel_bytes):
+    """Upload the exact Report Card Excel bytes to Google Drive and share view-only.
+    Older backups are never deleted or replaced.
+    """
+    _, drive_service = get_google_services()
+
+    school_name = _google_school_name(school_id)
+    safe_name = (
+        school_name.replace("'", "")
+        .replace("/", "_")
+        .replace("\\", "_")
+    )
+
+    media = MediaIoBaseUpload(
+        io.BytesIO(excel_bytes),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        resumable=False
+    )
+
+    drive_file = (
+        drive_service.files()
+        .create(
+            body={
+                "name": filename,
+                "description": (
+                    f"Report Card Excel backup for school {school_id}. "
+                    "Permanent backup; created by the school management app."
+                ),
+                "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            },
+            media_body=media,
+            fields="id,name,webViewLink,createdTime"
+        )
+        .execute()
+    )
+
+    # Report Card backups are VIEW-ONLY for SuperAdmins and the
+    # active Admin/Admin+Teacher users of the same school.
+    for email in sorted(_google_target_emails(school_id)):
+        _share_drive_file(
+            drive_service,
+            drive_file.get("id"),
+            email,
+            "reader"
+        )
+
+    return drive_file
+
+
 def sync_school_marks_to_google(school_id):
     """Create/update a school Google Sheet and dated XLSX backup in Drive."""
     sheets_service, drive_service = get_google_services()
@@ -7373,12 +7422,30 @@ def list_google_school_backups():
             .get("files", [])
         )
 
+        report_card_xlsx_files = (
+            drive_service.files()
+            .list(
+                q=(
+                    f"name contains '{safe_name}_Report_Cards_Backup_' and "
+                    "mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' and "
+                    "trashed = false"
+                ),
+                spaces="drive",
+                fields="files(id,name,webViewLink,modifiedTime)",
+                orderBy="modifiedTime desc",
+                pageSize=50
+            )
+            .execute()
+            .get("files", [])
+        )
+
         results.append({
             "school_id": school_id,
             "school_name": school_name,
             "school_code": school.get("code") or "",
             "sheet": spreadsheets[0] if spreadsheets else None,
-            "xlsx": xlsx_files
+            "xlsx": xlsx_files,
+            "report_card_xlsx": report_card_xlsx_files
         })
 
     return results
@@ -7457,6 +7524,26 @@ def google_marks_backup_section(school_id):
                 )
             except Exception as e:
                 st.warning(f"Current Google Excel download unavailable: {e}")
+
+        for file_info in group.get("report_card_xlsx", [])[:20]:
+            file_id = file_info.get("id")
+            st.markdown(
+                f"[📄 View Report Card Backup: {file_info.get('name')}]({file_info.get('webViewLink') or ('https://drive.google.com/file/d/' + file_id + '/view')})"
+            )
+            try:
+                report_bytes = _google_drive_download_bytes(
+                    get_google_services()[1],
+                    file_id
+                )
+                st.download_button(
+                    "⬇️ Download Report Card Backup",
+                    data=report_bytes,
+                    file_name=file_info.get("name") or "Report_Cards_Backup.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"download_google_report_card_xlsx_{file_id}"
+                )
+            except Exception as e:
+                st.warning(f"Report Card backup download unavailable: {e}")
 
         for file_info in group.get("xlsx", [])[:10]:
             file_id = file_info.get("id")
@@ -8515,7 +8602,7 @@ def build_report_cards_excel(school_id):
         sb.table("students")
         .select(
             "id,school_id,name,admission_no,class_name,section,"
-            "date_of_birth,father_name,parent_name,remarks,active"
+            "date_of_birth,parent_name,dob"
         )
         .eq("school_id", school_id)
         .execute()
@@ -8594,6 +8681,7 @@ def build_report_cards_excel(school_id):
             "Student ID": str(mark.get("student_id") or ""),
             "Student Name": student.get("name") or "",
             "Admission No.": student.get("admission_no") or "",
+            "Parent Name": student.get("parent_name") or "",
             "Class": student.get("class_name") or "",
             "Section": student.get("section") or "",
             "Class ID": str(
@@ -9348,42 +9436,37 @@ def report_cards():
             use_container_width=True,
             key=f"download_report_cards_excel_{school_id}"
         )
-        # Google Drive backup: save the exact same Report Card Excel bytes.
-        # This never deletes older Google Drive backups.
+        # Google Drive backup: upload the EXACT same Excel bytes.
+        # Every backup is kept permanently; nothing is automatically deleted.
         if st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
-            try:
-                if st.button(
-                    "☁️ Backup this exact Excel to Google Drive",
-                    use_container_width=True,
-                    key=f"backup_report_cards_google_{school_id}"
-                ):
-                    google_services = get_google_services()
-                    if google_services:
-                        drive_service = google_services[1]
-                        from googleapiclient.http import MediaIoBaseUpload
-                        media = MediaIoBaseUpload(
-                            io.BytesIO(report_excel_bytes),
-                            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            resumable=False
-                        )
-                        drive_file = drive_service.files().create(
-                            body={
-                                "name": report_excel_name,
-                                "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            },
-                            media_body=media,
-                            fields="id,name,webViewLink"
-                        ).execute()
-                        st.success(
-                            f"✅ Exact Report Card Excel backed up to Google Drive: {drive_file.get('name','')}"
-                        )
-                    else:
-                        st.error("Google Drive connection could not be created. Check GOOGLE_SERVICE_ACCOUNT_JSON.")
-            except Exception as e:
-                st.error("Google Drive backup failed.")
-                st.code(str(e))
+            if st.button(
+                "☁️ Backup this exact Excel to Google Drive",
+                use_container_width=True,
+                key=f"backup_report_cards_google_{school_id}"
+            ):
+                try:
+                    drive_file = backup_report_cards_excel_to_google(
+                        school_id,
+                        report_excel_name,
+                        report_excel_bytes
+                    )
+                    view_url = (
+                        drive_file.get("webViewLink")
+                        or f"https://drive.google.com/file/d/{drive_file.get('id')}/view"
+                    )
+                    st.success(
+                        f"✅ Exact Report Card Excel backed up permanently: "
+                        f"{drive_file.get('name', report_excel_name)}"
+                    )
+                    st.markdown(f"[👁️ View this backup in Google Drive]({view_url})")
+                except Exception as e:
+                    st.error("Google Drive Report Card backup failed.")
+                    st.code(str(e))
         else:
-            st.info("Google Drive backup will be available after GOOGLE_SERVICE_ACCOUNT_JSON is added to Streamlit Secrets.")
+            st.info(
+                "Google Drive backup is ready. Add GOOGLE_SERVICE_ACCOUNT_JSON "
+                "to Streamlit Secrets to enable it."
+            )
 
         st.success(
             "✅ Excel includes Exam_Wise, Class_Wise, Students_Wise, "
