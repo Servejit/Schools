@@ -411,6 +411,55 @@ def users():
     }
 
     # -----------------------------------------------------
+    # SUPERADMIN QUICK ADD SCHOOL
+    # -----------------------------------------------------
+    if st.session_state.profile.get("role") == "SuperAdmin":
+        with st.expander("🏫 ➕ Add New School", expanded=False):
+            quick_school_name = st.text_input(
+                "School Name",
+                key="quick_school_name"
+            )
+            quick_school_code = st.text_input(
+                "School Code",
+                key="quick_school_code"
+            )
+            quick_school_address = st.text_area(
+                "Address",
+                key="quick_school_address"
+            )
+
+            if st.button(
+                "➕ Add School",
+                use_container_width=True,
+                key="quick_add_school_button"
+            ):
+                if not quick_school_name.strip() or not quick_school_code.strip():
+                    st.warning("School Name and School Code are required.")
+                else:
+                    try:
+                        duplicate = (
+                            sb.table("schools")
+                            .select("id")
+                            .eq("code", quick_school_code.strip())
+                            .execute()
+                            .data or []
+                        )
+                        if duplicate:
+                            st.error("School code already exists.")
+                        else:
+                            sb.table("schools").insert({
+                                "name": quick_school_name.strip(),
+                                "code": quick_school_code.strip(),
+                                "address": quick_school_address.strip(),
+                                "active": True
+                            }).execute()
+                            st.success("✅ School added successfully.")
+                            st.rerun()
+                    except Exception as e:
+                        st.error("Could not add school.")
+                        st.code(str(e))
+
+    # -----------------------------------------------------
     # CREATE USER
     # -----------------------------------------------------
     with st.expander("➕ Create User", expanded=True):
