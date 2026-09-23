@@ -723,8 +723,8 @@ def users():
                 return
 
             # SuperAdmin has no Admin+Teacher limit.
-            # Each Admin can create/own at most 2 active Admin+Teacher users
-            # in that Admin's own school.
+            # Each school can have at most 3 ACTIVE Admin+Teacher users
+            # created/managed by its Admin. The limit is school-wide.
             if role == "Admin+Teacher" and creator_role == "Admin":
                 try:
                     hybrid_count = (
@@ -733,12 +733,11 @@ def users():
                         .eq("school_id", school_map[selected_school])
                         .eq("role", "Admin+Teacher")
                         .eq("active", True)
-                        .eq("admin_teacher_created_by", st.session_state.user.id)
                         .execute()
                         .count or 0
                     )
-                    if hybrid_count >= 2:
-                        st.error("This Admin can have only 2 active Admin+Teacher users in this school.")
+                    if hybrid_count >= 3:
+                        st.error("This school already has 3 active Admin+Teacher users. The Admin+Teacher limit is 3 per school.")
                         return
                 except Exception as e:
                     st.error("Could not verify the Admin + Teacher limit.")
@@ -966,11 +965,12 @@ def users():
                     key=f"user_status_{user_id}"
                 ):
                     try:
+                        # Re-activating an Admin+Teacher must also respect
+                        # the school-wide maximum of 3 active accounts.
                         if (
                             not active
                             and user.get("role") == "Admin+Teacher"
                             and role == "Admin"
-                            and str(user.get("admin_teacher_created_by") or "") == str(st.session_state.user.id)
                         ):
                             hybrid_count = (
                                 sb.table("profiles")
@@ -978,12 +978,11 @@ def users():
                                 .eq("school_id", user.get("school_id"))
                                 .eq("role", "Admin+Teacher")
                                 .eq("active", True)
-                                .eq("admin_teacher_created_by", st.session_state.user.id)
                                 .execute()
                                 .count or 0
                             )
-                            if hybrid_count >= 2:
-                                st.error("This Admin can have only 2 active Admin+Teacher users in this school.")
+                            if hybrid_count >= 3:
+                                st.error("This school already has 3 active Admin+Teacher users. Deactivate one before re-activating another.")
                                 continue
 
                         (
@@ -1008,24 +1007,74 @@ def users():
 
                 current_role = user.get("role")
 
-                role_options = ["Admin", "Teacher", "Student", "Parent"]
+                # Role-change rules:
+                # SuperAdmin: can change to any role, across every school.
+                # Admin:
+                #   - can create/promote users to Admin+Teacher, subject to
+                #     the school-wide maximum of 3 ACTIVE Admin+Teacher users.
+                #   - can reverse Admin+Teacher only to Admin or Teacher.
+                # Admin+Teacher: cannot change/reverse anyone's role.
+                if role == "SuperAdmin":
+                    role_options = [
+                        "Admin",
+                        "Admin+Teacher",
+                        "Teacher",
+                        "Student",
+                        "Parent"
+                    ]
+                    edit_role = st.selectbox(
+                        "Role",
+                        role_options,
+                        index=(
+                            role_options.index(current_role)
+                            if current_role in role_options
+                            else 0
+                        ),
+                        key=f"edit_user_role_{user_id}"
+                    )
 
-                # Only SuperAdmin/Admin can assign the Admin+Teacher role.
-                # Keep an existing Admin+Teacher value visible when a
-                # non-authorized admin-like user is editing it, so it is
-                # not accidentally changed just by opening the form.
-                if role in ["SuperAdmin", "Admin"] or current_role == "Admin+Teacher":
-                    role_options.insert(1, "Admin+Teacher")
-                edit_role = st.selectbox(
-                    "Role",
-                    role_options,
-                    index=(
-                        role_options.index(current_role)
-                        if current_role in role_options
-                        else 0
-                    ),
-                    key=f"edit_user_role_{user_id}"
-                )
+                elif role == "Admin":
+                    if current_role == "Admin+Teacher":
+                        # Admin can reverse an Admin+Teacher only to Admin
+                        # or Teacher (or leave it unchanged).
+                        role_options = [
+                            "Admin+Teacher",
+                            "Admin",
+                            "Teacher"
+                        ]
+                    else:
+                        role_options = [
+                            "Admin",
+                            "Admin+Teacher",
+                            "Teacher",
+                            "Student",
+                            "Parent"
+                        ]
+
+                    edit_role = st.selectbox(
+                        "Role",
+                        role_options,
+                        index=(
+                            role_options.index(current_role)
+                            if current_role in role_options
+                            else 0
+                        ),
+                        key=f"edit_user_role_{user_id}"
+                    )
+
+                elif role == "Admin+Teacher":
+                    # Admin+Teacher is NOT allowed to reverse or otherwise
+                    # change another user's role.
+                    edit_role = st.selectbox(
+                        "Role",
+                        [current_role],
+                        index=0,
+                        disabled=True,
+                        key=f"edit_user_role_{user_id}"
+                    )
+
+                else:
+                    edit_role = current_role
 
                 current_school_id = str(user.get("school_id") or "")
                 school_labels = list(school_map.keys())
@@ -1244,18 +1293,49 @@ def users():
                         continue
 
                     try:
-                        # Only SuperAdmin/Admin may change another user's role
-                        # to Admin+Teacher.
+                        # Enforce role-change permissions server-side in the
+                        # Streamlit layer as well as in the visible controls.
+                        if (
+                            current_role == "Admin+Teacher"
+                            and edit_role != "Admin+Teacher"
+                            and role not in ["SuperAdmin", "Admin"]
+                        ):
+                            st.error(
+                                "Admin+Teacher cannot change or reverse user roles."
+                            )
+                            continue
+
+                        # Only Admin and SuperAdmin may assign Admin+Teacher.
                         if (
                             edit_role == "Admin+Teacher"
                             and current_role != "Admin+Teacher"
                             and role not in ["SuperAdmin", "Admin"]
                         ):
                             st.error(
-                                "Only SuperAdmin or Admin can assign the Admin+Teacher role."
+                                "Only Admin or SuperAdmin can assign the Admin+Teacher role."
                             )
                             continue
 
+                        # An Admin can reverse Admin+Teacher only to Admin or
+                        # Teacher. No other role is allowed in that transition.
+                        if (
+                            current_role == "Admin+Teacher"
+                            and role == "Admin"
+                            and edit_role not in ["Admin+Teacher", "Admin", "Teacher"]
+                        ):
+                            st.error(
+                                "Admin can reverse Admin+Teacher only to Admin or Teacher."
+                            )
+                            continue
+
+                        # Admin+Teacher cannot reverse or change roles at all.
+                        if role == "Admin+Teacher" and edit_role != current_role:
+                            st.error(
+                                "Admin+Teacher is not authorized to change user roles."
+                            )
+                            continue
+
+                        # Admin: maximum 3 ACTIVE Admin+Teacher users per school.
                         if (
                             edit_role == "Admin+Teacher"
                             and current_role != "Admin+Teacher"
@@ -1268,12 +1348,14 @@ def users():
                                 .eq("school_id", target_school_id)
                                 .eq("role", "Admin+Teacher")
                                 .eq("active", True)
-                                .eq("admin_teacher_created_by", st.session_state.user.id)
                                 .execute()
                                 .count or 0
                             )
-                            if hybrid_count >= 2:
-                                st.error("This Admin can have only 2 active Admin+Teacher users in this school.")
+                            if hybrid_count >= 3:
+                                st.error(
+                                    "This school already has 3 active Admin+Teacher users. "
+                                    "The Admin+Teacher limit is 3 per school."
+                                )
                                 continue
 
                         (
