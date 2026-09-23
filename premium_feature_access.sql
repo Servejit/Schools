@@ -161,3 +161,110 @@ from public;
 
 grant execute on function public.parent_student_subject_wise_premium_enabled(uuid)
 to authenticated;
+
+
+-- =========================================================
+-- PARENT ↔ STUDENT LINKING
+-- =========================================================
+-- Parent accounts are linked to students separately from
+-- students.user_id. This allows one Parent to have multiple
+-- children while keeping Student login independent.
+
+create table if not exists public.parent_student_links (
+    id uuid primary key default gen_random_uuid(),
+    parent_id uuid not null references public.profiles(id) on delete cascade,
+    student_id uuid not null references public.students(id) on delete cascade,
+    created_at timestamptz not null default now(),
+    unique (parent_id, student_id)
+);
+
+create index if not exists parent_student_links_parent_idx
+on public.parent_student_links(parent_id);
+
+create index if not exists parent_student_links_student_idx
+on public.parent_student_links(student_id);
+
+alter table public.parent_student_links enable row level security;
+
+drop policy if exists "parent_student_links_select"
+on public.parent_student_links;
+
+drop policy if exists "parent_student_links_insert"
+on public.parent_student_links;
+
+drop policy if exists "parent_student_links_update"
+on public.parent_student_links;
+
+drop policy if exists "parent_student_links_delete"
+on public.parent_student_links;
+
+create policy "parent_student_links_select"
+on public.parent_student_links
+for select
+to authenticated
+using (
+    parent_id = auth.uid()
+    or exists (
+        select 1
+        from public.profiles p
+        where p.id = auth.uid()
+          and p.active = true
+          and p.role in ('Admin', 'SuperAdmin')
+    )
+);
+
+create policy "parent_student_links_insert"
+on public.parent_student_links
+for insert
+to authenticated
+with check (
+    exists (
+        select 1
+        from public.profiles p
+        where p.id = auth.uid()
+          and p.active = true
+          and p.role in ('Admin', 'SuperAdmin')
+          and p.school_id = (
+              select s.school_id
+              from public.students s
+              where s.id = parent_student_links.student_id
+          )
+    )
+);
+
+create policy "parent_student_links_update"
+on public.parent_student_links
+for update
+to authenticated
+using (
+    exists (
+        select 1
+        from public.profiles p
+        where p.id = auth.uid()
+          and p.active = true
+          and p.role in ('Admin', 'SuperAdmin')
+    )
+)
+with check (
+    exists (
+        select 1
+        from public.profiles p
+        where p.id = auth.uid()
+          and p.active = true
+          and p.role in ('Admin', 'SuperAdmin')
+    )
+);
+
+create policy "parent_student_links_delete"
+on public.parent_student_links
+for delete
+to authenticated
+using (
+    exists (
+        select 1
+        from public.profiles p
+        where p.id = auth.uid()
+          and p.active = true
+          and p.role in ('Admin', 'SuperAdmin')
+    )
+);
