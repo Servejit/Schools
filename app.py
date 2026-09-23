@@ -8606,7 +8606,7 @@ def build_report_cards_excel(school_id):
         sb.table("students")
         .select(
             "id,school_id,name,admission_no,class_name,section,"
-            "date_of_birth,parent_name,dob"
+            "date_of_birth,parent_name"
         )
         .eq("school_id", school_id)
         .execute()
