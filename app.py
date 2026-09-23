@@ -7815,7 +7815,8 @@ def create_report_overlay(
     total_attendance=0,
     present_days=0,
     school_logo_path=None,
-    school_logo_size=52
+    school_logo_size=52,
+    top3_subject_rank=0
 ):
 
     width, height = pdf_page_size(
@@ -8010,6 +8011,24 @@ def create_report_overlay(
         height - 82,
         str(exam_name)    )
 
+
+    def draw_golden_star(cx, cy, outer_radius=4.0, inner_radius=1.7):
+        path = pdf.beginPath()
+        for point_index in range(10):
+            angle = (math.pi / 2) + (point_index * math.pi / 5)
+            radius = outer_radius if point_index % 2 == 0 else inner_radius
+            px = cx + (radius * math.cos(angle))
+            py = cy + (radius * math.sin(angle))
+            if point_index == 0:
+                path.moveTo(px, py)
+            else:
+                path.lineTo(px, py)
+        path.close()
+        pdf.setFillColorRGB(1.0, 0.72, 0.05)
+        pdf.setStrokeColorRGB(0.88, 0.55, 0.0)
+        pdf.setLineWidth(0.35)
+        pdf.drawPath(path, stroke=1, fill=1)
+
     # -----------------------------------------------------
     # Student details
     # -----------------------------------------------------
@@ -8088,11 +8107,41 @@ def create_report_overlay(
             9
         )
 
+        value_text = str(value)
+
         pdf.drawString(
             x + 78,
             y,
-            str(value)
+            value_text
         )
+
+        # Golden star sprinkle for students who rank in the top 3
+        # in at least one subject for this exam.
+        if label == "Student Name" and int(top3_subject_rank or 0) in (1, 2, 3):
+            rank = int(top3_subject_rank)
+            star_count = {1: 7, 2: 5, 3: 4}[rank]
+            value_width = pdf.stringWidth(value_text, "Helvetica", 9)
+
+            star_positions = [
+                (x + 70, y + 7),
+                (x + 74 + value_width * 0.28, y + 8),
+                (x + 74 + value_width * 0.58, y + 7),
+                (x + 74 + value_width * 0.86, y + 8),
+                (x + 82 + value_width, y + 6),
+                (x + 88 + value_width * 0.42, y - 3),
+                (x + 82 + value_width * 0.78, y - 4),
+            ]
+
+            for star_index in range(star_count):
+                sx, sy = star_positions[star_index]
+                draw_golden_star(
+                    sx,
+                    sy,
+                    outer_radius=3.6 if rank == 1 else 3.2,
+                    inner_radius=1.5
+                )
+
+        pdf.setFillColorRGB(0, 0, 0)
 
     # -----------------------------------------------------
     # Student photo
@@ -8500,7 +8549,8 @@ def make_report_card_pdf(
     total_attendance=0,
     present_days=0,
     school_logo_path=None,
-    school_logo_size=52
+    school_logo_size=52,
+    top3_subject_rank=0
 ):
 
     overlay_bytes = create_report_overlay(
@@ -8512,7 +8562,8 @@ def make_report_card_pdf(
         total_attendance=total_attendance,
         present_days=present_days,
         school_logo_path=school_logo_path,
-        school_logo_size=school_logo_size
+        school_logo_size=school_logo_size,
+        top3_subject_rank=top3_subject_rank
     )
     overlay_doc = fitz.open(
         stream=overlay_bytes,
