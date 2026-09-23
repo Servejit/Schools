@@ -13055,46 +13055,55 @@ def dashboard():
 
         st.title("👨‍👩‍👧 Parent Dashboard")
 
-        # Parent receives only the Subject-wise Premium feature when an
-        # Admin with active Premium access has explicitly permitted it.
-        # The general <30/<40/<50 and full Marks Percentage Premium
-        # analysis is never exposed to Parent.
+        # Load the Parent ↔ Student links first. The linked student's school
+        # is used as a reliable fallback when the Parent profile does not yet
+        # have school_id populated.
+        current_user_id = str(st.session_state.user.id)
+        linked_ids = []
+        try:
+            parent_links = (
+                sb.table("parent_student_links")
+                .select("student_id")
+                .eq("parent_id", current_user_id)
+                .execute()
+                .data or []
+            )
+            linked_ids = [
+                row.get("student_id")
+                for row in parent_links
+                if row.get("student_id")
+            ]
+        except Exception:
+            linked_ids = []
+
         school_id = profile.get("school_id")
 
-        if school_id and subject_wise_parent_student_premium_enabled(school_id):
-            current_user_id = str(st.session_state.user.id)
-            current_email = str(profile.get("email") or "").strip().lower()
-
-            linked_ids = []
+        # If the Parent profile has no school_id, derive it from the linked
+        # student so Premium access is checked against the correct school.
+        if linked_ids and not school_id:
             try:
-                # Parent ↔ Student relationships are stored separately from
-                # students.user_id. A parent can therefore be linked to one
-                # or multiple children without affecting Student login.
-                parent_links = (
-                    sb.table("parent_student_links")
-                    .select("student_id")
-                    .eq("parent_id", current_user_id)
+                linked_student = (
+                    sb.table("students")
+                    .select("school_id")
+                    .eq("id", str(linked_ids[0]))
+                    .maybe_single()
                     .execute()
-                    .data or []
+                    .data
                 )
-                linked_ids = [
-                    row.get("student_id")
-                    for row in parent_links
-                    if row.get("student_id")
-                ]
+                school_id = linked_student.get("school_id") if linked_student else None
             except Exception:
-                linked_ids = []
+                school_id = None
 
-            if linked_ids:
-                subject_wise_premium_view(
-                    school_id,
-                    linked_ids,
-                    "Parent"
-                )
-            else:
-                st.info(
-                    "Your Parent account is not linked to a student record yet."
-                )
+        if linked_ids and school_id and subject_wise_parent_student_premium_enabled(school_id):
+            subject_wise_premium_view(
+                school_id,
+                linked_ids,
+                "Parent"
+            )
+        elif not linked_ids:
+            st.info(
+                "Your Parent account is not linked to a student record yet."
+            )
         else:
             st.info(
                 "💎 Subject-wise Premium has not been enabled for Parents by Admin."
