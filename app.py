@@ -7300,8 +7300,6 @@ def sync_school_marks_to_google(school_id):
                     }
                 }]
             }
-                ]
-            }
         ).execute()
 
     log_values = [
