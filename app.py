@@ -1519,39 +1519,65 @@ def upload_student_file(
 # STUDENT MANAGEMENT
 # =========================================================
 
-def make_student_records_excel(student_rows):
-    """Create an Excel workbook containing all student record fields."""
-    columns = [
-        "id", "school_id", "user_id", "name", "admission_no", "class_name",
-        "section", "date_of_birth", "gender", "father_name", "parent_name",
-        "parent_phone", "remarks", "photo_path", "teacher_signature_path",
-        "principal_signature_path", "active", "created_at", "updated_at",
-    ]
-    headers = [
-        "Student ID", "School ID", "User ID", "Student Name", "Admission No.",
-        "Class", "Section", "Date of Birth", "Gender", "Father Name",
-        "Parent Name", "Parent Phone", "Remarks", "Photo Path",
-        "Teacher Signature Path", "Principal Signature Path", "Active",
-        "Created At", "Updated At",
-    ]
+def make_student_records_excel(student_rows, selected_fields):
+    """Create an Excel workbook containing only the fields selected by the user."""
+    field_map = {
+        "Student ID": "id",
+        "School ID": "school_id",
+        "User ID": "user_id",
+        "Student Name": "name",
+        "Admission No.": "admission_no",
+        "Class": "class_name",
+        "Section": "section",
+        "Date of Birth": "date_of_birth",
+        "Gender": "gender",
+        "Father Name": "father_name",
+        "Parent Name": "parent_name",
+        "Parent Phone": "parent_phone",
+        "Remarks": "remarks",
+        "Photo Path": "photo_path",
+        "Teacher Signature Path": "teacher_signature_path",
+        "Principal Signature Path": "principal_signature_path",
+        "Active": "active",
+        "Created At": "created_at",
+        "Updated At": "updated_at",
+    }
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Student Records"
-    ws.append(headers)
+    ws.append(selected_fields)
+
     for cell in ws[1]:
         cell.font = Font(bold=True)
         cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    selected_columns = [field_map[x] for x in selected_fields]
+
     for row in student_rows:
         ws.append([
             row.get(column, "") if row.get(column, "") is not None else ""
-            for column in columns
+            for column in selected_columns
         ])
+
     ws.freeze_panes = "A2"
-    ws.auto_filter.ref = ws.dimensions
-    widths = [38, 38, 38, 25, 18, 12, 12, 16, 12, 24, 24, 18, 35, 45, 45, 45, 12, 24, 24]
-    for index, width in enumerate(widths, start=1):
-        from openpyxl.utils import get_column_letter
-        ws.column_dimensions[get_column_letter(index)].width = width
+    if ws.max_row >= 1 and ws.max_column >= 1:
+        ws.auto_filter.ref = ws.dimensions
+
+    widths = {
+        "Student ID": 38, "School ID": 38, "User ID": 38,
+        "Student Name": 25, "Admission No.": 18, "Class": 12,
+        "Section": 12, "Date of Birth": 16, "Gender": 12,
+        "Father Name": 24, "Parent Name": 24, "Parent Phone": 18,
+        "Remarks": 35, "Photo Path": 45, "Teacher Signature Path": 45,
+        "Principal Signature Path": 45, "Active": 12,
+        "Created At": 24, "Updated At": 24,
+    }
+
+    from openpyxl.utils import get_column_letter
+    for index, field in enumerate(selected_fields, start=1):
+        ws.column_dimensions[get_column_letter(index)].width = widths.get(field, 20)
+
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
@@ -1895,17 +1921,88 @@ def students():
     # EXCEL EXPORT
     # -----------------------------------------------------
     st.divider()
-    ex1, ex2 = st.columns([3, 1])
-    with ex1:
-        st.subheader("📥 Student Records Excel")
-        st.caption(
-            "Downloads all student information entered in Student Management "
-            "for the students currently visible to you."
+    st.subheader("📥 Student Records Excel")
+    st.caption(
+        "Select exactly which student-record fields you want in the downloaded Excel. "
+        "Teachers only get records they are allowed to see; Admin/SuperAdmin get the "
+        "currently filtered students."
+    )
+
+    export_fields = [
+        "Student ID",
+        "School ID",
+        "User ID",
+        "Student Name",
+        "Admission No.",
+        "Class",
+        "Section",
+        "Date of Birth",
+        "Gender",
+        "Father Name",
+        "Parent Name",
+        "Parent Phone",
+        "Remarks",
+        "Photo Path",
+        "Teacher Signature Path",
+        "Principal Signature Path",
+        "Active",
+        "Created At",
+        "Updated At",
+    ]
+
+    export_defaults = [
+        "Student Name",
+        "Admission No.",
+        "Class",
+        "Section",
+        "Date of Birth",
+        "Gender",
+        "Father Name",
+        "Parent Name",
+        "Parent Phone",
+        "Remarks",
+    ]
+
+    export_select_all_key = f"student_export_select_all_{role}_{school_id}"
+    export_clear_key = f"student_export_clear_all_{role}_{school_id}"
+
+    ec1, ec2 = st.columns(2)
+    with ec1:
+        if st.button(
+            "☑️ Select All Fields",
+            use_container_width=True,
+            key=export_select_all_key
+        ):
+            st.session_state[f"student_export_fields_{role}_{school_id}"] = export_fields.copy()
+    with ec2:
+        if st.button(
+            "⬜ Clear All Fields",
+            use_container_width=True,
+            key=export_clear_key
+        ):
+            st.session_state[f"student_export_fields_{role}_{school_id}"] = []
+
+    export_state_key = f"student_export_fields_{role}_{school_id}"
+    if export_state_key not in st.session_state:
+        st.session_state[export_state_key] = export_defaults.copy()
+
+    selected_export_fields = st.multiselect(
+        "☑️ Select fields for Excel output",
+        export_fields,
+        default=st.session_state[export_state_key],
+        key=export_state_key,
+        help="Tick/select only the information you want to download."
+    )
+
+    if not selected_export_fields:
+        st.warning("Select at least one field before downloading.")
+    else:
+        excel_bytes = make_student_records_excel(
+            student_data,
+            selected_export_fields
         )
-    with ex2:
-        excel_bytes = make_student_records_excel(student_data)
         st.download_button(
-            "⬇️ Download Excel",
+            "⬇️ Download Selected Student Records Excel",
             data=excel_bytes,
             file_name="Student_Records.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
