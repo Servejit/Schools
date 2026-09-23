@@ -79,23 +79,50 @@ if (
 # =========================================================
 # SAVE BUTTON STATE
 # =========================================================
-def _save_state_signature():
+def _save_state_signature(key=None):
     values = {}
     for k, v in st.session_state.items():
         if k.startswith("_save_") or "password" in k.lower():
             continue
-        if isinstance(v, (str, int, float, bool, type(None), list, tuple, dict)):
-            values[k] = v
+        if not isinstance(v, (str, int, float, bool, type(None), list, tuple, dict)):
+            continue
+
+        # Track only the controls belonging to this save action.
+        if key:
+            prefixes = {
+                "school_save_": ("school_edit_",),
+                "save_user_": ("edit_user_", "class_teacher_assign_", "subject_teacher_assign_"),
+                "save_student_": ("edit_",),
+                "save_teacher_": ("assign_teacher_",),
+                "save_class_": ("edit_class_",),
+                "save_subject_": ("subject_",),
+                "save_exam_assessment": ("new_exam_assessment_name",),
+                "save_all_marks": ("marks_editor_",),
+                "save_attendance_button": ("attendance_", "attendance_date"),
+                "upload_template_button": ("template_name_", "template_type_", "template_page_size_", "template_orientation_"),
+                "save_report_school_logo_size_": ("report_school_logo_size_", "save_report_school_logo_size_"),
+                "save_report_school_logo": ("report_school_logo",),
+            }
+            matched = False
+            for marker, wanted in prefixes.items():
+                if key == marker or key.startswith(marker):
+                    matched = any(k.startswith(p) or k == p for p in wanted)
+                    break
+            if matched:
+                values = {k: values[k] for k in sorted(values) if any(
+                    k.startswith(p) or k == p for p in wanted
+                )}
+
     try:
         return json.dumps(values, sort_keys=True, default=str)
     except Exception:
         return repr(values)
 
 def save_enabled(key):
-    return st.session_state.get("_save_sig_" + key) != _save_state_signature()
+    return st.session_state.get("_save_sig_" + key) != _save_state_signature(key)
 
 def mark_saved(key):
-    st.session_state["_save_sig_" + key] = _save_state_signature()
+    st.session_state["_save_sig_" + key] = _save_state_signature(key)
     st.session_state["_save_msg_" + key] = "Saved successfully."
 
 def show_save_message(key):
@@ -2761,6 +2788,7 @@ def classes_subjects():
                                 .execute()
                             )
     
+                            mark_saved(save_key)
                             st.session_state["saved_class_changes"] = True
                             st.rerun()
     
@@ -2982,6 +3010,7 @@ def classes_subjects():
                                             .execute()
                                         )
 
+                                        mark_saved(save_key)
                                         st.success(
                                             "Subject updated."
                                         )
@@ -3510,10 +3539,14 @@ def bulk_marks():
 
     st.divider()
 
+    save_key = "save_all_marks"
+    show_save_message(save_key)
     if st.button(
         "💾 Save All Marks",
         type="primary",
-        use_container_width=True
+        use_container_width=True,
+        key=save_key,
+        disabled=not save_enabled(save_key)
     ):
 
         errors = []
@@ -6596,10 +6629,13 @@ def report_cards():
                     help="52 is the normal/original size. Move left for smaller or right for larger."
                 )
 
+                save_key = f"save_report_school_logo_size_{selected_template['id']}"
+                show_save_message(save_key)
                 if st.button(
                     "💾 Save Logo Size",
                     use_container_width=True,
-                    key=f"save_report_school_logo_size_{selected_template['id']}"
+                    key=save_key,
+                    disabled=not save_enabled(save_key)
                 ):
                     try:
                         logo_config = get_template_config(
