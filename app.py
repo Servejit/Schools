@@ -13795,6 +13795,81 @@ def dashboard():
                 else None
             )
 
+            # Some older student records were created before the Student login
+            # was linked and therefore have user_id = NULL. If that happens,
+            # use the authenticated Student profile email to find an exact
+            # unlinked student record in the same school, then link it once.
+            if not student:
+                try:
+                    auth_email = str(
+                        getattr(st.session_state.user, "email", "") or ""
+                    ).strip().lower()
+                    student_school_id = profile.get("school_id")
+
+                    if auth_email and student_school_id:
+                        profile_rows = (
+                            sb.table("profiles")
+                            .select("id,email,role,school_id,active")
+                            .eq("id", st.session_state.user.id)
+                            .eq("role", "Student")
+                            .eq("school_id", student_school_id)
+                            .eq("active", True)
+                            .limit(1)
+                            .execute()
+                        )
+                        profile_data = (
+                            getattr(profile_rows, "data", None)
+                            if profile_rows is not None
+                            else None
+                        ) or []
+
+                        if profile_data:
+                            # Match an unlinked record by the Student account's
+                            # email only when the students table has an email
+                            # column. If it does not, no unsafe name matching is
+                            # attempted.
+                            try:
+                                email_response = (
+                                    sb.table("students")
+                                    .select(
+                                        "id,school_id,user_id,name,admission_no,"
+                                        "class_name,section,date_of_birth,gender,"
+                                        "father_name,parent_name,parent_phone,photo_path,"
+                                        "remarks,active,email"
+                                    )
+                                    .eq("school_id", student_school_id)
+                                    .eq("active", True)
+                                    .eq("email", auth_email)
+                                    .is_("user_id", "null")
+                                    .limit(1)
+                                    .execute()
+                                )
+                                email_rows = (
+                                    getattr(email_response, "data", None)
+                                    if email_response is not None
+                                    else None
+                                ) or []
+                            except Exception:
+                                email_rows = []
+
+                            if email_rows:
+                                candidate = email_rows[0]
+                                link_response = (
+                                    sb.table("students")
+                                    .update({"user_id": st.session_state.user.id})
+                                    .eq("id", candidate.get("id"))
+                                    .eq("school_id", student_school_id)
+                                    .is_("user_id", "null")
+                                    .execute()
+                                )
+                                if link_response is not None:
+                                    student = candidate.copy()
+                                    student["user_id"] = st.session_state.user.id
+                except Exception:
+                    # Never block the Student Dashboard because automatic
+                    # linking is unavailable; show the normal link message.
+                    pass
+
             if student:
 
                 photo_path = student.get(
