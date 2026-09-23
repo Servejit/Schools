@@ -106,6 +106,34 @@ def show_save_message(key):
         st.success("✅ " + msg)
 
 # =========================================================
+# ROLE-BASED DASHBOARD THEME
+# =========================================================
+ROLE_THEMES = {
+    "SuperAdmin": {"bg": "#EAF7EA", "accent": "#1B5E20", "accent2": "#2E7D32", "text": "#16351A", "card": "#FFFFFF"},
+    "Admin": {"bg": "#EAF2FF", "accent": "#1565C0", "accent2": "#1976D2", "text": "#102A43", "card": "#FFFFFF"},
+    "Teacher": {"bg": "#FFF0F6", "accent": "#C2185B", "accent2": "#E91E63", "text": "#4A1230", "card": "#FFFFFF"},
+    "Student": {"bg": "#111111", "accent": "#FFFFFF", "accent2": "#DDDDDD", "text": "#FFFFFF", "card": "#1E1E1E"},
+    "Parent": {"bg": "#F5EEFF", "accent": "#6A1B9A", "accent2": "#8E24AA", "text": "#32143F", "card": "#FFFFFF"},
+}
+
+def apply_role_theme():
+    role = (st.session_state.get("profile") or {}).get("role")
+    theme = ROLE_THEMES.get(role)
+    if not theme:
+        return
+    st.markdown(f"""<style>
+    .stApp {{ background: {theme["bg"]}; color: {theme["text"]}; }}
+    [data-testid="stHeader"] {{ background: transparent; }}
+    [data-testid="stSidebar"] {{ background: {theme["accent"]}; }}
+    [data-testid="stSidebar"] * {{ color: #FFFFFF !important; }}
+    .role-theme-card {{ background: {theme["card"]}; border: 1px solid rgba(0,0,0,.08); border-left: 5px solid {theme["accent2"]}; border-radius: 12px; padding: 14px 16px; margin: 8px 0; }}
+    .stButton > button {{ border-color: {theme["accent2"]}; }}
+    .stButton > button:hover {{ border-color: {theme["accent"]}; color: {theme["accent"]}; }}
+    div[data-testid="stMetric"] {{ background: {theme["card"]}; border: 1px solid rgba(0,0,0,.08); border-radius: 12px; padding: 10px; }}
+    </style>""", unsafe_allow_html=True)
+
+
+# =========================================================
 # LOGOUT
 # =========================================================
 
@@ -8970,6 +8998,7 @@ def dashboard():
 
 if st.session_state.logged_in:
 
+    apply_role_theme()
     dashboard()
 
 else:
