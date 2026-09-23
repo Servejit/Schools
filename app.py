@@ -10,6 +10,16 @@ import fitz
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment
 
+# Optional Google Sheets / Drive integration.
+try:
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build as google_build
+    from googleapiclient.http import MediaIoBaseUpload
+except Exception:
+    service_account = None
+    google_build = None
+    MediaIoBaseUpload = None
+
 from PIL import Image
 from supabase import create_client
 
@@ -6687,6 +6697,304 @@ def marks_backup_and_result_tools(school_id):
         "Example: PT-1 10%, PT-2 10%, Half Yearly 30%, Annual 50%. "
         "Raw exam marks are never changed; weightage is used only for the final result."
     )
+
+    google_marks_backup_section(school_id)
+
+
+
+def get_google_services():
+    """Return Google Sheets and Drive clients when configured in Streamlit secrets."""
+    if service_account is None or google_build is None:
+        raise RuntimeError(
+            "Google API packages are not installed. Add the Google packages to requirements.txt."
+        )
+
+    raw = st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if not raw:
+        raise RuntimeError(
+            "GOOGLE_SERVICE_ACCOUNT_JSON is not configured in Streamlit Secrets."
+        )
+
+    if isinstance(raw, str):
+        info = json.loads(raw)
+    else:
+        info = dict(raw)
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive.file",
+    ]
+    creds = service_account.Credentials.from_service_account_info(
+        info,
+        scopes=scopes
+    )
+
+    return (
+        google_build("sheets", "v4", credentials=creds),
+        google_build("drive", "v3", credentials=creds)
+    )
+
+
+def sync_school_marks_to_google(school_id):
+    """Create/update one Google Sheet per school and save a dated XLSX backup in Drive."""
+    sheets_service, drive_service = get_google_services()
+
+    school = (
+        sb.table("schools")
+        .select("id,name,code")
+        .eq("id", school_id)
+        .maybe_single()
+        .execute()
+        .data
+    ) or {}
+
+    school_name = str(school.get("name") or "School").strip()
+    safe_name = (
+        school_name
+        .replace("'", "")
+        .replace("/", "_")
+        .replace("\\", "_")
+    )
+
+    spreadsheet_title = f"{safe_name} - Marks Backup"
+    query_name = spreadsheet_title.replace("\\", "\\\\").replace("'", "\\'")
+
+    found = (
+        drive_service.files()
+        .list(
+            q=(
+                f"name = '{query_name}' and "
+                "mimeType = 'application/vnd.google-apps.spreadsheet' and "
+                "trashed = false"
+            ),
+            spaces="drive",
+            fields="files(id,name,webViewLink)",
+            pageSize=10
+        )
+        .execute()
+        .get("files", [])
+    )
+
+    if found:
+        spreadsheet_id = found[0]["id"]
+    else:
+        created = (
+            sheets_service.spreadsheets()
+            .create(
+                body={"properties": {"title": spreadsheet_title}},
+                fields="spreadsheetId,spreadsheetUrl"
+            )
+            .execute()
+        )
+        spreadsheet_id = created["spreadsheetId"]
+
+    # Build the same source-of-truth backup that is available as XLSX.
+    backup_bytes = build_marks_backup_workbook(school_id)
+    workbook = pd.read_excel(
+        io.BytesIO(backup_bytes),
+        sheet_name=None,
+        engine="openpyxl"
+    )
+
+    metadata = (
+        sheets_service.spreadsheets()
+        .get(spreadsheetId=spreadsheet_id)
+        .execute()
+    )
+    existing_sheets = {
+        x.get("properties", {}).get("title")
+        for x in metadata.get("sheets", [])
+    }
+
+    requests_body = []
+    for sheet_name in workbook.keys():
+        if sheet_name not in existing_sheets:
+            requests_body.append({
+                "addSheet": {
+                    "properties": {"title": sheet_name[:100]}
+                }
+            })
+
+    if requests_body:
+        sheets_service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": requests_body}
+        ).execute()
+
+    for sheet_name, dataframe in workbook.items():
+        values = [list(dataframe.columns)]
+        for row in dataframe.itertuples(index=False, name=None):
+            clean = []
+            for value in row:
+                if pd.isna(value):
+                    clean.append("")
+                elif isinstance(value, (pd.Timestamp, datetime.datetime, datetime.date)):
+                    clean.append(str(value))
+                else:
+                    clean.append(value)
+            values.append(clean)
+
+        # Backup_Info is stored from the Excel workbook as two columns.
+        if sheet_name == "Backup_Info":
+            values = [
+                [str(x) if not pd.isna(x) else "" for x in row]
+                for row in dataframe.astype(object).values.tolist()
+            ]
+
+        safe_sheet = sheet_name.replace("'", "''")
+        (
+            sheets_service.spreadsheets()
+            .values()
+            .clear(
+                spreadsheetId=spreadsheet_id,
+                range=f"'{safe_sheet}'"
+            )
+            .execute()
+        )
+        (
+            sheets_service.spreadsheets()
+            .values()
+            .update(
+                spreadsheetId=spreadsheet_id,
+                range=f"'{safe_sheet}'!A1",
+                valueInputOption="RAW",
+                body={"values": values}
+            )
+            .execute()
+        )
+
+    # Datewise synchronization history.
+    log_name = "Backup_Log"
+    if log_name not in existing_sheets:
+        sheets_service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={
+                "requests": [
+                    {"addSheet": {"properties": {"title": log_name}}}
+                ]
+            }
+        ).execute()
+
+    log_values = [
+        datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        str(st.session_state.profile.get("email") or ""),
+        "Marks backup sync",
+        str(school_id),
+        str(len(workbook)),
+    ]
+    (
+        sheets_service.spreadsheets()
+        .values()
+        .append(
+            spreadsheetId=spreadsheet_id,
+            range="'Backup_Log'!A1",
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": [log_values]}
+        )
+        .execute()
+    )
+
+    # Save the actual dated XLSX file in Drive as an immutable backup copy.
+    backup_stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    xlsx_name = f"{safe_name}_Marks_Backup_{backup_stamp}.xlsx"
+
+    media = MediaIoBaseUpload(
+        io.BytesIO(backup_bytes),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        resumable=False
+    )
+    drive_file = (
+        drive_service.files()
+        .create(
+            body={"name": xlsx_name},
+            media_body=media,
+            fields="id,name,webViewLink"
+        )
+        .execute()
+    )
+
+    # Share the school's Google Sheet with Admin/Admin+Teacher users and
+    # all SuperAdmins. Google Drive permissions are controlled by Google,
+    # not by the Streamlit role itself.
+    profiles = (
+        sb.table("profiles")
+        .select("email,role,school_id,active")
+        .execute()
+        .data or []
+    )
+    target_emails = set()
+    for profile in profiles:
+        email = str(profile.get("email") or "").strip()
+        role = profile.get("role")
+        same_school = str(profile.get("school_id")) == str(school_id)
+        if email and (
+            role == "SuperAdmin"
+            or (same_school and role in ["Admin", "Admin+Teacher"])
+        ):
+            target_emails.add(email)
+
+    for email in sorted(target_emails):
+        try:
+            drive_service.permissions().create(
+                fileId=spreadsheet_id,
+                body={
+                    "type": "user",
+                    "role": "writer",
+                    "emailAddress": email
+                },
+                sendNotificationEmail=False
+            ).execute()
+        except Exception:
+            # Existing permission or a non-Google/non-shareable account
+            # should not prevent the backup from being written.
+            pass
+
+    return {
+        "spreadsheet_id": spreadsheet_id,
+        "spreadsheet_url": (
+            f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit"
+        ),
+        "xlsx_file_id": drive_file.get("id"),
+        "xlsx_name": xlsx_name
+    }
+
+
+def google_marks_backup_section(school_id):
+    role = st.session_state.profile.get("role")
+    if role not in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+        return
+
+    st.markdown("### ☁️ Google Sheets / Google Drive Backup")
+    st.caption(
+        "One Google Sheet is maintained per school. A dated XLSX copy is also saved "
+        "to Google Drive. The app remains the official marks source."
+    )
+
+    if not st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
+        st.info(
+            "Google backup is ready in the app, but Google credentials are not "
+            "configured yet. Add GOOGLE_SERVICE_ACCOUNT_JSON to Streamlit Secrets."
+        )
+        return
+
+    if st.button(
+        "☁️ Sync This School to Google Sheets + Drive",
+        use_container_width=True,
+        key=f"sync_google_marks_{school_id}"
+    ):
+        try:
+            result = sync_school_marks_to_google(school_id)
+            st.success("✅ Google Sheets and dated Drive backup updated.")
+            st.markdown(
+                f"[Open School Google Sheet]({result['spreadsheet_url']})"
+            )
+            st.caption(
+                f"Dated Excel backup: {result['xlsx_name']}"
+            )
+        except Exception as e:
+            st.error("Google backup could not be completed.")
+            st.code(str(e))
 
 
 # =========================================================
