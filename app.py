@@ -11012,7 +11012,7 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
         )
         all_students = (
             sb.table("students")
-            .select("id,name,admission_no,class_name,section,active")
+            .select("id,name,admission_no,class_name,section,father_name,parent_name,active")
             .eq("school_id", school_id)
             .eq("active", True)
             .execute()
@@ -11087,6 +11087,11 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 "Admission No.": student.get("admission_no") or "",
                 "Class": student.get("class_name") or "",
                 "Section": student.get("section") or "",
+                "Father Name": (
+                    student.get("father_name")
+                    or student.get("parent_name")
+                    or ""
+                ),
                 "Marks": round(obtained, 2),
                 "Maximum": round(maximum, 2),
                 "Percentage": round(percentage, 2)
@@ -11164,6 +11169,9 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 ranking_rows.append({
                     "Rank": f"{medal} {index}".strip(),
                     "Student Name": row["Student Name"],
+                    "Class": row["Class"],
+                    "Section": row["Section"],
+                    "Father Name": row["Father Name"],
                     "Marks": (
                         f'{format_mark(row["Marks"])}/{format_mark(row["Maximum"])}'
                     ),
@@ -11181,6 +11189,9 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                     <tr>
                         <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Rank</th>
                         <th style="text-align:left; padding:10px; border-bottom:2px solid #ddd;">Student Name</th>
+                        <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Class</th>
+                        <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Section</th>
+                        <th style="text-align:left; padding:10px; border-bottom:2px solid #ddd;">Father Name</th>
                         <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Marks</th>
                         <th style="text-align:center; padding:10px; border-bottom:2px solid #ddd;">Percentage</th>
                     </tr>
@@ -11203,6 +11214,9 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                     <tr>
                         <td style="text-align:center; padding:10px; font-size:20px; border-bottom:1px solid #eee;">{rank_html}</td>
                         <td style="padding:10px; border-bottom:1px solid #eee;">{item["Student Name"]}</td>
+                        <td style="text-align:center; padding:10px; border-bottom:1px solid #eee;">{item["Class"]}</td>
+                        <td style="text-align:center; padding:10px; border-bottom:1px solid #eee;">{item["Section"]}</td>
+                        <td style="padding:10px; border-bottom:1px solid #eee;">{item["Father Name"]}</td>
                         <td style="text-align:center; padding:10px; border-bottom:1px solid #eee;">{item["Marks"]}</td>
                         <td style="text-align:center; padding:10px; border-bottom:1px solid #eee;">{item["Percentage"]}</td>
                     </tr>
