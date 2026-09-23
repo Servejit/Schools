@@ -6209,11 +6209,12 @@ def build_marks_backup_workbook(school_id):
             ws.column_dimensions[col_letter].width = min(max(max_len + 2, 12), 32)
 
     # -----------------------------------------------------
-    # SUMMARY SHEETS
+    # ANALYSIS SHEETS
     # -----------------------------------------------------
-    # In addition to one sheet per exam, create consolidated
-    # Class-wise, Student-wise, Subject-wise and Total All sheets.
-    # These are summaries only; the exam sheets remain the recovery source.
+    # These sheets are designed for school result analysis:
+    # Exam_Wise, Class_Wise, Students_Wise, Subjects_Wise and Total_All.
+    # Total/percentage are calculated from obtained marks / maximum marks.
+    # Class toppers in Total_All are highlighted green.
     def _safe_number(value):
         try:
             if value is None or pd.isna(value):
@@ -6226,18 +6227,20 @@ def build_marks_backup_workbook(school_id):
     for mark in marks:
         student = student_map.get(str(mark.get("student_id")), {})
         subject = subject_map.get(str(mark.get("subject_id")), {})
-        exam_name = str(mark.get("exam_name") or "").strip()
-        if not exam_name:
+        exam = str(mark.get("exam_name") or "").strip()
+        if not exam:
             continue
+
         max_marks = (
             mark.get("max_marks")
             if mark.get("max_marks") is not None
             else subject.get("max_marks")
         )
+
         enriched.append({
-            "Exam": exam_name,
-            "Class": student.get("class_name") or "",
-            "Section": student.get("section") or "",
+            "Exam": exam,
+            "Class": str(student.get("class_name") or "").strip(),
+            "Section": str(student.get("section") or "").strip(),
             "Student ID": str(mark.get("student_id") or ""),
             "Student Name": student.get("name") or "",
             "Admission No.": student.get("admission_no") or "",
@@ -6250,10 +6253,11 @@ def build_marks_backup_workbook(school_id):
 
     detail_df = pd.DataFrame(enriched)
 
-    def _format_summary_sheet(ws, df):
+    def _write_df(ws, df, widths=None):
         if df.empty:
             ws.append(["No data"])
             return
+
         ws.append(list(df.columns))
         for row in df.itertuples(index=False, name=None):
             ws.append([
@@ -6261,22 +6265,58 @@ def build_marks_backup_workbook(school_id):
                 else value
                 for value in row
             ])
+
         for cell in ws[1]:
             cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal="center")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.fill = PatternFill("solid", fgColor="D9EAF7")
+
         ws.freeze_panes = "A2"
         ws.auto_filter.ref = ws.dimensions
+
         for column in ws.columns:
             max_len = 0
             col_letter = column[0].column_letter
-            for cell in column[:500]:
+            for cell in column[:1000]:
                 value = "" if cell.value is None else str(cell.value)
                 max_len = max(max_len, len(value))
-            ws.column_dimensions[col_letter].width = min(max(max_len + 2, 12), 30)
+            ws.column_dimensions[col_letter].width = min(max(max_len + 2, 12), 32)
 
-    # Class-wise: one row for every Class + Section + Exam.
+    # 1. EXAM_WISE
+    exam_rows = []
     if not detail_df.empty:
-        class_rows = []
+        for (exam, student_id, student_name, admission, class_name, section), g in detail_df.groupby(
+            ["Exam", "Student ID", "Student Name", "Admission No.", "Class", "Section"],
+            dropna=False
+        ):
+            obtained = float(g["Marks"].sum())
+            maximum = float(g["Maximum Marks"].sum())
+            exam_rows.append({
+                "Exam": exam,
+                "Class": class_name,
+                "Section": section,
+                "Student ID": student_id,
+                "Student Name": student_name,
+                "Admission No.": admission,
+                "Total Obtained Marks": round(obtained, 2),
+                "Total Marks": round(maximum, 2),
+                "Percentage": round((obtained / maximum) * 100, 2) if maximum else 0,
+                "Subjects": int(g["Subject ID"].nunique()),
+            })
+
+    exam_df = pd.DataFrame(exam_rows)
+    if not exam_df.empty:
+        exam_df = exam_df.sort_values(
+            ["Exam", "Class", "Section", "Percentage", "Student Name"],
+            ascending=[True, True, True, False, True]
+        )
+
+    ws = wb.create_sheet("Exam_Wise")
+    _write_df(ws, exam_df)
+
+    # 2. CLASS_WISE
+    class_rows = []
+    if not detail_df.empty:
         for (exam, class_name, section), g in detail_df.groupby(
             ["Exam", "Class", "Section"], dropna=False
         ):
@@ -6287,114 +6327,153 @@ def build_marks_backup_workbook(school_id):
                 "Class": class_name,
                 "Section": section,
                 "Students": int(g["Student ID"].nunique()),
-                "Subjects": int(g["Subject ID"].nunique()),
-                "Marks Obtained": round(obtained, 2),
-                "Maximum Marks": round(maximum, 2),
-                "Percentage": round(obtained * 100 / maximum, 2) if maximum else 0,
+                "Total Obtained Marks": round(obtained, 2),
+                "Total Marks": round(maximum, 2),
+                "Percentage": round((obtained / maximum) * 100, 2) if maximum else 0,
+                "Average Student %": round(
+                    float(
+                        exam_df[
+                            (exam_df["Exam"] == exam)
+                            & (exam_df["Class"] == class_name)
+                            & (exam_df["Section"] == section)
+                        ]["Percentage"].mean()
+                    ), 2
+                ) if not exam_df.empty else 0,
             })
-        class_df = pd.DataFrame(class_rows).sort_values(
+
+    class_df = pd.DataFrame(class_rows)
+    if not class_df.empty:
+        class_df = class_df.sort_values(
             ["Exam", "Class", "Section"]
         )
-    else:
-        class_df = pd.DataFrame()
 
     ws = wb.create_sheet("Class_Wise")
-    _format_summary_sheet(ws, class_df)
+    _write_df(ws, class_df)
 
-    # Student-wise: one row for every Student + Exam.
-    if not detail_df.empty:
-        student_rows = []
-        for (exam, student_id, student_name, admission, class_name, section), g in detail_df.groupby(
-            ["Exam", "Student ID", "Student Name", "Admission No.", "Class", "Section"],
-            dropna=False
-        ):
-            obtained = float(g["Marks"].sum())
-            maximum = float(g["Maximum Marks"].sum())
-            student_rows.append({
-                "Exam": exam,
-                "Student ID": student_id,
-                "Student Name": student_name,
-                "Admission No.": admission,
-                "Class": class_name,
-                "Section": section,
-                "Subjects": int(g["Subject ID"].nunique()),
-                "Marks Obtained": round(obtained, 2),
-                "Maximum Marks": round(maximum, 2),
-                "Percentage": round(obtained * 100 / maximum, 2) if maximum else 0,
-                "Result": "PASS" if maximum and obtained >= float(g["Passing Marks"].sum()) else "FAIL",
-            })
-        student_df = pd.DataFrame(student_rows).sort_values(
-            ["Exam", "Class", "Section", "Student Name"]
-        )
-    else:
-        student_df = pd.DataFrame()
-
+    # 3. STUDENTS_WISE
+    # One row per student per exam, with complete totals and percentage.
     ws = wb.create_sheet("Students_Wise")
-    _format_summary_sheet(ws, student_df)
+    _write_df(ws, exam_df)
 
-    # Subject-wise: one row for every Subject + Exam.
+    # Highlight each student's row when it is the class topper for that exam.
+    if not exam_df.empty:
+        for (exam, class_name, section), group in exam_df.groupby(
+            ["Exam", "Class", "Section"], dropna=False
+        ):
+            if group.empty:
+                continue
+            highest = float(group["Percentage"].max())
+            for idx in group.index:
+                if float(group.loc[idx, "Percentage"]) == highest:
+                    excel_row = int(group.index.get_loc(idx)) + 2
+                    # Locate the actual Excel row after sorting.
+                    matching_rows = [
+                        r for r in range(2, ws.max_row + 1)
+                        if str(ws.cell(r, 1).value) == str(exam)
+                        and str(ws.cell(r, 2).value) == str(class_name)
+                        and str(ws.cell(r, 3).value) == str(section)
+                        and str(ws.cell(r, 4).value) == str(group.loc[idx, "Student ID"])
+                    ]
+                    for excel_row in matching_rows:
+                        for cell in ws[excel_row]:
+                            cell.fill = PatternFill("solid", fgColor="90EE90")
+                            cell.font = Font(bold=True)
+
+    # 4. SUBJECTS_WISE
+    subject_rows = []
     if not detail_df.empty:
-        subject_rows = []
-        for (exam, subject_id, subject), g in detail_df.groupby(
-            ["Exam", "Subject ID", "Subject"], dropna=False
+        for (exam, class_name, section, subject_id, subject), g in detail_df.groupby(
+            ["Exam", "Class", "Section", "Subject ID", "Subject"], dropna=False
         ):
             obtained = float(g["Marks"].sum())
             maximum = float(g["Maximum Marks"].sum())
             subject_rows.append({
                 "Exam": exam,
+                "Class": class_name,
+                "Section": section,
                 "Subject ID": subject_id,
                 "Subject": subject,
                 "Students": int(g["Student ID"].nunique()),
-                "Marks Obtained": round(obtained, 2),
-                "Maximum Marks": round(maximum, 2),
+                "Total Obtained Marks": round(obtained, 2),
+                "Total Marks": round(maximum, 2),
+                "Percentage": round((obtained / maximum) * 100, 2) if maximum else 0,
                 "Average Marks": round(float(g["Marks"].mean()), 2) if len(g) else 0,
                 "Highest Marks": round(float(g["Marks"].max()), 2) if len(g) else 0,
                 "Lowest Marks": round(float(g["Marks"].min()), 2) if len(g) else 0,
-                "Percentage": round(obtained * 100 / maximum, 2) if maximum else 0,
                 "Pass Count": int((g["Marks"] >= g["Passing Marks"]).sum()),
                 "Fail Count": int((g["Marks"] < g["Passing Marks"]).sum()),
             })
-        subject_df = pd.DataFrame(subject_rows).sort_values(
-            ["Exam", "Subject"]
+
+    subject_df = pd.DataFrame(subject_rows)
+    if not subject_df.empty:
+        subject_df = subject_df.sort_values(
+            ["Exam", "Class", "Section", "Subject"]
         )
-    else:
-        subject_df = pd.DataFrame()
 
     ws = wb.create_sheet("Subjects_Wise")
-    _format_summary_sheet(ws, subject_df)
+    _write_df(ws, subject_df)
 
-    # Total All: grand totals for every exam plus one overall total row.
+    # 5. TOTAL_ALL
+    # One row per student across all exams. This is the main recovery/result
+    # overview and is where class-wise toppers are highlighted green.
     total_rows = []
     if not detail_df.empty:
-        for exam, g in detail_df.groupby("Exam", sort=False):
+        for (student_id, student_name, admission, class_name, section), g in detail_df.groupby(
+            ["Student ID", "Student Name", "Admission No.", "Class", "Section"],
+            dropna=False
+        ):
             obtained = float(g["Marks"].sum())
             maximum = float(g["Maximum Marks"].sum())
             total_rows.append({
-                "Exam": exam,
-                "Classes": int(g["Class"].astype(str).str.strip().replace("", pd.NA).nunique()),
-                "Students": int(g["Student ID"].nunique()),
+                "Class": class_name,
+                "Section": section,
+                "Student ID": student_id,
+                "Student Name": student_name,
+                "Admission No.": admission,
+                "Exams": int(g["Exam"].nunique()),
                 "Subjects": int(g["Subject ID"].nunique()),
-                "Marks Obtained": round(obtained, 2),
-                "Maximum Marks": round(maximum, 2),
-                "Percentage": round(obtained * 100 / maximum, 2) if maximum else 0,
-                "Mark Rows": int(len(g)),
+                "Total Obtained Marks": round(obtained, 2),
+                "Total Marks": round(maximum, 2),
+                "Percentage": round((obtained / maximum) * 100, 2) if maximum else 0,
             })
-        obtained = float(detail_df["Marks"].sum())
-        maximum = float(detail_df["Maximum Marks"].sum())
-        total_rows.append({
-            "Exam": "TOTAL ALL EXAMS",
-            "Classes": int(detail_df["Class"].astype(str).str.strip().replace("", pd.NA).nunique()),
-            "Students": int(detail_df["Student ID"].nunique()),
-            "Subjects": int(detail_df["Subject ID"].nunique()),
-            "Marks Obtained": round(obtained, 2),
-            "Maximum Marks": round(maximum, 2),
-            "Percentage": round(obtained * 100 / maximum, 2) if maximum else 0,
-            "Mark Rows": int(len(detail_df)),
-        })
+
     total_df = pd.DataFrame(total_rows)
+    if not total_df.empty:
+        total_df = total_df.sort_values(
+            ["Class", "Section", "Percentage", "Student Name"],
+            ascending=[True, True, False, True]
+        )
 
     ws = wb.create_sheet("Total_All")
-    _format_summary_sheet(ws, total_df)
+    _write_df(ws, total_df)
+
+    # Green = class topper. Ties are also highlighted.
+    if not total_df.empty:
+        for (class_name, section), group in total_df.groupby(
+            ["Class", "Section"], dropna=False
+        ):
+            if group.empty:
+                continue
+            highest = float(group["Percentage"].max())
+            for _, student_row in group.iterrows():
+                if float(student_row["Percentage"]) == highest:
+                    matches = [
+                        r for r in range(2, ws.max_row + 1)
+                        if str(ws.cell(r, 1).value) == str(class_name)
+                        and str(ws.cell(r, 2).value) == str(section)
+                        and str(ws.cell(r, 3).value) == str(student_row["Student ID"])
+                    ]
+                    for excel_row in matches:
+                        for cell in ws[excel_row]:
+                            cell.fill = PatternFill("solid", fgColor="90EE90")
+                            cell.font = Font(bold=True)
+
+    # Add a legend at the top-right area without disturbing the table.
+    if not total_df.empty:
+        legend_col = max(12, ws.max_column + 2)
+        ws.cell(1, legend_col, "GREEN = CLASS TOPPER")
+        ws.cell(1, legend_col).fill = PatternFill("solid", fgColor="90EE90")
+        ws.cell(1, legend_col).font = Font(bold=True)
 
     # Add student and subject master data to make the backup self-contained.
     for title, rows, headers in [
