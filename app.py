@@ -131,9 +131,34 @@ ROLE_THEMES = {
     },
 }
 
-def apply_role_theme():
+def get_active_theme_role():
+    """
+    Admin+Teacher has two working modes:
+    - Admin-only work uses the Admin theme.
+    - Teacher-only work uses the Teacher theme.
+    All other roles keep their normal role theme.
+    """
     role = (st.session_state.get("profile") or {}).get("role")
-    theme = ROLE_THEMES.get(role)
+
+    if role == "Admin+Teacher":
+        teacher_menu_items = {
+            "🎓 Students",
+            "📝 Marks",
+            "📅 Attendance",
+            "📄 Report Cards",
+            "📊 Reports",
+        }
+        selected_menu = st.session_state.get("admin_dashboard_menu")
+        if selected_menu in teacher_menu_items:
+            return "Teacher"
+        return "Admin"
+
+    return role
+
+
+def apply_role_theme():
+    theme_role = get_active_theme_role()
+    theme = ROLE_THEMES.get(theme_role)
     if not theme:
         return
 
@@ -9271,7 +9296,21 @@ def dashboard():
 
     elif role in ["Admin", "Admin+Teacher"]:
 
-        st.title("🛠️ Admin Dashboard")
+        if role == "Admin+Teacher":
+            teacher_mode_items = {
+                "🎓 Students",
+                "📝 Marks",
+                "📅 Attendance",
+                "📄 Report Cards",
+                "📊 Reports",
+            }
+            current_menu = st.session_state.get("admin_dashboard_menu")
+            if current_menu in teacher_mode_items:
+                st.title("👨‍🏫 Teacher Dashboard")
+            else:
+                st.title("🛠️ Admin Dashboard")
+        else:
+            st.title("🛠️ Admin Dashboard")
 
         # Admin has full access to every Teacher module and
         # also retains all Admin-only management functions.
@@ -9288,8 +9327,31 @@ def dashboard():
                 "📄 Report Cards",
                 "📊 Reports"
             ],
-            horizontal=True
+            horizontal=True,
+            key="admin_dashboard_menu"
         )
+
+        # Admin+Teacher automatically switches visual mode according
+        # to the work being performed. Admin-only modules use the
+        # Admin theme; Teacher modules use the Teacher theme.
+        if role == "Admin+Teacher":
+            active_mode = (
+                "Teacher"
+                if menu in {
+                    "🎓 Students",
+                    "📝 Marks",
+                    "📅 Attendance",
+                    "📄 Report Cards",
+                    "📊 Reports",
+                }
+                else "Admin"
+            )
+            if active_mode == "Teacher":
+                st.caption("👨‍🏫 Teacher Mode")
+            else:
+                st.caption("🛠️ Admin Mode")
+
+            apply_role_theme()
 
         if menu == "👥 Users":
             users()
