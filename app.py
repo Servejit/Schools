@@ -8453,6 +8453,837 @@ def make_report_card_pdf(
     return output
 
 
+
+# =========================================================
+# REPORT CARD EXCEL EXPORT / IMPORT
+# =========================================================
+
+def _report_excel_safe_number(value):
+    try:
+        if value is None or pd.isna(value):
+            return 0.0
+        return float(value)
+    except Exception:
+        return 0.0
+
+
+def _report_excel_write_df(ws, df):
+    if df is None or df.empty:
+        ws.append(["No data"])
+        return
+
+    ws.append(list(df.columns))
+    for row in df.itertuples(index=False, name=None):
+        ws.append([
+            "" if value is None or (isinstance(value, float) and pd.isna(value))
+            else value
+            for value in row
+        ])
+
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.fill = PatternFill("solid", fgColor="D9EAF7")
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+    for column in ws.columns:
+        max_len = 0
+        col_letter = column[0].column_letter
+        for cell in column[:1500]:
+            value = "" if cell.value is None else str(cell.value)
+            max_len = max(max_len, len(value))
+        ws.column_dimensions[col_letter].width = min(max(max_len + 2, 12), 35)
+
+
+def build_report_cards_excel(school_id):
+    """
+    Create a self-contained Report Card Backup/Import workbook.
+    Report_Card_Data is the authoritative import sheet.
+    """
+    school = (
+        sb.table("schools")
+        .select("id,name,code,address")
+        .eq("id", school_id)
+        .maybe_single()
+        .execute()
+        .data
+    ) or {}
+
+    students = (
+        sb.table("students")
+        .select(
+            "id,school_id,name,admission_no,class_name,section,"
+            "date_of_birth,father_name,parent_name,remarks,active"
+        )
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+
+    subjects = (
+        sb.table("subjects")
+        .select(
+            "id,school_id,class_id,name,subject_name,code,"
+            "max_marks,passing_marks,active"
+        )
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+
+    marks = (
+        sb.table("marks")
+        .select(
+            "id,school_id,student_id,subject_id,exam_name,"
+            "marks,max_marks,class_id"
+        )
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+
+    try:
+        attendance = (
+            sb.table("attendance")
+            .select(
+                "id,school_id,student_id,attendance_date,present"
+            )
+            .eq("school_id", school_id)
+            .execute()
+            .data or []
+        )
+    except Exception:
+        attendance = []
+
+    student_map = {str(x["id"]): x for x in students}
+    subject_map = {str(x["id"]): x for x in subjects}
+
+    attendance_summary_map = {}
+    for row in attendance:
+        sid = str(row.get("student_id") or "")
+        total, present = attendance_summary_map.get(sid, (0, 0))
+        attendance_summary_map[sid] = (
+            total + 1,
+            present + (1 if bool(row.get("present")) else 0)
+        )
+
+    detail_rows = []
+    for mark in marks:
+        student = student_map.get(str(mark.get("student_id")), {})
+        subject = subject_map.get(str(mark.get("subject_id")), {})
+        exam = str(mark.get("exam_name") or "").strip()
+        if not exam:
+            continue
+
+        total_att, present_days = attendance_summary_map.get(
+            str(mark.get("student_id")), (0, 0)
+        )
+
+        maximum = (
+            mark.get("max_marks")
+            if mark.get("max_marks") is not None
+            else subject.get("max_marks")
+        )
+
+        detail_rows.append({
+            "School ID": str(school_id),
+            "School Name": school.get("name") or "",
+            "Exam Name": exam,
+            "Student ID": str(mark.get("student_id") or ""),
+            "Student Name": student.get("name") or "",
+            "Admission No.": student.get("admission_no") or "",
+            "Class": student.get("class_name") or "",
+            "Section": student.get("section") or "",
+            "Class ID": str(
+                mark.get("class_id")
+                or subject.get("class_id")
+                or ""
+            ),
+            "Subject ID": str(mark.get("subject_id") or ""),
+            "Subject Name": (
+                subject.get("subject_name")
+                or subject.get("name")
+                or ""
+            ),
+            "Subject Code": subject.get("code") or "",
+            "Marks Obtained": mark.get("marks"),
+            "Maximum Marks": maximum,
+            "Passing Marks": subject.get("passing_marks"),
+            "Total Attendance": total_att,
+            "Present Days": present_days,
+            "Percentage": round(
+                (
+                    _report_excel_safe_number(mark.get("marks"))
+                    / _report_excel_safe_number(maximum)
+                    * 100
+                ),
+                2
+            ) if _report_excel_safe_number(maximum) else 0,
+            "Grade": grade_from_percentage(
+                (
+                    _report_excel_safe_number(mark.get("marks"))
+                    / _report_excel_safe_number(maximum)
+                    * 100
+                )
+                if _report_excel_safe_number(maximum)
+                else 0
+            ),
+        })
+
+    detail_df = pd.DataFrame(detail_rows)
+
+    exam_rows = []
+    class_rows = []
+    student_exam_rows = []
+
+    if not detail_df.empty:
+        for (
+            exam, student_id, student_name, admission, class_name, section
+        ), group in detail_df.groupby(
+            [
+                "Exam Name", "Student ID", "Student Name",
+                "Admission No.", "Class", "Section"
+            ],
+            dropna=False
+        ):
+            obtained = float(
+                pd.to_numeric(group["Marks Obtained"], errors="coerce")
+                .fillna(0).sum()
+            )
+            maximum = float(
+                pd.to_numeric(group["Maximum Marks"], errors="coerce")
+                .fillna(0).sum()
+            )
+            percentage = round(
+                obtained / maximum * 100, 2
+            ) if maximum else 0
+
+            row = {
+                "Exam Name": exam,
+                "Class": class_name,
+                "Section": section,
+                "Student ID": student_id,
+                "Student Name": student_name,
+                "Admission No.": admission,
+                "Total Obtained Marks": round(obtained, 2),
+                "Total Marks": round(maximum, 2),
+                "Percentage": percentage,
+                "Grade": grade_from_percentage(percentage),
+                "Subjects": int(group["Subject ID"].nunique()),
+            }
+            exam_rows.append(row)
+            student_exam_rows.append(dict(row))
+
+        for (
+            exam, class_name, section
+        ), group in detail_df.groupby(
+            ["Exam Name", "Class", "Section"],
+            dropna=False
+        ):
+            obtained = float(
+                pd.to_numeric(group["Marks Obtained"], errors="coerce")
+                .fillna(0).sum()
+            )
+            maximum = float(
+                pd.to_numeric(group["Maximum Marks"], errors="coerce")
+                .fillna(0).sum()
+            )
+            student_percentages = []
+            for _, sg in group.groupby("Student ID"):
+                sg_obtained = float(
+                    pd.to_numeric(
+                        sg["Marks Obtained"], errors="coerce"
+                    ).fillna(0).sum()
+                )
+                sg_max = float(
+                    pd.to_numeric(
+                        sg["Maximum Marks"], errors="coerce"
+                    ).fillna(0).sum()
+                )
+                student_percentages.append(
+                    sg_obtained / sg_max * 100 if sg_max else 0
+                )
+
+            class_rows.append({
+                "Exam Name": exam,
+                "Class": class_name,
+                "Section": section,
+                "Students": int(group["Student ID"].nunique()),
+                "Total Obtained Marks": round(obtained, 2),
+                "Total Marks": round(maximum, 2),
+                "Percentage": round(
+                    obtained / maximum * 100, 2
+                ) if maximum else 0,
+                "Average Student %": round(
+                    sum(student_percentages) / len(student_percentages), 2
+                ) if student_percentages else 0,
+            })
+
+    exam_df = pd.DataFrame(exam_rows)
+    class_df = pd.DataFrame(class_rows)
+    students_wise_df = pd.DataFrame(student_exam_rows)
+
+    if not exam_df.empty:
+        exam_df = exam_df.sort_values(
+            ["Exam Name", "Class", "Section", "Percentage", "Student Name"],
+            ascending=[True, True, True, False, True]
+        )
+        students_wise_df = exam_df.copy()
+
+    subject_rows = []
+    if not detail_df.empty:
+        for (
+            exam, class_name, section, subject_id, subject_name
+        ), group in detail_df.groupby(
+            [
+                "Exam Name", "Class", "Section",
+                "Subject ID", "Subject Name"
+            ],
+            dropna=False
+        ):
+            marks_series = pd.to_numeric(
+                group["Marks Obtained"], errors="coerce"
+            ).fillna(0)
+            max_series = pd.to_numeric(
+                group["Maximum Marks"], errors="coerce"
+            ).fillna(0)
+            pass_series = pd.to_numeric(
+                group["Passing Marks"], errors="coerce"
+            ).fillna(0)
+
+            subject_rows.append({
+                "Exam Name": exam,
+                "Class": class_name,
+                "Section": section,
+                "Subject ID": subject_id,
+                "Subject Name": subject_name,
+                "Students": int(group["Student ID"].nunique()),
+                "Total Obtained Marks": round(float(marks_series.sum()), 2),
+                "Total Marks": round(float(max_series.sum()), 2),
+                "Percentage": round(
+                    float(marks_series.sum())
+                    / float(max_series.sum()) * 100,
+                    2
+                ) if float(max_series.sum()) else 0,
+                "Average Marks": round(float(marks_series.mean()), 2),
+                "Highest Marks": round(float(marks_series.max()), 2),
+                "Lowest Marks": round(float(marks_series.min()), 2),
+                "Pass Count": int((marks_series >= pass_series).sum()),
+                "Fail Count": int((marks_series < pass_series).sum()),
+            })
+
+    subjects_wise_df = pd.DataFrame(subject_rows)
+
+    total_rows = []
+    if not detail_df.empty:
+        for (
+            student_id, student_name, admission, class_name, section
+        ), group in detail_df.groupby(
+            [
+                "Student ID", "Student Name", "Admission No.",
+                "Class", "Section"
+            ],
+            dropna=False
+        ):
+            obtained = float(
+                pd.to_numeric(group["Marks Obtained"], errors="coerce")
+                .fillna(0).sum()
+            )
+            maximum = float(
+                pd.to_numeric(group["Maximum Marks"], errors="coerce")
+                .fillna(0).sum()
+            )
+            percentage = round(
+                obtained / maximum * 100, 2
+            ) if maximum else 0
+
+            total_rows.append({
+                "Class": class_name,
+                "Section": section,
+                "Student ID": student_id,
+                "Student Name": student_name,
+                "Admission No.": admission,
+                "Exams": int(group["Exam Name"].nunique()),
+                "Subjects": int(group["Subject ID"].nunique()),
+                "Total Obtained Marks": round(obtained, 2),
+                "Total Marks": round(maximum, 2),
+                "Percentage": percentage,
+                "Grade": grade_from_percentage(percentage),
+            })
+
+    total_df = pd.DataFrame(total_rows)
+    if not total_df.empty:
+        total_df = total_df.sort_values(
+            ["Class", "Section", "Percentage", "Student Name"],
+            ascending=[True, True, False, True]
+        )
+
+    wb = Workbook()
+    info_ws = wb.active
+    info_ws.title = "School_Info"
+    info_ws.append(["Field", "Value"])
+    for key, value in [
+        ["School ID", str(school_id)],
+        ["School Name", school.get("name") or ""],
+        ["School Code", school.get("code") or ""],
+        ["School Address", school.get("address") or ""],
+        [
+            "Created At",
+            datetime.datetime.now(
+                datetime.timezone.utc
+            ).isoformat()
+        ],
+        [
+            "Purpose",
+            "Report Card export that can be uploaded later to restore marks and attendance."
+        ],
+        [
+            "Import Source",
+            "Report_Card_Data"
+        ],
+    ]:
+        info_ws.append([key, value])
+    for cell in info_ws[1]:
+        cell.font = Font(bold=True)
+
+    _report_excel_write_df(
+        wb.create_sheet("Report_Card_Data"),
+        detail_df
+    )
+    _report_excel_write_df(
+        wb.create_sheet("Exam_Wise"),
+        exam_df
+    )
+    _report_excel_write_df(
+        wb.create_sheet("Class_Wise"),
+        class_df
+    )
+    _report_excel_write_df(
+        wb.create_sheet("Students_Wise"),
+        students_wise_df
+    )
+    _report_excel_write_df(
+        wb.create_sheet("Subjects_Wise"),
+        subjects_wise_df
+    )
+    _report_excel_write_df(
+        wb.create_sheet("Total_All"),
+        total_df
+    )
+
+    attendance_df = pd.DataFrame([
+        {
+            "School ID": str(school_id),
+            "Student ID": str(x.get("student_id") or ""),
+            "Student Name": student_map.get(
+                str(x.get("student_id")), {}
+            ).get("name") or "",
+            "Class": student_map.get(
+                str(x.get("student_id")), {}
+            ).get("class_name") or "",
+            "Section": student_map.get(
+                str(x.get("student_id")), {}
+            ).get("section") or "",
+            "Attendance Date": x.get("attendance_date"),
+            "Present": bool(x.get("present")),
+        }
+        for x in attendance
+    ])
+    _report_excel_write_df(
+        wb.create_sheet("Attendance"),
+        attendance_df
+    )
+
+    students_df = pd.DataFrame([
+        {
+            "Student ID": str(x.get("id") or ""),
+            "Name": x.get("name") or "",
+            "Admission No.": x.get("admission_no") or "",
+            "Class": x.get("class_name") or "",
+            "Section": x.get("section") or "",
+            "Date of Birth": x.get("date_of_birth") or "",
+            "Father Name": x.get("father_name") or "",
+            "Parent Name": x.get("parent_name") or "",
+            "Remarks": x.get("remarks") or "",
+            "Active": x.get("active"),
+        }
+        for x in students
+    ])
+    _report_excel_write_df(
+        wb.create_sheet("Students"),
+        students_df
+    )
+
+    subjects_df = pd.DataFrame([
+        {
+            "Subject ID": str(x.get("id") or ""),
+            "Subject Name": x.get("subject_name") or x.get("name") or "",
+            "Code": x.get("code") or "",
+            "Class ID": str(x.get("class_id") or ""),
+            "Maximum Marks": x.get("max_marks"),
+            "Passing Marks": x.get("passing_marks"),
+            "Active": x.get("active"),
+        }
+        for x in subjects
+    ])
+    _report_excel_write_df(
+        wb.create_sheet("Subjects"),
+        subjects_df
+    )
+
+    # Highlight class toppers in Total_All.
+    if not total_df.empty:
+        total_ws = wb["Total_All"]
+        for (class_name, section), group in total_df.groupby(
+            ["Class", "Section"], dropna=False
+        ):
+            highest = float(group["Percentage"].max())
+            for _, student_row in group.iterrows():
+                if float(student_row["Percentage"]) != highest:
+                    continue
+                for excel_row in range(2, total_ws.max_row + 1):
+                    if (
+                        str(total_ws.cell(excel_row, 1).value)
+                        == str(class_name)
+                        and str(total_ws.cell(excel_row, 2).value)
+                        == str(section)
+                        and str(total_ws.cell(excel_row, 3).value)
+                        == str(student_row["Student ID"])
+                    ):
+                        for cell in total_ws[excel_row]:
+                            cell.fill = PatternFill(
+                                "solid",
+                                fgColor="90EE90"
+                            )
+                            cell.font = Font(bold=True)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.getvalue()
+
+
+def restore_report_cards_from_excel(uploaded_file, school_id):
+    """
+    Restore a Report Card export. It updates/inserts marks and, when present,
+    attendance. It never deletes existing records and never creates students
+    or subjects automatically.
+    """
+    workbook = pd.read_excel(
+        uploaded_file,
+        sheet_name=None,
+        engine="openpyxl"
+    )
+
+    info = workbook.get("School_Info")
+    if info is None or info.empty:
+        raise ValueError(
+            "This is not a valid Report Card Excel file. "
+            "The School_Info sheet is missing."
+        )
+
+    info_map = {}
+    for _, row in info.iterrows():
+        if len(row) >= 2:
+            info_map[str(row.iloc[0]).strip()] = row.iloc[1]
+
+    backup_school_id = str(
+        info_map.get("School ID") or ""
+    ).strip()
+
+    if backup_school_id and backup_school_id != str(school_id):
+        raise ValueError(
+            "This Excel belongs to another school. "
+            "Import was stopped for safety."
+        )
+
+    data = workbook.get("Report_Card_Data")
+    if data is None or data.empty:
+        raise ValueError(
+            "Report_Card_Data sheet is missing or empty."
+        )
+
+    normalized = {
+        str(c).strip().lower(): c
+        for c in data.columns
+    }
+
+    required = [
+        "student id",
+        "subject id",
+        "exam name",
+        "marks obtained"
+    ]
+    missing = [
+        x for x in required
+        if x not in normalized
+    ]
+    if missing:
+        raise ValueError(
+            "Report_Card_Data is missing: "
+            + ", ".join(missing)
+        )
+
+    students = (
+        sb.table("students")
+        .select("id,school_id")
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+    subjects = (
+        sb.table("subjects")
+        .select("id,school_id,class_id,max_marks")
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+    existing_marks = (
+        sb.table("marks")
+        .select(
+            "id,student_id,subject_id,exam_name,"
+            "marks,max_marks,class_id"
+        )
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+
+    valid_students = {
+        str(x["id"]) for x in students
+    }
+    valid_subjects = {
+        str(x["id"]): x for x in subjects
+    }
+    existing_map = {
+        (
+            str(x.get("student_id")),
+            str(x.get("subject_id")),
+            str(x.get("exam_name") or "").strip()
+        ): x
+        for x in existing_marks
+    }
+
+    marks_inserted = 0
+    marks_updated = 0
+    skipped = []
+
+    class_id_col = normalized.get("class id")
+    max_col = normalized.get("maximum marks")
+
+    for _, row in data.iterrows():
+        student_id = str(
+            row.get(normalized["student id"]) or ""
+        ).strip()
+        subject_id = str(
+            row.get(normalized["subject id"]) or ""
+        ).strip()
+        exam_name = str(
+            row.get(normalized["exam name"]) or ""
+        ).strip()
+        raw_marks = row.get(
+            normalized["marks obtained"]
+        )
+
+        if not student_id or not subject_id or not exam_name:
+            continue
+
+        if student_id not in valid_students:
+            skipped.append(
+                f"Unknown Student ID: {student_id}"
+            )
+            continue
+
+        if subject_id not in valid_subjects:
+            skipped.append(
+                f"Unknown Subject ID: {subject_id}"
+            )
+            continue
+
+        if (
+            raw_marks is None
+            or pd.isna(raw_marks)
+            or str(raw_marks).strip() == ""
+        ):
+            continue
+
+        try:
+            mark_value = float(raw_marks)
+        except Exception:
+            skipped.append(
+                f"Invalid marks: {student_id}/{subject_id}/{exam_name}"
+            )
+            continue
+
+        subject_info = valid_subjects[subject_id]
+        max_marks = subject_info.get("max_marks")
+
+        if max_col:
+            try:
+                if not pd.isna(row.get(max_col)):
+                    max_marks = float(row.get(max_col))
+            except Exception:
+                pass
+
+        if max_marks is not None:
+            try:
+                if mark_value > float(max_marks):
+                    skipped.append(
+                        f"Marks exceed maximum: "
+                        f"{student_id}/{subject_id}/{exam_name}"
+                    )
+                    continue
+            except Exception:
+                pass
+
+        if mark_value < 0:
+            skipped.append(
+                f"Negative marks: {student_id}/{subject_id}/{exam_name}"
+            )
+            continue
+
+        class_id = None
+        if class_id_col:
+            raw_class_id = row.get(class_id_col)
+            if (
+                raw_class_id is not None
+                and not pd.isna(raw_class_id)
+            ):
+                class_id = str(raw_class_id).strip() or None
+
+        if not class_id:
+            class_id = str(
+                subject_info.get("class_id") or ""
+            ).strip() or None
+
+        key = (
+            student_id,
+            subject_id,
+            exam_name
+        )
+        old = existing_map.get(key)
+
+        if old:
+            sb.table("marks").update({
+                "marks": mark_value,
+                "max_marks": max_marks,
+                "class_id": class_id or old.get("class_id")
+            }).eq(
+                "id",
+                old["id"]
+            ).execute()
+            marks_updated += 1
+        else:
+            sb.table("marks").insert({
+                "school_id": school_id,
+                "student_id": student_id,
+                "subject_id": subject_id,
+                "exam_name": exam_name,
+                "marks": mark_value,
+                "max_marks": max_marks,
+                "class_id": class_id
+            }).execute()
+            marks_inserted += 1
+
+    attendance_inserted = 0
+    attendance_updated = 0
+
+    attendance_df = workbook.get("Attendance")
+    if attendance_df is not None and not attendance_df.empty:
+        att_norm = {
+            str(c).strip().lower(): c
+            for c in attendance_df.columns
+        }
+        if (
+            "student id" in att_norm
+            and "attendance date" in att_norm
+            and "present" in att_norm
+        ):
+            try:
+                existing_attendance = (
+                    sb.table("attendance")
+                    .select(
+                        "id,student_id,attendance_date,present"
+                    )
+                    .eq("school_id", school_id)
+                    .execute()
+                    .data or []
+                )
+            except Exception:
+                existing_attendance = []
+
+            attendance_map = {
+                (
+                    str(x.get("student_id")),
+                    str(x.get("attendance_date"))
+                ): x
+                for x in existing_attendance
+            }
+
+            for _, row in attendance_df.iterrows():
+                sid = str(
+                    row.get(att_norm["student id"]) or ""
+                ).strip()
+                raw_date = row.get(
+                    att_norm["attendance date"]
+                )
+
+                if not sid or sid not in valid_students:
+                    continue
+                if raw_date is None or pd.isna(raw_date):
+                    continue
+
+                try:
+                    date_value = pd.to_datetime(
+                        raw_date
+                    ).date().isoformat()
+                except Exception:
+                    date_value = str(raw_date).split(" ")[0]
+
+                raw_present = row.get(
+                    att_norm["present"]
+                )
+                present_text = str(
+                    raw_present
+                ).strip().lower()
+                present = (
+                    raw_present is True
+                    or present_text in {
+                        "true", "1", "yes", "present"
+                    }
+                )
+
+                key = (sid, date_value)
+                old = attendance_map.get(key)
+
+                if old:
+                    sb.table("attendance").update({
+                        "present": present
+                    }).eq(
+                        "id",
+                        old["id"]
+                    ).execute()
+                    attendance_updated += 1
+                else:
+                    sb.table("attendance").insert({
+                        "school_id": school_id,
+                        "student_id": sid,
+                        "attendance_date": date_value,
+                        "present": present
+                    }).execute()
+                    attendance_inserted += 1
+
+    return {
+        "marks_inserted": marks_inserted,
+        "marks_updated": marks_updated,
+        "attendance_inserted": attendance_inserted,
+        "attendance_updated": attendance_updated,
+        "skipped": skipped,
+    }
+
+
 # =========================================================
 # REPORT CARD GENERATOR
 # =========================================================
@@ -8482,6 +9313,111 @@ def report_cards():
 
     if not school_id:
         return
+
+    # -----------------------------------------------------
+    # REPORT CARD EXCEL EXPORT / IMPORT
+    # -----------------------------------------------------
+    st.subheader("📦 Report Card Excel — Export & Import")
+    st.caption(
+        "Download a complete Report Card Excel and upload the same file later "
+        "to restore marks and attendance. The raw Report_Card_Data sheet is "
+        "used for safe re-import."
+    )
+
+    try:
+        report_excel_bytes = build_report_cards_excel(school_id)
+        report_school_name = (
+            str(school_info.get("name") if "school_info" in locals() else "School")
+            .replace("/", "_")
+            .replace("\\", "_")
+            .replace(" ", "_")
+        )
+        report_excel_stamp = datetime.datetime.now().strftime(
+            "%Y-%m-%d_%H-%M-%S"
+        )
+        report_excel_name = (
+            f"{report_school_name}_Report_Cards_Backup_"
+            f"{report_excel_stamp}.xlsx"
+        )
+
+        st.download_button(
+            "⬇️ Download Report Cards Excel",
+            data=report_excel_bytes,
+            file_name=report_excel_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key=f"download_report_cards_excel_{school_id}"
+        )
+        st.success(
+            "✅ Excel includes Exam_Wise, Class_Wise, Students_Wise, "
+            "Subjects_Wise, Total_All, Attendance and the full "
+            "Report_Card_Data import sheet."
+        )
+    except Exception as e:
+        st.error("Could not create the Report Cards Excel.")
+        st.code(str(e))
+
+    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+        uploaded_report_excel = st.file_uploader(
+            "📤 Upload a previously downloaded Report Cards Excel",
+            type=["xlsx"],
+            key=f"report_cards_excel_import_{school_id}"
+        )
+
+        if uploaded_report_excel:
+            try:
+                import_preview = pd.read_excel(
+                    uploaded_report_excel,
+                    sheet_name=None,
+                    engine="openpyxl"
+                )
+                preview_rows = []
+                for sheet_name, sheet_df in import_preview.items():
+                    preview_rows.append({
+                        "Sheet": sheet_name,
+                        "Rows": int(len(sheet_df)),
+                        "Columns": int(len(sheet_df.columns))
+                    })
+                st.dataframe(
+                    pd.DataFrame(preview_rows),
+                    hide_index=True,
+                    use_container_width=True
+                )
+
+                if st.button(
+                    "♻️ Import Report Cards Excel",
+                    type="primary",
+                    use_container_width=True,
+                    key=f"import_report_cards_excel_{school_id}"
+                ):
+                    result = restore_report_cards_from_excel(
+                        uploaded_report_excel,
+                        school_id
+                    )
+                    st.success(
+                        "✅ Report Card Excel imported successfully. "
+                        f"Marks: {result['marks_inserted']} inserted, "
+                        f"{result['marks_updated']} updated. "
+                        f"Attendance: {result['attendance_inserted']} inserted, "
+                        f"{result['attendance_updated']} updated."
+                    )
+                    if result["skipped"]:
+                        st.warning(
+                            f"{len(result['skipped'])} rows were skipped. "
+                            "The existing school records were not deleted."
+                        )
+                        for item in result["skipped"][:30]:
+                            st.caption(item)
+                    st.session_state.pop(
+                        f"report_cards_excel_import_{school_id}",
+                        None
+                    )
+                    st.rerun()
+            except Exception as e:
+                st.error("This Report Cards Excel could not be read.")
+                st.code(str(e))
+
+    st.divider()
 
     # -----------------------------------------------------
     # MARKS BACKUP / RECOVERY / WEIGHTAGE
