@@ -1727,7 +1727,7 @@ def students():
         class_filter = st.selectbox(
             "🏫 Select Class",
             ["All Classes"] + class_options,
-            key="admin_student_class_filter"
+            key=f"{role.lower()}_student_class_filter"
         )
 
         filtered_students = student_data
@@ -1747,7 +1747,7 @@ def students():
         section_filter = st.selectbox(
             "📚 Select Section",
             ["All Sections"] + section_options,
-            key="admin_student_section_filter"
+            key=f"{role.lower()}_student_section_filter"
         )
 
         if section_filter != "All Sections":
