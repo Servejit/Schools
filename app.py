@@ -9674,6 +9674,50 @@ def report_cards():
     st.header("📄 Report Card Generator")
 
     role = st.session_state.profile.get("role")
+    show_save_message("parent_report_card_permission")
+
+    if role == "Admin" and role:
+        school_id_for_parent_access = st.session_state.profile.get("school_id")
+        if school_id_for_parent_access:
+            try:
+                current_parent_report_access = (
+                    sb.table("premium_feature_access")
+                    .select("active")
+                    .eq("school_id", school_id_for_parent_access)
+                    .eq("admin_id", st.session_state.user.id)
+                    .eq("feature_key", "parent_report_cards")
+                    .maybe_single()
+                    .execute()
+                    .data
+                )
+                allow_parent_reports = st.toggle(
+                    "👨‍👩‍👧 Allow Parents to view linked children's Report Cards",
+                    value=bool(
+                        current_parent_report_access
+                        and current_parent_report_access.get("active") is True
+                    ),
+                    key=f"allow_parent_report_cards_{school_id_for_parent_access}"
+                )
+                if st.button(
+                    "💾 Save Parent Report Card Permission",
+                    use_container_width=True,
+                    key=f"save_parent_report_cards_{school_id_for_parent_access}"
+                ):
+                    sb.table("premium_feature_access").upsert(
+                        {
+                            "school_id": school_id_for_parent_access,
+                            "admin_id": st.session_state.user.id,
+                            "feature_key": "parent_report_cards",
+                            "active": bool(allow_parent_reports),
+                            "updated_at": datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat()
+                        },
+                        on_conflict="school_id,admin_id,feature_key"
+                    ).execute()
+                    mark_saved("parent_report_card_permission")
+                    st.rerun()
+        st.divider()
 
     if role not in [
         "SuperAdmin",
@@ -10803,6 +10847,291 @@ def report_cards():
                 use_container_width=True
             )
 
+
+
+def parent_report_cards_enabled(school_id):
+    """Check whether Admin has enabled Report Cards for Parents."""
+    if not school_id:
+        return False
+    try:
+        result = (
+            sb.rpc(
+                "parent_report_cards_enabled",
+                {"p_school_id": school_id}
+            )
+            .execute()
+        )
+        data = result.data
+        if isinstance(data, bool):
+            return data
+        if isinstance(data, list) and data:
+            return bool(data[0])
+        if isinstance(data, dict):
+            return bool(
+                data.get("parent_report_cards_enabled")
+                or data.get("enabled")
+                or data.get("result")
+            )
+    except Exception:
+        return False
+    return False
+
+
+def parent_report_cards_view(school_id, parent_user_id):
+    """Show report cards only for students linked to this Parent."""
+    st.header("📄 My Child's Report Cards")
+
+    try:
+        links = (
+            sb.table("parent_student_links")
+            .select("student_id")
+            .eq("parent_id", str(parent_user_id))
+            .execute()
+            .data or []
+        )
+        linked_ids = [
+            str(x.get("student_id"))
+            for x in links
+            if x.get("student_id")
+        ]
+    except Exception:
+        linked_ids = []
+
+    if not linked_ids:
+        st.info("No child is linked to this Parent account yet.")
+        return
+
+    try:
+        students = (
+            sb.table("students")
+            .select(
+                "id,school_id,name,admission_no,class_name,section,"
+                "date_of_birth,father_name,parent_name,active"
+            )
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .in_("id", linked_ids)
+            .order("name")
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error("Could not load your linked child records.")
+        st.code(str(e))
+        return
+
+    if not students:
+        st.info("No active linked child records were found.")
+        return
+
+    exams = get_exam_assessments(school_id)
+    exam_names = [
+        str(x.get("name") or "").strip()
+        for x in exams if x.get("name")
+    ]
+    if not exam_names:
+        st.info("No Exam / Assessment is available yet.")
+        return
+
+    student_options = {
+        (
+            f"{s.get('name') or 'Student'} | "
+            f"Class {s.get('class_name') or '-'} | "
+            f"Section {s.get('section') or '-'} | "
+            f"Admission {s.get('admission_no') or '-'}"
+        ): s
+        for s in students
+    }
+
+    selected_label = st.selectbox(
+        "🎓 Child",
+        list(student_options.keys()),
+        key="parent_report_card_child"
+    )
+    selected_student = student_options[selected_label]
+
+    exam_name = st.selectbox(
+        "📝 Exam / Assessment",
+        exam_names,
+        key="parent_report_card_exam"
+    )
+
+    try:
+        templates = (
+            sb.table("print_templates")
+            .select(
+                "id,name,template_name,page_size,orientation,"
+                "storage_path,file_path,file_type,config_json,active"
+            )
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .order("created_at", desc=True)
+            .execute()
+            .data or []
+        )
+        report_templates = [
+            t for t in templates
+            if get_template_config(t).get("template_type") == "Report Card"
+        ]
+    except Exception as e:
+        st.error("Could not load the school's Report Card template.")
+        st.code(str(e))
+        return
+
+    if not report_templates:
+        st.warning("No active Report Card template is available.")
+        return
+
+    template = report_templates[0]
+    template_path = template.get("storage_path") or template.get("file_path")
+    if not template_path:
+        st.warning("The active Report Card template has no storage path.")
+        return
+
+    try:
+        template_bytes = sb.storage.from_("school-assets").download(
+            template_path
+        )
+    except Exception as e:
+        st.error("Could not load the Report Card template.")
+        st.code(str(e))
+        return
+
+    try:
+        school_info = (
+            sb.table("schools")
+            .select("id,name,code,address")
+            .eq("id", school_id)
+            .maybe_single()
+            .execute()
+            .data or {}
+        )
+        subjects = (
+            sb.table("subjects")
+            .select(
+                "id,school_id,class_id,name,subject_name,"
+                "code,max_marks,passing_marks,active"
+            )
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .order("subject_name")
+            .execute()
+            .data or []
+        )
+        marks = (
+            sb.table("marks")
+            .select(
+                "id,student_id,subject_id,exam_name,marks,max_marks,class_id"
+            )
+            .eq("school_id", school_id)
+            .eq("student_id", str(selected_student["id"]))
+            .eq("exam_name", exam_name)
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error("Could not load marks for this report card.")
+        st.code(str(e))
+        return
+
+    if not marks:
+        st.info(
+            f"No marks found for {selected_student.get('name') or 'this student'} "
+            f"for {exam_name}."
+        )
+        return
+
+    marks_by_subject = {
+        str(x.get("subject_id")): x for x in marks
+        if x.get("subject_id") is not None
+    }
+    marked_class_ids = {
+        str(x.get("class_id")) for x in marks
+        if x.get("class_id") is not None
+    }
+
+    subject_data = []
+    for subject in subjects:
+        sid = str(subject.get("id"))
+        if marked_class_ids:
+            if str(subject.get("class_id")) not in marked_class_ids:
+                continue
+        elif sid not in marks_by_subject:
+            continue
+        subject_data.append(subject)
+
+    marks_rows = []
+    for subject in subject_data:
+        row = marks_by_subject.get(str(subject.get("id")))
+        if row:
+            combined = dict(row)
+        else:
+            combined = {
+                "student_id": selected_student["id"],
+                "subject_id": subject.get("id"),
+                "exam_name": exam_name,
+                "marks": None,
+                "max_marks": subject.get("max_marks"),
+                "class_id": subject.get("class_id")
+            }
+        combined["subject_name"] = (
+            subject.get("subject_name")
+            or subject.get("name")
+            or "Subject"
+        )
+        combined["passing_marks"] = subject.get("passing_marks")
+        marks_rows.append(combined)
+
+    if not marks_rows:
+        st.info("No subject marks are available for this report card.")
+        return
+
+    total_attendance, present_days = attendance_summary(
+        selected_student["id"], school_id
+    )
+    orientation = template.get("orientation") or "Portrait"
+    file_type = (template.get("file_type") or "pdf").lower()
+    logo_path = school_logo_from_template(template)
+    logo_size = school_logo_size_from_template(template)
+
+    if st.button(
+        "📄 Generate & View Report Card",
+        type="primary",
+        use_container_width=True,
+        key="parent_generate_report_card"
+    ):
+        try:
+            pdf_bytes = make_report_card_pdf(
+                template_bytes=template_bytes,
+                template_type="Report Card",
+                orientation=orientation,
+                student=selected_student,
+                school_info=school_info,
+                subjects=subject_data,
+                marks_rows=marks_rows,
+                exam_name=exam_name,
+                file_type=file_type,
+                total_attendance=total_attendance,
+                present_days=present_days,
+                school_logo_path=logo_path,
+                school_logo_size=logo_size
+            )
+
+            st.success("✅ Report card generated successfully.")
+            st.download_button(
+                "⬇️ Download Report Card PDF",
+                data=pdf_bytes,
+                file_name=(
+                    f"{selected_student.get('name') or 'Student'}_"
+                    f"{exam_name}_ReportCard.pdf"
+                ).replace("/", "_").replace("\\", "_"),
+                mime="application/pdf",
+                use_container_width=True,
+                key="parent_download_report_card"
+            )
+        except Exception as e:
+            st.error("Could not generate the Report Card.")
+            st.code(str(e))
 
 # =========================================================
 # REPORTS
@@ -13095,11 +13424,15 @@ def dashboard():
 
         st.title("👨‍👩‍👧 Parent Dashboard")
 
-        # Parent Premium is school-wide. It is determined only by the
-        # Parent account's school, not by parent_student_links.
-        # Therefore every Parent in the school can see the same Premium
-        # school-wide lists, even when no student is linked to that Parent.
         school_id = profile.get("school_id")
+
+        if school_id and parent_report_cards_enabled(school_id):
+            parent_report_cards_view(
+                school_id,
+                st.session_state.user.id
+            )
+
+            st.divider()
 
         if school_id and subject_wise_parent_student_premium_enabled(school_id):
             # All active students of this school can appear in the
