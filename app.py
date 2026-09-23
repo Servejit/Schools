@@ -12655,6 +12655,8 @@ def dashboard():
 
         st.title("🎓 Student Dashboard")
 
+        student = None
+
         try:
 
             student = (
