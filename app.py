@@ -11161,15 +11161,7 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 if not filtered:
                     continue
                 shown = True
-                if rows:
-                top_student_name = str(rows[0].get("Student Name") or "").strip()
-                if top_student_name:
-                    st.markdown(
-                        f'<div class="premium-gold-name">✨ {top_student_name}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-            st.markdown(f"#### 📚 {subject_name}")
+                st.markdown(f"#### 📚 {subject_name}")
                 st.dataframe(
                     pd.DataFrame(filtered),
                     hide_index=True,
@@ -11207,6 +11199,11 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                     ),
                     "Percentage": f'{format_mark(row["Percentage"])}%'
                 })
+
+            st.markdown(
+                f'<div class="premium-gold-name">✨ {rows[0]["Student Name"]}</div>',
+                unsafe_allow_html=True,
+            )
 
             st.markdown(f"#### 📚 {subject_name}")
 
