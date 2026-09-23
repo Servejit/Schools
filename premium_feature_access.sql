@@ -166,9 +166,17 @@ to authenticated;
 -- =========================================================
 -- PARENT ↔ STUDENT LINKING
 -- =========================================================
--- Parent accounts are linked to students separately from
--- students.user_id. This allows one Parent to have multiple
--- children while keeping Student login independent.
+-- Admin / SuperAdmin:
+--   Can link any Parent to any student in the school.
+-- Admin+Teacher:
+--   Has Admin-level linking authority for the school.
+-- Teacher:
+--   Can link Parents only to students in classes where the
+--   teacher is the Class Teacher.
+--
+-- Premium remains completely separate:
+--   Only Admin controls Parent/Student Subject-wise Premium.
+--   Teachers cannot enable or disable Premium.
 
 create table if not exists public.parent_student_links (
     id uuid primary key default gen_random_uuid(),
@@ -198,21 +206,66 @@ on public.parent_student_links;
 drop policy if exists "parent_student_links_delete"
 on public.parent_student_links;
 
+
+-- ---------------------------------------------------------
+-- SELECT
+-- ---------------------------------------------------------
+-- Parent: own links.
+-- SuperAdmin/Admin/Admin+Teacher: school-wide links.
+-- Teacher: links for own Class Teacher classes.
+
 create policy "parent_student_links_select"
 on public.parent_student_links
 for select
 to authenticated
 using (
     parent_id = auth.uid()
+
     or exists (
         select 1
         from public.profiles p
         where p.id = auth.uid()
           and p.active = true
-          and p.role in ('Admin', 'SuperAdmin')
+          and (
+              p.role = 'SuperAdmin'
+              or (
+                  p.role in ('Admin', 'Admin+Teacher')
+                  and p.school_id = (
+                      select s.school_id
+                      from public.students s
+                      where s.id = parent_student_links.student_id
+                  )
+              )
+              or (
+                  p.role = 'Teacher'
+                  and p.school_id = (
+                      select s.school_id
+                      from public.students s
+                      where s.id = parent_student_links.student_id
+                  )
+                  and exists (
+                      select 1
+                      from public.classes c
+                      join public.students s
+                        on s.school_id = c.school_id
+                       and lower(trim(coalesce(s.class_name, ''))) =
+                           lower(trim(coalesce(c.class_name, '')))
+                       and lower(trim(coalesce(s.section, ''))) =
+                           lower(trim(coalesce(c.section, '')))
+                      where c.id = c.id
+                        and c.class_teacher_id = auth.uid()
+                        and c.active = true
+                        and s.id = parent_student_links.student_id
+                  )
+              )
+          )
     )
 );
 
+
+-- ---------------------------------------------------------
+-- INSERT
+-- ---------------------------------------------------------
 create policy "parent_student_links_insert"
 on public.parent_student_links
 for insert
@@ -220,40 +273,63 @@ to authenticated
 with check (
     exists (
         select 1
-        from public.profiles p
-        where p.id = auth.uid()
-          and p.active = true
-          and p.role in ('Admin', 'SuperAdmin')
-          and p.school_id = (
-              select s.school_id
-              from public.students s
-              where s.id = parent_student_links.student_id
+        from public.profiles parent_profile
+        join public.students s
+          on s.id = parent_student_links.student_id
+         and s.school_id = parent_profile.school_id
+        where parent_profile.id = parent_student_links.parent_id
+          and parent_profile.role = 'Parent'
+          and parent_profile.active = true
+    )
+
+    and exists (
+        select 1
+        from public.profiles actor
+        where actor.id = auth.uid()
+          and actor.active = true
+          and (
+              actor.role = 'SuperAdmin'
+
+              or (
+                  actor.role in ('Admin', 'Admin+Teacher')
+                  and actor.school_id = (
+                      select s.school_id
+                      from public.students s
+                      where s.id = parent_student_links.student_id
+                  )
+              )
+
+              or (
+                  actor.role = 'Teacher'
+                  and actor.school_id = (
+                      select s.school_id
+                      from public.students s
+                      where s.id = parent_student_links.student_id
+                  )
+                  and exists (
+                      select 1
+                      from public.classes c
+                      join public.students s
+                        on s.school_id = c.school_id
+                       and lower(trim(coalesce(s.class_name, ''))) =
+                           lower(trim(coalesce(c.class_name, '')))
+                       and lower(trim(coalesce(s.section, ''))) =
+                           lower(trim(coalesce(c.section, '')))
+                      where c.class_teacher_id = auth.uid()
+                        and c.active = true
+                        and s.id = parent_student_links.student_id
+                  )
+              )
           )
     )
 );
 
-create policy "parent_student_links_update"
-on public.parent_student_links
-for update
-to authenticated
-using (
-    exists (
-        select 1
-        from public.profiles p
-        where p.id = auth.uid()
-          and p.active = true
-          and p.role in ('Admin', 'SuperAdmin')
-    )
-)
-with check (
-    exists (
-        select 1
-        from public.profiles p
-        where p.id = auth.uid()
-          and p.active = true
-          and p.role in ('Admin', 'SuperAdmin')
-    )
-);
+
+-- ---------------------------------------------------------
+-- DELETE
+-- ---------------------------------------------------------
+-- Same authority as linking. This lets a Teacher remove a
+-- link from a student in the Teacher's own Class Teacher class.
 
 create policy "parent_student_links_delete"
 on public.parent_student_links
@@ -262,9 +338,121 @@ to authenticated
 using (
     exists (
         select 1
-        from public.profiles p
-        where p.id = auth.uid()
-          and p.active = true
-          and p.role in ('Admin', 'SuperAdmin')
+        from public.profiles actor
+        where actor.id = auth.uid()
+          and actor.active = true
+          and (
+              actor.role = 'SuperAdmin'
+
+              or (
+                  actor.role in ('Admin', 'Admin+Teacher')
+                  and actor.school_id = (
+                      select s.school_id
+                      from public.students s
+                      where s.id = parent_student_links.student_id
+                  )
+              )
+
+              or (
+                  actor.role = 'Teacher'
+                  and actor.school_id = (
+                      select s.school_id
+                      from public.students s
+                      where s.id = parent_student_links.student_id
+                  )
+                  and exists (
+                      select 1
+                      from public.classes c
+                      join public.students s
+                        on s.school_id = c.school_id
+                       and lower(trim(coalesce(s.class_name, ''))) =
+                           lower(trim(coalesce(c.class_name, '')))
+                       and lower(trim(coalesce(s.section, ''))) =
+                           lower(trim(coalesce(c.section, '')))
+                      where c.class_teacher_id = auth.uid()
+                        and c.active = true
+                        and s.id = parent_student_links.student_id
+                  )
+              )
+          )
     )
 );
+
+
+-- ---------------------------------------------------------
+-- UPDATE
+-- ---------------------------------------------------------
+-- Links are replaced by the app (delete + insert), but this
+-- policy is included for direct database updates as well.
+
+create policy "parent_student_links_update"
+on public.parent_student_links
+for update
+to authenticated
+using (
+    exists (
+        select 1
+        from public.profiles actor
+        where actor.id = auth.uid()
+          and actor.active = true
+          and (
+              actor.role = 'SuperAdmin'
+              or (
+                  actor.role in ('Admin', 'Admin+Teacher')
+                  and actor.school_id = (
+                      select s.school_id
+                      from public.students s
+                      where s.id = parent_student_links.student_id
+                  )
+              )
+              or (
+                  actor.role = 'Teacher'
+                  and actor.school_id = (
+                      select s.school_id
+                      from public.students s
+                      where s.id = parent_student_links.student_id
+                  )
+                  and exists (
+                      select 1
+                      from public.classes c
+                      join public.students s
+                        on s.school_id = c.school_id
+                       and lower(trim(coalesce(s.class_name, ''))) =
+                           lower(trim(coalesce(c.class_name, '')))
+                       and lower(trim(coalesce(s.section, ''))) =
+                           lower(trim(coalesce(c.section, '')))
+                      where c.class_teacher_id = auth.uid()
+                        and c.active = true
+                        and s.id = parent_student_links.student_id
+                  )
+              )
+          )
+    )
+)
+with check (
+    exists (
+        select 1
+        from public.profiles parent_profile
+        join public.students s
+          on s.id = parent_student_links.student_id
+         and s.school_id = parent_profile.school_id
+        where parent_profile.id = parent_student_links.parent_id
+          and parent_profile.role = 'Parent'
+          and parent_profile.active = true
+    )
+);
+
+
+-- =========================================================
+-- IMPORTANT PREMIUM RULE
+-- =========================================================
+-- DO NOT give Teachers or Admin+Teacher permission to modify
+-- premium_feature_access.
+--
+-- Premium access remains:
+-- SuperAdmin → controls Admin Premium
+-- Admin      → controls Parent/Student Subject-wise Premium
+-- Teacher    → NO Premium control
+-- Admin+Teacher → NO Premium control
+--
+-- The policies above this section enforce that rule.
