@@ -10560,80 +10560,143 @@ def premium_feature_enabled(school_id, admin_id, feature_key):
 
 
 def premium_feature_management():
-    st.header("💎 Premium Feature Management")
-    st.caption("SuperAdmin controls which Admin users can use premium features.")
+    """Manage Premium access hierarchy.
 
-    try:
-        schools_data = (
-            sb.table("schools").select("id,name,code,active")
-            .order("name").execute().data or []
+    SuperAdmin -> controls Admin Premium access.
+    Admin -> when its own Premium access is active, can allow the
+    complete Subject-wise Premium feature for Parents and Students.
+    Parents/Students never receive the general Marks Percentage Premium
+    analysis (<30/<40/<50 or full percentage analysis).
+    """
+    role = st.session_state.profile.get("role")
+    school_id = st.session_state.profile.get("school_id")
+
+    if role == "SuperAdmin":
+        st.header("💎 Premium Feature Management")
+        st.caption(
+            "SuperAdmin controls Premium access for Admin users. "
+            "Parents/Students can never receive the general Marks Percentage Premium analysis."
         )
-        admin_data = (
-            sb.table("profiles").select("id,email,full_name,school_id,role,active")
-            .eq("role", "Admin").order("full_name").execute().data or []
-        )
-    except Exception as e:
-        st.error("Could not load premium feature settings.")
-        st.code(str(e))
-        return
 
-    schools_map = {
-        f"{x.get('name') or '-'} ({x.get('code') or '-'})": x
-        for x in schools_data if x.get("active", True)
-    }
-    if not schools_map:
-        st.warning("No active schools available.")
-        return
-
-    selected_school_label = st.selectbox(
-        "🏫 School", list(schools_map.keys()), key="premium_school"
-    )
-    school_id = schools_map[selected_school_label]["id"]
-
-    school_admins = [
-        x for x in admin_data if str(x.get("school_id")) == str(school_id)
-    ]
-    if not school_admins:
-        st.info("No Admin users are assigned to this school.")
-        return
-
-    st.subheader("💎 School Academic Status")
-    st.caption("Activate or deactivate this premium feature separately for each Admin.")
-
-    for admin in school_admins:
-        admin_id = admin["id"]
         try:
-            existing = (
-                sb.table("premium_feature_access")
-                .select("id,active")
-                .eq("school_id", school_id)
-                .eq("admin_id", admin_id)
-                .eq("feature_key", "school_academic_status")
-                .maybe_single().execute().data
+            schools_data = (
+                sb.table("schools")
+                .select("id,name,code,active")
+                .order("name")
+                .execute()
+                .data or []
             )
-        except Exception:
-            existing = None
+            admin_data = (
+                sb.table("profiles")
+                .select("id,email,full_name,school_id,role,active")
+                .eq("role", "Admin")
+                .order("full_name")
+                .execute()
+                .data or []
+            )
+        except Exception as e:
+            st.error("Could not load premium feature settings.")
+            st.code(str(e))
+            return
 
-        active = bool(existing and existing.get("active") is True)
-        label = admin.get("full_name") or admin.get("email") or "Admin"
+        schools_map = {
+            f"{x.get('name') or '-'} ({x.get('code') or '-'})": x
+            for x in schools_data
+            if x.get("active", True)
+        }
+        if not schools_map:
+            st.warning("No active schools available.")
+            return
 
-        with st.container(border=True):
-            c1, c2 = st.columns([4, 1])
-            with c1:
+        selected_school_label = st.selectbox(
+            "🏫 School",
+            list(schools_map.keys()),
+            key="premium_school"
+        )
+        school_id = schools_map[selected_school_label]["id"]
+
+        school_admins = [
+            x for x in admin_data
+            if str(x.get("school_id")) == str(school_id)
+            and x.get("active", True)
+        ]
+
+        if not school_admins:
+            st.info("No active Admin users are assigned to this school.")
+            return
+
+        st.subheader("💎 Admin Premium Access")
+        st.caption(
+            "An Admin can use the complete Premium feature only when "
+            "SuperAdmin has activated it for that Admin."
+        )
+
+        for admin in school_admins:
+            admin_id = admin["id"]
+            try:
+                existing = (
+                    sb.table("premium_feature_access")
+                    .select("id,active")
+                    .eq("school_id", school_id)
+                    .eq("admin_id", admin_id)
+                    .eq("feature_key", "school_academic_status")
+                    .maybe_single()
+                    .execute()
+                    .data
+                )
+            except Exception:
+                existing = None
+
+            active = bool(existing and existing.get("active") is True)
+            label = admin.get("full_name") or admin.get("email") or "Admin"
+
+            try:
+                parent_permission = (
+                    sb.table("premium_feature_access")
+                    .select("active")
+                    .eq("school_id", school_id)
+                    .eq("admin_id", admin_id)
+                    .eq("feature_key", "subject_wise_premium_parent_student")
+                    .maybe_single()
+                    .execute()
+                    .data
+                )
+                parent_permission_active = bool(
+                    parent_permission
+                    and parent_permission.get("active") is True
+                )
+            except Exception:
+                parent_permission_active = False
+
+            with st.container(border=True):
                 st.write(f"**{label}**")
                 st.caption(admin.get("email") or "")
-            with c2:
-                st.write("ACTIVE" if active else "DEACTIVATED")
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.write(
+                        "🟢 Premium Active"
+                        if active
+                        else "🔴 Premium Not Allowed"
+                    )
+                with c2:
+                    st.write(
+                        "👨‍👩‍👧 Subject-wise Parent/Student: "
+                        + ("ALLOWED" if parent_permission_active else "NOT ALLOWED")
+                    )
+
                 if st.button(
-                    "Deactivate" if active else "Activate",
-                    key=f"premium_toggle_{school_id}_{admin_id}"
+                    "Deactivate Premium" if active else "Activate Premium",
+                    key=f"premium_toggle_{school_id}_{admin_id}",
+                    use_container_width=True
                 ):
                     try:
                         if existing:
                             (
                                 sb.table("premium_feature_access")
                                 .update({"active": not active})
-                                .eq("id", existing["id"]).execute()
+                                .eq("id", existing["id"])
+                                .execute()
                             )
                         else:
                             (
@@ -10643,14 +10706,460 @@ def premium_feature_management():
                                     "admin_id": admin_id,
                                     "feature_key": "school_academic_status",
                                     "active": True
-                                }).execute()
+                                })
+                                .execute()
                             )
+
+                        # If SuperAdmin removes the Admin's Premium access,
+                        # the downstream Parent/Student permission is also
+                        # disabled so it cannot remain active without an
+                        # active Admin Premium subscription.
+                        if active:
+                            (
+                                sb.table("premium_feature_access")
+                                .update({"active": False})
+                                .eq("school_id", school_id)
+                                .eq("admin_id", admin_id)
+                                .eq(
+                                    "feature_key",
+                                    "subject_wise_premium_parent_student"
+                                )
+                                .execute()
+                            )
+
                         mark_saved("premium_feature_setting")
                         st.success("✅ Saved successfully.")
                         st.rerun()
                     except Exception as e:
                         st.error("Could not save premium feature setting.")
                         st.code(str(e))
+
+        st.info(
+            "Parents/Students can receive only the Subject-wise Premium feature "
+            "after the Admin's own Premium access is active and the Admin permits it."
+        )
+        return
+
+    if role == "Admin":
+        if not school_id:
+            st.error("Your account is not assigned to a school.")
+            return
+
+        if not premium_feature_enabled(
+            school_id,
+            st.session_state.user.id,
+            "school_academic_status"
+        ):
+            st.error(
+                "Your Admin account does not currently have Premium access. "
+                "Only SuperAdmin can activate it."
+            )
+            return
+
+        st.header("💎 Premium Features")
+        st.subheader("👨‍👩‍👧 Parent / Student Access")
+        st.caption(
+            "Because your Admin Premium access is active, you can permit "
+            "Parents and Students to use the complete Subject-wise Premium feature."
+        )
+
+        feature_key = "subject_wise_premium_parent_student"
+        try:
+            existing = (
+                sb.table("premium_feature_access")
+                .select("id,active")
+                .eq("school_id", school_id)
+                .eq("admin_id", st.session_state.user.id)
+                .eq("feature_key", feature_key)
+                .maybe_single()
+                .execute()
+                .data
+            )
+        except Exception:
+            existing = None
+
+        current_active = bool(existing and existing.get("active") is True)
+
+        st.write(
+            "### 📚 Subject-wise Premium"
+        )
+        st.caption(
+            "Includes full Subject-wise Premium access: Topper, "
+            ">70%, >80% and >90% subject-wise analysis."
+        )
+        st.caption(
+            "Parents/Students will NOT receive the general Marks Percentage "
+            "Premium analysis such as <30%, <40%, <50%, or full percentage analysis."
+        )
+
+        new_active = st.toggle(
+            "Allow Parents and Students to view Subject-wise Premium",
+            value=current_active,
+            key=f"allow_parent_student_subjectwise_{school_id}"
+        )
+
+        if st.button(
+            "💾 Save Parent/Student Premium Permission",
+            type="primary",
+            use_container_width=True,
+            key=f"save_parent_student_premium_{school_id}"
+        ):
+            try:
+                if existing:
+                    (
+                        sb.table("premium_feature_access")
+                        .update({"active": bool(new_active)})
+                        .eq("id", existing["id"])
+                        .execute()
+                    )
+                else:
+                    (
+                        sb.table("premium_feature_access")
+                        .insert({
+                            "school_id": school_id,
+                            "admin_id": st.session_state.user.id,
+                            "feature_key": feature_key,
+                            "active": bool(new_active)
+                        })
+                        .execute()
+                    )
+
+                mark_saved(f"save_parent_student_premium_{school_id}")
+                st.success("✅ Saved successfully.")
+                st.rerun()
+            except Exception as e:
+                st.error(
+                    "Could not save Parent/Student Premium permission."
+                )
+                st.code(str(e))
+        return
+
+    st.error("Only SuperAdmin or Admin can manage Premium permissions.")
+
+
+def subject_wise_parent_student_premium_enabled(school_id):
+    """Return True only when an active Admin has both Premium and downstream permission."""
+    if not school_id:
+        return False
+
+    try:
+        admin_rows = (
+            sb.table("profiles")
+            .select("id")
+            .eq("school_id", school_id)
+            .eq("role", "Admin")
+            .eq("active", True)
+            .execute()
+            .data or []
+        )
+
+        for admin in admin_rows:
+            admin_id = admin.get("id")
+            if not admin_id:
+                continue
+
+            if not premium_feature_enabled(
+                school_id,
+                admin_id,
+                "school_academic_status"
+            ):
+                continue
+
+            permission = (
+                sb.table("premium_feature_access")
+                .select("active")
+                .eq("school_id", school_id)
+                .eq("admin_id", admin_id)
+                .eq(
+                    "feature_key",
+                    "subject_wise_premium_parent_student"
+                )
+                .maybe_single()
+                .execute()
+                .data
+            )
+
+            if permission and permission.get("active") is True:
+                return True
+    except Exception:
+        return False
+
+    return False
+
+
+def subject_wise_premium_view(school_id, student_ids, viewer_label):
+    """Full Subject-wise Premium view for permitted Parent/Student accounts.
+
+    This intentionally exposes only Subject-wise Premium:
+    - Subject toppers
+    - Students above 70%
+    - Students above 80%
+    - Students above 90%
+
+    It never exposes the general <30/<40/<50 or full Marks Percentage Premium analysis.
+    """
+    st.header("💎 Subject-wise Premium")
+    st.caption(
+        "Full Subject-wise Premium access: Topper, >70%, >80% and >90%."
+    )
+
+    if not school_id or not student_ids:
+        st.info(
+            f"No linked student record is available for this {viewer_label} account."
+        )
+        return
+
+    try:
+        students = (
+            sb.table("students")
+            .select(
+                "id,name,admission_no,class_name,section,school_id,active"
+            )
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .execute()
+            .data or []
+        )
+        allowed_students = [
+            x for x in students
+            if str(x.get("id")) in {str(v) for v in student_ids}
+        ]
+    except Exception as e:
+        st.error("Could not load linked student records.")
+        st.code(str(e))
+        return
+
+    if not allowed_students:
+        st.info("No active linked student records were found.")
+        return
+
+    class_pairs = {
+        (
+            str(x.get("class_name") or "").strip().lower(),
+            str(x.get("section") or "").strip().lower()
+        )
+        for x in allowed_students
+    }
+
+    try:
+        classes = (
+            sb.table("classes")
+            .select("id,class_name,section,academic_year,active")
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .execute()
+            .data or []
+        )
+        class_rows = [
+            x for x in classes
+            if (
+                str(x.get("class_name") or "").strip().lower(),
+                str(x.get("section") or "").strip().lower()
+            ) in class_pairs
+        ]
+    except Exception as e:
+        st.error("Could not load class information.")
+        st.code(str(e))
+        return
+
+    if not class_rows:
+        st.info("No active class is available for the linked student.")
+        return
+
+    sessions = sorted({
+        str(x.get("academic_year") or "").strip()
+        for x in class_rows
+        if str(x.get("academic_year") or "").strip()
+    })
+    if not sessions:
+        st.warning("No Academic Session is available.")
+        return
+
+    session = st.selectbox(
+        "📅 Academic Session",
+        sessions,
+        key=f"subject_premium_session_{viewer_label}"
+    )
+    session_class_rows = [
+        x for x in class_rows
+        if str(x.get("academic_year") or "").strip() == session
+    ]
+    class_ids = {str(x["id"]) for x in session_class_rows}
+
+    exam_names = [
+        str(x.get("name") or "").strip()
+        for x in get_exam_assessments(school_id)
+        if x.get("name")
+    ]
+    if not exam_names:
+        st.info("No Exam / Assessment is available yet.")
+        return
+
+    exam_name = st.selectbox(
+        "📝 Exam / Assessment",
+        exam_names,
+        key=f"subject_premium_exam_{viewer_label}"
+    )
+
+    try:
+        subjects = (
+            sb.table("subjects")
+            .select("id,class_id,subject_name,name,max_marks,active")
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .execute()
+            .data or []
+        )
+        all_students = (
+            sb.table("students")
+            .select("id,name,admission_no,class_name,section,active")
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .execute()
+            .data or []
+        )
+        marks = (
+            sb.table("marks")
+            .select(
+                "student_id,subject_id,marks,max_marks,class_id"
+            )
+            .eq("school_id", school_id)
+            .eq("exam_name", exam_name)
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error("Could not load Subject-wise Premium data.")
+        st.code(str(e))
+        return
+
+    # Subject-wise Premium is shown for the linked student's class/section(s),
+    # so the feature is useful for class-level comparison without exposing
+    # other classes.
+    visible_students = [
+        x for x in all_students
+        if (
+            str(x.get("class_name") or "").strip().lower(),
+            str(x.get("section") or "").strip().lower()
+        ) in {
+            (
+                str(cl.get("class_name") or "").strip().lower(),
+                str(cl.get("section") or "").strip().lower()
+            )
+            for cl in session_class_rows
+        }
+    ]
+    visible_subjects = [
+        x for x in subjects
+        if str(x.get("class_id")) in class_ids
+    ]
+    subject_ids = {str(x["id"]) for x in visible_subjects}
+    visible_marks = [
+        x for x in marks
+        if str(x.get("class_id")) in class_ids
+        and str(x.get("subject_id")) in subject_ids
+    ]
+
+    student_map = {str(x["id"]): x for x in visible_students}
+
+    subject_rows = {}
+    for subject in visible_subjects:
+        sid = str(subject["id"])
+        rows = []
+        for mark in visible_marks:
+            if str(mark.get("subject_id")) != sid:
+                continue
+
+            student = student_map.get(str(mark.get("student_id")))
+            if not student:
+                continue
+
+            maximum = float(
+                mark.get("max_marks")
+                or subject.get("max_marks")
+                or 100
+            )
+            obtained = float(mark.get("marks") or 0)
+            percentage = obtained * 100 / maximum if maximum else 0
+
+            rows.append({
+                "Student Name": student.get("name") or "",
+                "Admission No.": student.get("admission_no") or "",
+                "Class": student.get("class_name") or "",
+                "Section": student.get("section") or "",
+                "Marks": round(obtained, 2),
+                "Maximum": round(maximum, 2),
+                "Percentage": round(percentage, 2)
+            })
+
+        if rows:
+            subject_rows[
+                subject.get("subject_name")
+                or subject.get("name")
+                or "Subject"
+            ] = sorted(
+                rows,
+                key=lambda x: (
+                    float(x["Percentage"]),
+                    float(x["Marks"])
+                ),
+                reverse=True
+            )
+
+    if not subject_rows:
+        st.info("No Subject-wise marks are available for the selected exam.")
+        return
+
+    tab_topper, tab_70, tab_80, tab_90 = st.tabs(
+        [
+            "🏆 Topper",
+            "📈 >70%",
+            "📈 >80%",
+            "📈 >90%"
+        ]
+    )
+
+    for tab, threshold in [
+        (tab_70, 70),
+        (tab_80, 80),
+        (tab_90, 90)
+    ]:
+        with tab:
+            shown = False
+            for subject_name, rows in subject_rows.items():
+                filtered = [
+                    row for row in rows
+                    if float(row["Percentage"]) > threshold
+                ]
+                if not filtered:
+                    continue
+                shown = True
+                st.markdown(f"#### 📚 {subject_name}")
+                st.dataframe(
+                    pd.DataFrame(filtered),
+                    hide_index=True,
+                    use_container_width=True
+                )
+            if not shown:
+                st.info(f"No students are above {threshold}% in the selected subjects.")
+
+    with tab_topper:
+        for subject_name, rows in subject_rows.items():
+            if not rows:
+                continue
+            topper_percentage = float(rows[0]["Percentage"])
+            toppers = [
+                row for row in rows
+                if float(row["Percentage"]) == topper_percentage
+            ]
+            st.markdown(
+                f"#### 📚 {subject_name}"
+            )
+            st.dataframe(
+                pd.DataFrame(toppers),
+                hide_index=True,
+                use_container_width=True
+            )
 
 
 def school_academic_status(school_id):
@@ -11974,19 +12483,30 @@ def dashboard():
 
         # Admin has full access to every Teacher module and
         # also retains all Admin-only management functions.
+        admin_menu_items = [
+            "👥 Users",
+            "🎓 Students",
+            "📚 Classes & Subjects",
+            "📝 Exam / Assessment",
+            "📝 Marks",
+            "📅 Attendance",
+            "🖨️ Print Templates",
+            "📄 Report Cards",
+            "📊 Reports"
+        ]
+
+        # Premium Features is visible to Admin only when SuperAdmin
+        # has activated Premium access for this Admin.
+        if role == "Admin" and premium_feature_enabled(
+            profile.get("school_id"),
+            st.session_state.user.id,
+            "school_academic_status"
+        ):
+            admin_menu_items.append("💎 Premium Features")
+
         menu = st.radio(
             "Management",
-            [
-                "👥 Users",
-                "🎓 Students",
-                "📚 Classes & Subjects",
-                "📝 Exam / Assessment",
-                "📝 Marks",
-                "📅 Attendance",
-                "🖨️ Print Templates",
-                "📄 Report Cards",
-                "📊 Reports"
-            ],
+            admin_menu_items,
             horizontal=True,
             key="admin_dashboard_menu"
         )
@@ -12039,6 +12559,9 @@ def dashboard():
 
         elif menu == "📊 Reports":
             reports()
+
+        elif menu == "💎 Premium Features":
+            premium_feature_management()
 
         else:
             st.info(
@@ -12235,6 +12758,21 @@ def dashboard():
 
             st.code(str(e))
 
+        # Student can see Subject-wise Premium only when an active
+        # Admin has explicitly permitted it.
+        if student and subject_wise_parent_student_premium_enabled(
+            student.get("school_id")
+        ):
+            subject_wise_premium_view(
+                student.get("school_id"),
+                [student.get("id")],
+                "Student"
+            )
+        elif student:
+            st.info(
+                "💎 Subject-wise Premium is not enabled for Students by Admin."
+            )
+
     # =====================================================
     # PARENT
     # =====================================================
@@ -12243,9 +12781,73 @@ def dashboard():
 
         st.title("👨‍👩‍👧 Parent Dashboard")
 
-        st.info(
-            "Parent modules will be added next."
-        )
+        # Parent receives only the Subject-wise Premium feature when an
+        # Admin with active Premium access has explicitly permitted it.
+        # The general <30/<40/<50 and full Marks Percentage Premium
+        # analysis is never exposed to Parent.
+        school_id = profile.get("school_id")
+
+        if school_id and subject_wise_parent_student_premium_enabled(school_id):
+            current_user_id = str(st.session_state.user.id)
+            current_email = str(profile.get("email") or "").strip().lower()
+
+            try:
+                # Use * so this remains compatible with schools that already
+                # have a parent-link column under a different name.
+                parent_students = (
+                    sb.table("students")
+                    .select("*")
+                    .eq("school_id", school_id)
+                    .eq("active", True)
+                    .execute()
+                    .data or []
+                )
+            except Exception:
+                parent_students = []
+
+            linked_ids = []
+            possible_id_fields = [
+                "parent_user_id",
+                "parent_id",
+                "parent_profile_id",
+                "guardian_user_id",
+                "guardian_id"
+            ]
+            possible_email_fields = [
+                "parent_email",
+                "guardian_email"
+            ]
+
+            for row in parent_students:
+                matched = False
+                for field in possible_id_fields:
+                    if field in row and row.get(field):
+                        if str(row.get(field)) == current_user_id:
+                            matched = True
+                            break
+                if not matched:
+                    for field in possible_email_fields:
+                        if field in row and row.get(field):
+                            if str(row.get(field)).strip().lower() == current_email:
+                                matched = True
+                                break
+                if matched:
+                    linked_ids.append(row.get("id"))
+
+            if linked_ids:
+                subject_wise_premium_view(
+                    school_id,
+                    linked_ids,
+                    "Parent"
+                )
+            else:
+                st.info(
+                    "Your Parent account is not linked to a student record yet."
+                )
+        else:
+            st.info(
+                "💎 Subject-wise Premium has not been enabled for Parents by Admin."
+            )
 
     else:
 
