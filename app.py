@@ -3697,6 +3697,24 @@ def bulk_marks():
 
     st.header("📝 Bulk Marks Entry")
 
+    # Show the automatic Excel backup created after the previous successful save.
+    pending_backup = st.session_state.pop("_marks_backup_bytes", None)
+    pending_backup_name = st.session_state.pop(
+        "_marks_backup_filename",
+        None
+    )
+    if pending_backup:
+        st.success("✅ Marks were saved and a fresh Excel backup was created.")
+        st.download_button(
+            "⬇️ Download Fresh Marks Backup",
+            data=pending_backup,
+            file_name=pending_backup_name or "Marks_Backup.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key="bulk_marks_fresh_backup_download"
+        )
+        st.divider()
+
     role = st.session_state.profile.get("role")
 
     if role not in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
