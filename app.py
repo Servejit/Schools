@@ -11180,77 +11180,65 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
             st.markdown(f"#### 📚 {subject_name}")
 
-            # Top 10 leaderboard. Rank is the first column.
-            # Use a real HTML table with both the requested emoji and a
-            # CSS medal fallback, so the medal remains visible on devices
-            # whose emoji font does not render 🥇/🥈/🥉.
-            table_html = """
-            <table style="width:100%; border-collapse:collapse;">
-                <thead>
-                    <tr>
-                        <th style="padding:10px; text-align:center;">Rank</th>
-                        <th style="padding:10px; text-align:left;">Student Name</th>
-                        <th style="padding:10px; text-align:center;">Class</th>
-                        <th style="padding:10px; text-align:center;">Section</th>
-                        <th style="padding:10px; text-align:left;">Father Name</th>
-                        <th style="padding:10px; text-align:center;">Marks</th>
-                        <th style="padding:10px; text-align:center;">Percentage</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """
+            # Top 10 leaderboard with a dedicated Rank column.
+            # Use SVG images for medals. This is independent of the phone/browser
+            # emoji font and is supported by Streamlit ImageColumn.
+            import base64
+            from html import escape
 
-            for item in ranking_rows:
-                rank_number = str(item["Rank"]).split()[-1]
-
-                if rank_number == "1":
-                    medal = (
-                        '<span style="font-size:24px; font-family:'
-                        '"Noto Color Emoji","Segoe UI Emoji",sans-serif;">🥇</span> '
-                        '<span style="display:inline-flex;align-items:center;'
-                        'justify-content:center;width:28px;height:28px;'
-                        'border-radius:50%;background:#FFD700;color:#000;'
-                        'font-weight:700;">1</span>'
-                    )
-                elif rank_number == "2":
-                    medal = (
-                        '<span style="font-size:24px; font-family:'
-                        '"Noto Color Emoji","Segoe UI Emoji",sans-serif;">🥈</span> '
-                        '<span style="display:inline-flex;align-items:center;'
-                        'justify-content:center;width:28px;height:28px;'
-                        'border-radius:50%;background:#C0C0C0;color:#000;'
-                        'font-weight:700;">2</span>'
-                    )
-                elif rank_number == "3":
-                    medal = (
-                        '<span style="font-size:24px; font-family:'
-                        '"Noto Color Emoji","Segoe UI Emoji",sans-serif;">🥉</span> '
-                        '<span style="display:inline-flex;align-items:center;'
-                        'justify-content:center;width:28px;height:28px;'
-                        'border-radius:50%;background:#CD7F32;color:#fff;'
-                        'font-weight:700;">3</span>'
-                    )
+            def medal_svg(rank):
+                if rank == 1:
+                    fill = "#FFD700"
+                    text_color = "#000000"
+                elif rank == 2:
+                    fill = "#C0C0C0"
+                    text_color = "#000000"
+                elif rank == 3:
+                    fill = "#CD7F32"
+                    text_color = "#FFFFFF"
                 else:
-                    medal = f'<b>{rank_number}</b>'
+                    return ""
 
-                table_html += f"""
-                    <tr>
-                        <td style="padding:10px;text-align:center;border-bottom:1px solid #ddd;">{medal}</td>
-                        <td style="padding:10px;border-bottom:1px solid #ddd;">{item["Student Name"]}</td>
-                        <td style="padding:10px;text-align:center;border-bottom:1px solid #ddd;">{item["Class"]}</td>
-                        <td style="padding:10px;text-align:center;border-bottom:1px solid #ddd;">{item["Section"]}</td>
-                        <td style="padding:10px;border-bottom:1px solid #ddd;">{item["Father Name"]}</td>
-                        <td style="padding:10px;text-align:center;border-bottom:1px solid #ddd;">{item["Marks"]}</td>
-                        <td style="padding:10px;text-align:center;border-bottom:1px solid #ddd;">{item["Percentage"]}</td>
-                    </tr>
-                """
+                svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+                    <circle cx="36" cy="36" r="31" fill="{fill}" stroke="#666" stroke-width="2"/>
+                    <text x="36" y="45" text-anchor="middle"
+                          font-family="Arial,sans-serif" font-size="28"
+                          font-weight="700" fill="{text_color}">{rank}</text>
+                </svg>'''
+                encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+                return "data:image/svg+xml;base64," + encoded
 
-            table_html += """
-                </tbody>
-            </table>
-            """
+            display_rows = []
+            for item in ranking_rows:
+                rank_number = int(str(item["Rank"]).split()[-1])
+                display_rows.append({
+                    "Rank": medal_svg(rank_number) if rank_number <= 3 else str(rank_number),
+                    "Student Name": item["Student Name"],
+                    "Class": item["Class"],
+                    "Section": item["Section"],
+                    "Father Name": item["Father Name"],
+                    "Marks": item["Marks"],
+                    "Percentage": item["Percentage"],
+                })
 
-            st.html(table_html)
+            st.dataframe(
+                pd.DataFrame(display_rows),
+                hide_index=True,
+                use_container_width=True,
+                column_config={
+                    "Rank": st.column_config.ImageColumn(
+                        "Rank",
+                        width="small",
+                        help="🥇 1, 🥈 2, 🥉 3"
+                    ),
+                    "Student Name": st.column_config.TextColumn("Student Name"),
+                    "Class": st.column_config.TextColumn("Class"),
+                    "Section": st.column_config.TextColumn("Section"),
+                    "Father Name": st.column_config.TextColumn("Father Name"),
+                    "Marks": st.column_config.TextColumn("Marks"),
+                    "Percentage": st.column_config.TextColumn("Percentage"),
+                },
+            )
 
 def school_academic_status(school_id):
     st.subheader("💎 School Academic Status")
