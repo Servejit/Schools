@@ -3766,11 +3766,14 @@ def attendance():
 
         entries.append((sid, status == "Present", old.get("id")))
 
+    save_key = "save_attendance_button"
+    show_save_message(save_key)
     if st.button(
         "💾 Save Attendance",
         type="primary",
         use_container_width=True,
-        key="save_attendance_button"
+        key=save_key,
+        disabled=not save_enabled(save_key)
     ):
         try:
             for sid, status, old_id in entries:
@@ -3938,11 +3941,14 @@ def print_templates():
                     use_container_width=True
                 )
 
+        save_key = "upload_template_button"
+        show_save_message(save_key)
         if st.button(
             "⬆️ Upload & Save Template",
             type="primary",
             use_container_width=True,
-            key="upload_template_button"
+            key=save_key,
+            disabled=not save_enabled(save_key)
         ):
 
             if not template_name.strip():
@@ -4437,11 +4443,14 @@ def attendance():
 
         entries.append((sid, status == "Present", old.get("id")))
 
+    save_key = "save_attendance_button"
+    show_save_message(save_key)
     if st.button(
         "💾 Save Attendance",
         type="primary",
         use_container_width=True,
-        key="save_attendance_button"
+        key=save_key,
+        disabled=not save_enabled(save_key)
     ):
         try:
             for sid, status, old_id in entries:
@@ -6642,11 +6651,14 @@ def report_cards():
                 else "💾 Save School Logo"
             )
 
+            save_key = "save_report_school_logo"
+            show_save_message(save_key)
             if uploaded_logo and st.button(
                 replace_label,
                 use_container_width=True,
                 type="primary",
-                key="save_report_school_logo"
+                key=save_key,
+                disabled=not save_enabled(save_key)
             ):
                 try:
                     ext = uploaded_logo.name.split(".")[-1].lower()
@@ -7510,7 +7522,8 @@ def premium_feature_management():
                                     "active": True
                                 }).execute()
                             )
-                        st.success("Premium feature setting saved.")
+                        mark_saved("premium_feature_setting")
+                        st.success("✅ Saved successfully.")
                         st.rerun()
                     except Exception as e:
                         st.error("Could not save premium feature setting.")
