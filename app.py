@@ -11112,7 +11112,7 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
     tab_topper, tab_70, tab_80, tab_90 = st.tabs(
         [
-            "🏆 Topper",
+            "🏆 Top 10",
             "📈 >70%",
             "📈 >80%",
             "📈 >90%"
@@ -11147,16 +11147,33 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
         for subject_name, rows in subject_rows.items():
             if not rows:
                 continue
-            topper_percentage = float(rows[0]["Percentage"])
-            toppers = [
-                row for row in rows
-                if float(row["Percentage"]) == topper_percentage
-            ]
-            st.markdown(
-                f"#### 📚 {subject_name}"
-            )
+
+            # Top 10 is ranked by percentage (highest first), then marks.
+            # The first three positions receive medal symbols.
+            top_rows = rows[:10]
+            ranking_rows = []
+            for index, row in enumerate(top_rows, start=1):
+                if index == 1:
+                    rank_display = "🥇 1"
+                elif index == 2:
+                    rank_display = "🥈 2"
+                elif index == 3:
+                    rank_display = "🥉 3"
+                else:
+                    rank_display = str(index)
+
+                ranking_rows.append({
+                    "Rank": rank_display,
+                    "Student Name": row["Student Name"],
+                    "Marks": (
+                        f'{format_mark(row["Marks"])}/{format_mark(row["Maximum"])}'
+                    ),
+                    "Percentage": f'{format_mark(row["Percentage"])}%'
+                })
+
+            st.markdown(f"#### 📚 {subject_name}")
             st.dataframe(
-                pd.DataFrame(toppers),
+                pd.DataFrame(ranking_rows),
                 hide_index=True,
                 use_container_width=True
             )
