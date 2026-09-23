@@ -174,3 +174,57 @@ using (
     teacher_id = (select auth.uid())
 );
 
+-- Admin and Admin+Teacher can see all notices in their school.
+drop policy if exists "admins_select_school_notices"
+on public.school_notices;
+
+create policy "admins_select_school_notices"
+on public.school_notices
+for select
+to authenticated
+using (
+    exists (
+        select 1
+        from public.profiles p
+        where p.id = (select auth.uid())
+          and p.school_id = school_notices.school_id
+          and p.role in ('Admin', 'Admin+Teacher')
+          and p.active = true
+    )
+    or exists (
+        select 1
+        from public.profiles p
+        where p.id = (select auth.uid())
+          and p.role = 'SuperAdmin'
+          and p.active = true
+    )
+);
+
+-- Admin/Admin+Teacher can delete any notice in their school.
+-- Teacher can delete only notices sent by themselves.
+drop policy if exists "staff_delete_school_notices"
+on public.school_notices;
+
+create policy "staff_delete_school_notices"
+on public.school_notices
+for delete
+to authenticated
+using (
+    teacher_id = (select auth.uid())
+    or exists (
+        select 1
+        from public.profiles p
+        where p.id = (select auth.uid())
+          and p.school_id = school_notices.school_id
+          and p.role in ('Admin', 'Admin+Teacher')
+          and p.active = true
+    )
+    or exists (
+        select 1
+        from public.profiles p
+        where p.id = (select auth.uid())
+          and p.role = 'SuperAdmin'
+          and p.active = true
+    )
+);
+
