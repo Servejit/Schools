@@ -44,7 +44,7 @@ as $$
             from public.profiles p
             where p.id = (select auth.uid())
               and p.school_id = p_school_id
-              and p.role = 'Admin+Teacher'
+              and p.role in ('Admin', 'Admin+Teacher')
               and p.active = true
         )
         or exists (
