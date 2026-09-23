@@ -14,11 +14,12 @@ from openpyxl.styles import PatternFill, Font, Alignment
 try:
     from google.oauth2 import service_account
     from googleapiclient.discovery import build as google_build
-    from googleapiclient.http import MediaIoBaseUpload
+    from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 except Exception:
     service_account = None
     google_build = None
     MediaIoBaseUpload = None
+    MediaIoBaseDownload = None
 
 from PIL import Image
 from supabase import create_client
@@ -7034,11 +7035,27 @@ def get_google_services():
     )
 
 
-def sync_school_marks_to_google(school_id):
-    """Create/update one Google Sheet per school and save a dated XLSX backup in Drive."""
-    sheets_service, drive_service = get_google_services()
+def _google_drive_download_bytes(drive_service, file_id, mime_type=None):
+    """Download an XLSX or export a Google Sheet as XLSX."""
+    buffer = io.BytesIO()
+    if mime_type:
+        request = drive_service.files().export_media(
+            fileId=file_id,
+            mimeType=mime_type
+        )
+    else:
+        request = drive_service.files().get_media(fileId=file_id)
 
-    school = (
+    downloader = MediaIoBaseDownload(buffer, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def _google_school_name(school_id):
+    row = (
         sb.table("schools")
         .select("id,name,code")
         .eq("id", school_id)
@@ -7046,11 +7063,72 @@ def sync_school_marks_to_google(school_id):
         .execute()
         .data
     ) or {}
+    return str(row.get("name") or "School").strip()
 
-    school_name = str(school.get("name") or "School").strip()
+
+def _share_drive_file(drive_service, file_id, email, role="reader"):
+    try:
+        drive_service.permissions().create(
+            fileId=file_id,
+            body={
+                "type": "user",
+                "role": role,
+                "emailAddress": email
+            },
+            sendNotificationEmail=False
+        ).execute()
+    except Exception:
+        # Existing permission / non-Google account should not stop backup.
+        pass
+
+
+def _google_target_emails(school_id):
+    """Return only users who are allowed to access this school's files."""
+    role = st.session_state.profile.get("role")
+    current_email = str(
+        st.session_state.profile.get("email") or ""
+    ).strip()
+
+    profiles = (
+        sb.table("profiles")
+        .select("email,role,school_id,active")
+        .execute()
+        .data or []
+    )
+
+    emails = set()
+    for profile in profiles:
+        if not bool(profile.get("active", True)):
+            continue
+        email = str(profile.get("email") or "").strip()
+        p_role = profile.get("role")
+        same_school = str(profile.get("school_id")) == str(school_id)
+
+        if not email:
+            continue
+
+        if p_role == "SuperAdmin":
+            emails.add(email)
+        elif same_school and p_role in ["Admin", "Admin+Teacher"]:
+            emails.add(email)
+
+    # Always include the current user when they are an allowed school role.
+    if current_email and role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+        if role == "SuperAdmin" or str(
+            st.session_state.profile.get("school_id")
+        ) == str(school_id):
+            emails.add(current_email)
+
+    return emails
+
+
+def sync_school_marks_to_google(school_id):
+    """Create/update a school Google Sheet and dated XLSX backup in Drive."""
+    sheets_service, drive_service = get_google_services()
+
+    school_name = _google_school_name(school_id)
     safe_name = (
-        school_name
-        .replace("'", "")
+        school_name.replace("'", "")
         .replace("/", "_")
         .replace("\\", "_")
     )
@@ -7087,7 +7165,6 @@ def sync_school_marks_to_google(school_id):
         )
         spreadsheet_id = created["spreadsheetId"]
 
-    # Build the same source-of-truth backup that is available as XLSX.
     backup_bytes = build_marks_backup_workbook(school_id)
     workbook = pd.read_excel(
         io.BytesIO(backup_bytes),
@@ -7133,7 +7210,6 @@ def sync_school_marks_to_google(school_id):
                     clean.append(value)
             values.append(clean)
 
-        # Backup_Info is stored from the Excel workbook as two columns.
         if sheet_name == "Backup_Info":
             values = [
                 [str(x) if not pd.isna(x) else "" for x in row]
@@ -7162,14 +7238,13 @@ def sync_school_marks_to_google(school_id):
             .execute()
         )
 
-    # Datewise synchronization history.
     log_name = "Backup_Log"
     if log_name not in existing_sheets:
         sheets_service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id,
             body={
                 "requests": [
-                    {"addSheet": {"properties": {"title": log_name}}}
+                    {"addSheet": {"properties": {"title": log_name}}
                 ]
             }
         ).execute()
@@ -7194,7 +7269,6 @@ def sync_school_marks_to_google(school_id):
         .execute()
     )
 
-    # Save the actual dated XLSX file in Drive as an immutable backup copy.
     backup_stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     xlsx_name = f"{safe_name}_Marks_Backup_{backup_stamp}.xlsx"
 
@@ -7213,50 +7287,101 @@ def sync_school_marks_to_google(school_id):
         .execute()
     )
 
-    # Share the school's Google Sheet with Admin/Admin+Teacher users and
-    # all SuperAdmins. Google Drive permissions are controlled by Google,
-    # not by the Streamlit role itself.
-    profiles = (
-        sb.table("profiles")
-        .select("email,role,school_id,active")
-        .execute()
-        .data or []
-    )
-    target_emails = set()
-    for profile in profiles:
-        email = str(profile.get("email") or "").strip()
-        role = profile.get("role")
-        same_school = str(profile.get("school_id")) == str(school_id)
-        if email and (
-            role == "SuperAdmin"
-            or (same_school and role in ["Admin", "Admin+Teacher"])
-        ):
-            target_emails.add(email)
-
+    # School Admin/Admin+Teacher = VIEW ONLY.
+    # SuperAdmin = VIEW ONLY across all schools.
+    target_emails = _google_target_emails(school_id)
     for email in sorted(target_emails):
-        try:
-            drive_service.permissions().create(
-                fileId=spreadsheet_id,
-                body={
-                    "type": "user",
-                    "role": "writer",
-                    "emailAddress": email
-                },
-                sendNotificationEmail=False
-            ).execute()
-        except Exception:
-            # Existing permission or a non-Google/non-shareable account
-            # should not prevent the backup from being written.
-            pass
+        _share_drive_file(drive_service, spreadsheet_id, email, "reader")
+        _share_drive_file(drive_service, drive_file.get("id"), email, "reader")
 
     return {
         "spreadsheet_id": spreadsheet_id,
-        "spreadsheet_url": (
-            f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit"
-        ),
+        "spreadsheet_url": f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit",
         "xlsx_file_id": drive_file.get("id"),
         "xlsx_name": xlsx_name
     }
+
+
+def list_google_school_backups():
+    """List Google Sheets and XLSX backups visible to the current role."""
+    _, drive_service = get_google_services()
+    role = st.session_state.profile.get("role")
+    current_school_id = st.session_state.profile.get("school_id")
+
+    if role == "SuperAdmin":
+        school_rows = (
+            sb.table("schools")
+            .select("id,name,code")
+            .order("name")
+            .execute()
+            .data or []
+        )
+    elif role in ["Admin", "Admin+Teacher"]:
+        school_rows = (
+            sb.table("schools")
+            .select("id,name,code")
+            .eq("id", current_school_id)
+            .execute()
+            .data or []
+        )
+    else:
+        return []
+
+    results = []
+    for school in school_rows:
+        school_id = str(school.get("id"))
+        school_name = str(school.get("name") or "School").strip()
+        safe_name = (
+            school_name.replace("'", "")
+            .replace("/", "_")
+            .replace("\\", "_")
+        )
+        spreadsheet_title = f"{safe_name} - Marks Backup"
+        q_name = spreadsheet_title.replace("\\", "\\\\").replace("'", "\\'")
+
+        spreadsheets = (
+            drive_service.files()
+            .list(
+                q=(
+                    f"name = '{q_name}' and "
+                    "mimeType = 'application/vnd.google-apps.spreadsheet' and "
+                    "trashed = false"
+                ),
+                spaces="drive",
+                fields="files(id,name,webViewLink,modifiedTime)",
+                orderBy="modifiedTime desc",
+                pageSize=10
+            )
+            .execute()
+            .get("files", [])
+        )
+
+        xlsx_files = (
+            drive_service.files()
+            .list(
+                q=(
+                    f"name contains '{safe_name}_Marks_Backup_' and "
+                    "mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' and "
+                    "trashed = false"
+                ),
+                spaces="drive",
+                fields="files(id,name,webViewLink,modifiedTime)",
+                orderBy="modifiedTime desc",
+                pageSize=50
+            )
+            .execute()
+            .get("files", [])
+        )
+
+        results.append({
+            "school_id": school_id,
+            "school_name": school_name,
+            "school_code": school.get("code") or "",
+            "sheet": spreadsheets[0] if spreadsheets else None,
+            "xlsx": xlsx_files
+        })
+
+    return results
 
 
 def google_marks_backup_section(school_id):
@@ -7265,18 +7390,24 @@ def google_marks_backup_section(school_id):
         return
 
     st.markdown("### ☁️ Google Sheets / Google Drive Backup")
-    st.caption(
-        "One Google Sheet is maintained per school. A dated XLSX copy is also saved "
-        "to Google Drive. The app remains the official marks source."
-    )
+    if role == "SuperAdmin":
+        st.caption(
+            "SuperAdmin can view and download Google Excel backups for every school."
+        )
+    else:
+        st.caption(
+            "You can view and download only your own school's Google Excel backups. "
+            "Google files are view-only from the school account."
+        )
 
     if not st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
         st.info(
-            "Google backup is ready in the app, but Google credentials are not "
-            "configured yet. Add GOOGLE_SERVICE_ACCOUNT_JSON to Streamlit Secrets."
+            "Add GOOGLE_SERVICE_ACCOUNT_JSON to Streamlit Secrets to enable Google Drive."
         )
         return
 
+    # Sync only the currently selected school. The created Google files are
+    # immediately shared as VIEW-ONLY with the correct school users and all SuperAdmins.
     if st.button(
         "☁️ Sync This School to Google Sheets + Drive",
         use_container_width=True,
@@ -7284,16 +7415,68 @@ def google_marks_backup_section(school_id):
     ):
         try:
             result = sync_school_marks_to_google(school_id)
-            st.success("✅ Google Sheets and dated Drive backup updated.")
+            st.success("✅ Google Excel backup updated and shared.")
             st.markdown(
-                f"[Open School Google Sheet]({result['spreadsheet_url']})"
-            )
-            st.caption(
-                f"Dated Excel backup: {result['xlsx_name']}"
+                f"[👁️ View Google Sheet]({result['spreadsheet_url']})"
             )
         except Exception as e:
             st.error("Google backup could not be completed.")
             st.code(str(e))
+
+    try:
+        backup_groups = list_google_school_backups()
+    except Exception as e:
+        st.error("Google Drive files could not be loaded.")
+        st.code(str(e))
+        return
+
+    if not backup_groups:
+        st.info("No Google Excel backup is available yet.")
+        return
+
+    for group in backup_groups:
+        st.markdown(f"#### 🏫 {group['school_name']}")
+        sheet = group.get("sheet")
+        if sheet:
+            sheet_id = sheet.get("id")
+            st.markdown(
+                f"[👁️ View Google Excel]({sheet.get('webViewLink') or ('https://docs.google.com/spreadsheets/d/' + sheet_id + '/edit')})"
+            )
+            try:
+                sheet_bytes = _google_drive_download_bytes(
+                    get_google_services()[1],
+                    sheet_id,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                st.download_button(
+                    "⬇️ Download Current Google Excel",
+                    data=sheet_bytes,
+                    file_name=f"{group['school_name']}_Marks_Backup.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"download_google_sheet_{group['school_id']}"
+                )
+            except Exception as e:
+                st.warning(f"Current Google Excel download unavailable: {e}")
+
+        for file_info in group.get("xlsx", [])[:10]:
+            file_id = file_info.get("id")
+            st.markdown(
+                f"[📁 View Drive XLSX: {file_info.get('name')}]({file_info.get('webViewLink') or ('https://drive.google.com/file/d/' + file_id + '/view')})"
+            )
+            try:
+                xlsx_bytes = _google_drive_download_bytes(
+                    get_google_services()[1],
+                    file_id
+                )
+                st.download_button(
+                    "⬇️ Download dated XLSX",
+                    data=xlsx_bytes,
+                    file_name=file_info.get("name") or "Marks_Backup.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"download_google_xlsx_{file_id}"
+                )
+            except Exception as e:
+                st.warning(f"Download unavailable: {e}")
 
 
 # =========================================================
