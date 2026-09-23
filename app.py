@@ -2177,12 +2177,16 @@ def students():
 
     try:
 
-        student_users = (
+        student_users_query = (
             sb.table("profiles")
             .select("id,email,full_name")
             .eq("role", "Student")
             .eq("school_id", school_id)
             .eq("active", True)
+        )
+
+        student_users = (
+            student_users_query
             .order("full_name")
             .execute()
             .data or []
@@ -2191,6 +2195,42 @@ def students():
     except Exception:
 
         student_users = []
+
+    # Class Teachers may link Student login accounts only for students
+    # belonging to their assigned Class Teacher class(es). Admin roles retain
+    # school-wide access. Subject-only teachers do not get this control.
+    if role == "Teacher" and assigned_class_keys:
+        try:
+            existing_students_for_teacher = (
+                sb.table("students")
+                .select("user_id,class_name,section")
+                .eq("school_id", school_id)
+                .eq("active", True)
+                .execute()
+                .data or []
+            )
+            allowed_student_user_ids = {
+                str(row.get("user_id"))
+                for row in existing_students_for_teacher
+                if row.get("user_id") and (
+                    str(row.get("class_name") or "").strip().lower(),
+                    str(row.get("section") or "").strip().lower()
+                ) in assigned_class_keys
+            }
+            # Keep unlinked accounts available only when they will be selected
+            # from a student row in the Class Teacher's assigned class.
+            # Existing linked accounts outside the assigned class are hidden.
+            linked_outside_ids = {
+                str(row.get("user_id"))
+                for row in existing_students_for_teacher
+                if row.get("user_id") and str(row.get("user_id")) not in allowed_student_user_ids
+            }
+            student_users = [
+                user for user in student_users
+                if str(user.get("id")) not in linked_outside_ids
+            ]
+        except Exception:
+            pass
 
     user_options = {"Not linked": None}
 
