@@ -13152,6 +13152,9 @@ def class_teacher_notices(profile):
         return
 
     show_save_message("class_teacher_notice")
+    notice_sent_message = st.session_state.pop("_notice_sent_message", None)
+    if notice_sent_message:
+        st.success("✅ " + notice_sent_message)
 
     st.subheader("📢 Send Notice to Parents & Students")
     st.caption(
@@ -13253,9 +13256,8 @@ def class_teacher_notices(profile):
             ).execute()
 
             mark_saved("class_teacher_notice")
-            st.success(
-                f"✅ Notice sent successfully to "
-                f"{len(notice_rows)} class"
+            st.session_state["_notice_sent_message"] = (
+                f"Notice Sent Successfully to {len(notice_rows)} class"
                 f"{'es' if len(notice_rows) != 1 else ''}."
             )
             st.rerun()
