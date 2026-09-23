@@ -13403,6 +13403,7 @@ def dashboard():
             "📝 Exam / Assessment",
             "📝 Marks",
             "📅 Attendance",
+            "📢 Notices",
             "🖨️ Print Templates",
             "📄 Report Cards",
             "📊 Reports"
@@ -13464,6 +13465,9 @@ def dashboard():
 
         elif menu == "📅 Attendance":
             attendance()
+
+        elif menu == "📢 Notices":
+            class_teacher_notices(profile)
 
         elif menu == "🖨️ Print Templates":
             print_templates()
