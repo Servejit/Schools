@@ -11382,6 +11382,17 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
         st.info("No Subject-wise marks are available for the selected exam.")
         return
 
+    # Use the same subject-wise row colouring as the Admin view.
+    # Each subject gets its own light background colour.
+    subject_palette = [
+        "#E3F2FD", "#E8F5E9", "#FFF3E0", "#F3E5F5", "#FFFDE7",
+        "#E0F7FA", "#FBE9E7", "#E8EAF6", "#F1F8E9", "#FCE4EC"
+    ]
+    subject_colors = {
+        subject_name: subject_palette[idx % len(subject_palette)]
+        for idx, subject_name in enumerate(subject_rows.keys())
+    }
+
     tab_topper, tab_70, tab_80, tab_90 = st.tabs(
         [
             "🏆 Top 10",
@@ -11407,8 +11418,12 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                     continue
                 shown = True
                 st.markdown(f"#### 📚 {subject_name}")
+                filtered_df = pd.DataFrame(filtered)
+                bg = subject_colors.get(subject_name, "#E3F2FD")
                 st.dataframe(
-                    pd.DataFrame(filtered),
+                    filtered_df.style.map(
+                        lambda _: f"background-color: {bg}"
+                    ),
                     hide_index=True,
                     use_container_width=True
                 )
@@ -11444,8 +11459,12 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 })
 
             st.markdown(f"#### 📚 {subject_name}")
+            display_df = pd.DataFrame(display_rows)
+            bg = subject_colors.get(subject_name, "#E3F2FD")
             st.dataframe(
-                pd.DataFrame(display_rows),
+                display_df.style.map(
+                    lambda _: f"background-color: {bg}"
+                ),
                 hide_index=True,
                 use_container_width=True,
             )
