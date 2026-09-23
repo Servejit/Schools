@@ -13071,20 +13071,46 @@ def _notice_html(message):
 
 
 def show_dashboard_notices(school_id, title="📢 Notices"):
-    """Show notices allowed for the currently logged-in Parent/Student."""
+    """Show notices for the current Parent/Student dashboard."""
     if not school_id:
         return
 
+    notice_rows = []
+
     try:
-        notice_rows = (
-            sb.table("school_notices")
-            .select("id,notice_date,message,created_at")
-            .eq("school_id", school_id)
-            .order("notice_date", desc=True)
-            .order("created_at", desc=True)
-            .execute()
-            .data or []
-        )
+        # Students use a SECURITY DEFINER RPC so their notices are based
+        # directly on their linked Student record and class, rather than
+        # depending on the normal school_notices SELECT RLS path.
+        current_role = ""
+        try:
+            current_role = str(st.session_state.get("profile", {}).get("role") or "")
+        except Exception:
+            current_role = ""
+
+        if current_role == "Student":
+            rpc_response = sb.rpc(
+                "get_student_notices",
+                {"p_school_id": school_id}
+            ).execute()
+            notice_rows = (
+                getattr(rpc_response, "data", None)
+                if rpc_response is not None
+                else None
+            ) or []
+        else:
+            response = (
+                sb.table("school_notices")
+                .select("id,notice_date,message,created_at")
+                .eq("school_id", school_id)
+                .order("notice_date", desc=True)
+                .order("created_at", desc=True)
+                .execute()
+            )
+            notice_rows = (
+                getattr(response, "data", None)
+                if response is not None
+                else None
+            ) or []
     except Exception:
         notice_rows = []
 
