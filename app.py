@@ -13048,17 +13048,22 @@ def dashboard():
 
             st.code(str(e))
 
-        # Student can see Subject-wise Premium only when an active
-        # Admin has explicitly permitted it.
-        if student and subject_wise_parent_student_premium_enabled(
-            student.get("school_id")
+        # Subject-wise Premium is school-wide. It does not depend on
+        # this Student being linked to a particular student record.
+        student_school_id = (
+            (student or {}).get("school_id")
+            or profile.get("school_id")
+        )
+
+        if student_school_id and subject_wise_parent_student_premium_enabled(
+            student_school_id
         ):
             subject_wise_premium_view(
-                student.get("school_id"),
-                [student.get("id")],
+                student_school_id,
+                [],
                 "Student"
             )
-        elif student:
+        elif student_school_id:
             st.info(
                 "💎 Subject-wise Premium is not enabled for Students by Admin."
             )
@@ -13071,52 +13076,18 @@ def dashboard():
 
         st.title("👨‍👩‍👧 Parent Dashboard")
 
-        # Parent Premium is school-wide. The linked student is used only
-        # to identify the correct school; topper students do NOT need to
-        # belong to this Parent.
-        current_user_id = str(st.session_state.user.id)
-        linked_ids = []
-        linked_school_id = None
-
-        try:
-            parent_links = (
-                sb.table("parent_student_links")
-                .select("student_id")
-                .eq("parent_id", current_user_id)
-                .execute()
-                .data or []
-            )
-            linked_ids = [
-                row.get("student_id")
-                for row in parent_links
-                if row.get("student_id")
-            ]
-
-            # Always prefer the school of the linked student over a possibly
-            # stale/missing school_id in the Parent profile.
-            if linked_ids:
-                linked_student = (
-                    sb.table("students")
-                    .select("id,school_id")
-                    .eq("id", str(linked_ids[0]))
-                    .maybe_single()
-                    .execute()
-                    .data
-                )
-                if linked_student:
-                    linked_school_id = linked_student.get("school_id")
-        except Exception:
-            linked_ids = []
-            linked_school_id = None
-
-        school_id = linked_school_id or profile.get("school_id")
+        # Parent Premium is school-wide. It is determined only by the
+        # Parent account's school, not by parent_student_links.
+        # Therefore every Parent in the school can see the same Premium
+        # school-wide lists, even when no student is linked to that Parent.
+        school_id = profile.get("school_id")
 
         if school_id and subject_wise_parent_student_premium_enabled(school_id):
-            # School-wide Premium: all active students of this school can
-            # appear in Top 10/20/30/50 and >70/>80/>90% lists.
+            # All active students of this school can appear in the
+            # Top 10/20/30/50 and >70/>80/>90% Premium lists.
             subject_wise_premium_view(
                 school_id,
-                linked_ids,
+                [],
                 "Parent"
             )
         elif not school_id:
