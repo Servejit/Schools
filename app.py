@@ -8384,6 +8384,7 @@ def reports():
         return
 
     report_options = [
+        "Student Records (Excel)",
         "Student Performance",
         "Class Summary",
         "Subject Summary",
@@ -8404,6 +8405,196 @@ def reports():
 
     if report_type == "💎 School Academic Status":
         school_academic_status(school_id)
+        return
+
+    # -----------------------------------------------------
+    # STUDENT RECORDS EXCEL
+    # -----------------------------------------------------
+    if report_type == "Student Records (Excel)":
+        st.subheader("📥 Student Records Excel")
+        st.caption(
+            "Choose exactly which student information you want in Excel. "
+            "Teacher access is limited to their Class Teacher class(es)."
+        )
+
+        try:
+            students_query = (
+                sb.table("students")
+                .select(
+                    "id,school_id,user_id,name,admission_no,class_name,section,"
+                    "date_of_birth,gender,father_name,parent_name,parent_phone,"
+                    "remarks,photo_path,teacher_signature_path,"
+                    "principal_signature_path,active,created_at,updated_at"
+                )
+                .eq("school_id", school_id)
+                .eq("active", True)
+                .order("name")
+            )
+            students_data = students_query.execute().data or []
+        except Exception as e:
+            st.error("Could not load student records.")
+            st.code(str(e))
+            return
+
+        # Class Teacher sees only students from classes assigned to them.
+        if role == "Teacher":
+            try:
+                teacher_classes = (
+                    sb.table("classes")
+                    .select("class_name,section")
+                    .eq("school_id", school_id)
+                    .eq("class_teacher_id", st.session_state.user.id)
+                    .eq("active", True)
+                    .execute()
+                    .data or []
+                )
+            except Exception as e:
+                st.error("Could not load your Class Teacher classes.")
+                st.code(str(e))
+                return
+
+            allowed_pairs = {
+                (
+                    str(x.get("class_name") or "").strip().lower(),
+                    str(x.get("section") or "").strip().lower()
+                )
+                for x in teacher_classes
+            }
+            students_data = [
+                s for s in students_data
+                if (
+                    str(s.get("class_name") or "").strip().lower(),
+                    str(s.get("section") or "").strip().lower()
+                ) in allowed_pairs
+            ]
+
+        # Admin/SuperAdmin can filter the school records before export.
+        class_options = sorted({
+            str(s.get("class_name") or "").strip()
+            for s in students_data
+            if str(s.get("class_name") or "").strip()
+        })
+        section_options = sorted({
+            str(s.get("section") or "").strip()
+            for s in students_data
+            if str(s.get("section") or "").strip()
+        })
+
+        fc1, fc2 = st.columns(2)
+        with fc1:
+            class_filter = st.selectbox(
+                "🏫 Class",
+                ["All Classes"] + class_options,
+                key="reports_student_records_class"
+            )
+        filtered_students = students_data
+        if class_filter != "All Classes":
+            filtered_students = [
+                s for s in filtered_students
+                if str(s.get("class_name") or "").strip() == class_filter
+            ]
+
+        filtered_section_options = sorted({
+            str(s.get("section") or "").strip()
+            for s in filtered_students
+            if str(s.get("section") or "").strip()
+        })
+        with fc2:
+            section_filter = st.selectbox(
+                "📚 Section",
+                ["All Sections"] + filtered_section_options,
+                key="reports_student_records_section"
+            )
+        if section_filter != "All Sections":
+            filtered_students = [
+                s for s in filtered_students
+                if str(s.get("section") or "").strip() == section_filter
+            ]
+
+        search = st.text_input(
+            "🔍 Search Student",
+            placeholder="Student name or admission number",
+            key="reports_student_records_search"
+        ).strip().lower()
+        if search:
+            filtered_students = [
+                s for s in filtered_students
+                if search in str(s.get("name") or "").lower()
+                or search in str(s.get("admission_no") or "").lower()
+            ]
+
+        st.info(f"👥 {len(filtered_students)} student(s) available for export.")
+
+        export_fields = [
+            "Student ID", "School ID", "User ID", "Student Name",
+            "Admission No.", "Class", "Section", "Date of Birth", "Gender",
+            "Father Name", "Parent Name", "Parent Phone", "Remarks",
+            "Photo Path", "Teacher Signature Path", "Principal Signature Path",
+            "Active", "Created At", "Updated At"
+        ]
+        default_fields = {
+            "Student Name", "Admission No.", "Class", "Section",
+            "Date of Birth", "Gender", "Father Name", "Parent Phone",
+            "Remarks"
+        }
+
+        state_key = f"reports_student_export_fields_{role}_{school_id}"
+        if state_key not in st.session_state:
+            st.session_state[state_key] = set(default_fields)
+
+        b1, b2 = st.columns(2)
+        with b1:
+            if st.button(
+                "☑️ Select All Fields",
+                key=f"reports_student_export_all_{role}_{school_id}",
+                use_container_width=True
+            ):
+                st.session_state[state_key] = set(export_fields)
+                st.rerun()
+        with b2:
+            if st.button(
+                "⬜ Clear All Fields",
+                key=f"reports_student_export_clear_{role}_{school_id}",
+                use_container_width=True
+            ):
+                st.session_state[state_key] = set()
+                st.rerun()
+
+        st.markdown("**☑️ Tick the information you want in Excel:**")
+        selected_fields = []
+        field_cols = st.columns(3)
+        for i, field in enumerate(export_fields):
+            with field_cols[i % 3]:
+                checked = st.checkbox(
+                    field,
+                    value=field in st.session_state[state_key],
+                    key=f"reports_student_export_field_{role}_{school_id}_{i}"
+                )
+                if checked:
+                    selected_fields.append(field)
+
+        st.session_state[state_key] = set(selected_fields)
+
+        if not selected_fields:
+            st.warning("Please tick at least one field.")
+            return
+
+        if not filtered_students:
+            st.warning("No student records match the selected filters.")
+            return
+
+        excel_bytes = make_student_records_excel(
+            filtered_students,
+            selected_fields
+        )
+        st.download_button(
+            "⬇️ Download Selected Student Records Excel",
+            data=excel_bytes,
+            file_name="Student_Records_Selected.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key=f"reports_student_records_download_{role}_{school_id}"
+        )
         return
 
     try:
