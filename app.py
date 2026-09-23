@@ -9408,10 +9408,6 @@ def report_cards():
                         )
                         for item in result["skipped"][:30]:
                             st.caption(item)
-                    st.session_state.pop(
-                        f"report_cards_excel_import_{school_id}",
-                        None
-                    )
                     st.rerun()
             except Exception as e:
                 st.error("This Report Cards Excel could not be read.")
