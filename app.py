@@ -1798,7 +1798,7 @@ def students():
     # Teachers can only view/change students belonging to classes
     # where they are assigned as the Class Teacher.
     assigned_class_keys = None
-    if role in ["Teacher", "Admin+Teacher"]:
+    if role == "Teacher":
         try:
             assigned_classes = (
                 sb.table("classes")
@@ -1965,7 +1965,7 @@ def students():
             key="add_student_button"
         ):
 
-            if role in ["Teacher", "Admin+Teacher"]:
+            if role == "Teacher":
                 entered_class_key = (
                     str(class_name or "").strip().lower(),
                     str(section or "").strip().lower()
@@ -2084,7 +2084,7 @@ def students():
         st.code(str(e))
         return
 
-    if role in ["Teacher", "Admin+Teacher"] and assigned_class_keys is not None:
+    if role == "Teacher" and assigned_class_keys is not None:
         student_data = [
             student
             for student in student_data
@@ -2168,7 +2168,7 @@ def students():
     # Teachers should not see every student card on the dashboard.
     # They select one or more students from a dropdown (multiselect
     # displays checkbox options) and can also Select All.
-    if role in ["Teacher", "Admin+Teacher"]:
+    if role == "Teacher":
 
         student_labels = {}
         for student in student_data:
@@ -2409,7 +2409,7 @@ def students():
                 else:
                     st.error("INACTIVE")
 
-                if role in ["SuperAdmin", "Admin"]:
+                if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
                     if st.button(
                         "🗑️ Delete",
                         key=f"delete_student_{student_id}"
@@ -2659,7 +2659,7 @@ def students():
                     use_container_width=True,
                 ):
 
-                    if role in ["Teacher", "Admin+Teacher"] and (
+                    if role == "Teacher" and (
                         str(student.get("class_name") or "").strip().lower(),
                         str(student.get("section") or "").strip().lower()
                     ) not in assigned_class_keys:
@@ -2828,7 +2828,7 @@ def classes_subjects():
         return
 
     # Teachers can see only classes where they are the Class Teacher.
-    if role in ["Teacher", "Admin+Teacher"]:
+    if role == "Teacher":
         class_data = [
             x for x in class_data
             if str(x.get("class_teacher_id")) == str(st.session_state.user.id)
@@ -2861,14 +2861,14 @@ def classes_subjects():
         label = f"{teacher.get('full_name') or 'Teacher'} — {teacher.get('email') or ''}"
         teacher_options[label] = teacher["id"]
 
-    if role in ["SuperAdmin", "Admin"]:
+    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         with st.expander("👨‍🏫 Assign Class Teachers"):
             st.caption("Assign one class teacher to each class. Teachers will only see students from their assigned classes.")
 
             if not teacher_data:
                 st.info("Create an active Teacher account first.")
 
-    if role in ["SuperAdmin", "Admin"]:
+    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         with st.expander(        "➕ Add New Class",
             expanded=True    ):
     
@@ -2976,7 +2976,7 @@ def classes_subjects():
     # -----------------------------------------------------
     # Do not display every class card at once. First select the
     # class/section, then Select All or individual classes.
-    if role in ["SuperAdmin", "Admin"]:
+    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         class_filter_options = ["All Classes"] + [
             f"{x.get('class_name') or '-'} | Section: {x.get('section') or '-'} | {x.get('academic_year') or '-'}"
             for x in class_data
@@ -3100,7 +3100,7 @@ def classes_subjects():
 
             with c3:
 
-                if role in ["SuperAdmin", "Admin"] and st.button(
+                if role in ["SuperAdmin", "Admin", "Admin+Teacher"] and st.button(
                     "Deactivate" if active else "Activate",
                     key=f"class_active_{class_id}"
                 ):
@@ -3125,7 +3125,7 @@ def classes_subjects():
                     except Exception as e:
                         st.error(str(e))
 
-            if role in ["SuperAdmin", "Admin"]:
+            if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
                 current_teacher_id = class_item.get("class_teacher_id")
                 current_teacher_label = "Not Assigned"
 
@@ -3177,7 +3177,7 @@ def classes_subjects():
                         )
                         st.code(str(e))
 
-            if role in ["SuperAdmin", "Admin"]:
+            if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
                 with st.expander("✏️ Edit Class"):
     
                     edit_class_name = st.text_input(
@@ -3200,7 +3200,7 @@ def classes_subjects():
     
                     selected_teacher_label = None
     
-                    if role in ["SuperAdmin", "Admin"]:
+                    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
                         teacher_labels = list(teacher_options.keys())
                         current_teacher_id = class_item.get("class_teacher_id")
                         current_teacher_label = "Not Assigned"
@@ -3239,7 +3239,7 @@ def classes_subjects():
                                     ).isoformat()
                             }
     
-                            if role in ["SuperAdmin", "Admin"]:
+                            if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
                                 class_update_record["class_teacher_id"] = (
                                     teacher_options[selected_teacher_label]
                                 )
@@ -3361,7 +3361,7 @@ def classes_subjects():
 
                 with s3:
 
-                    if role in ["SuperAdmin", "Admin"]:
+                    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
                         if st.button(
                             "✏️ Edit",
                             key=f"edit_subject_button_{subject_id}"
@@ -3373,7 +3373,7 @@ def classes_subjects():
 
                             st.rerun()
 
-                if role in ["SuperAdmin", "Admin"] and st.session_state.get(
+                if role in ["SuperAdmin", "Admin", "Admin+Teacher"] and st.session_state.get(
                     f"editing_subject_{subject_id}",
                     False
                 ):
@@ -3525,7 +3525,7 @@ def classes_subjects():
 
                                     st.code(str(e))
 
-            if role in ["SuperAdmin", "Admin"] and subject_data:
+            if role in ["SuperAdmin", "Admin", "Admin+Teacher"] and subject_data:
                 subject_labels = {}
                 for sub in subject_data:
                     sub_display = sub.get("subject_name") or sub.get("name") or "Subject"
@@ -3731,7 +3731,7 @@ def bulk_marks():
         return
 
     # Teachers see only classes for which they have a subject assignment.
-    if role in ["Teacher", "Admin+Teacher"]:
+    if role == "Teacher":
         try:
             teacher_assignments = (
                 sb.table("teacher_subject_assignments")
@@ -3815,7 +3815,7 @@ def bulk_marks():
         return
 
     # Teachers see only the subjects assigned to them in the selected class.
-    if role in ["Teacher", "Admin+Teacher"]:
+    if role == "Teacher":
         assigned_subject_ids = {
             str(x.get("subject_id"))
             for x in teacher_assignments
@@ -3861,7 +3861,7 @@ def bulk_marks():
     # Admin / SuperAdmin can work with every active class and every
     # active subject in the selected school. Teachers remain restricted
     # to their exact assigned class + subject combinations.
-    if role in ["SuperAdmin", "Admin"]:
+    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         st.success(
             f"Admin access: all {len(class_data)} active classes are available, "
             f"and all active subjects for the selected class can be modified below."
@@ -4203,7 +4203,7 @@ def attendance():
     # Class Teacher can see/fill attendance only for classes assigned
     # to them as Class Teacher. Admin/SuperAdmin retain full access.
     assigned_class_rows = []
-    if role in ["Teacher", "Admin+Teacher"]:
+    if role == "Teacher":
         try:
             assigned_class_rows = (
                 sb.table("classes")
@@ -4268,7 +4268,7 @@ def attendance():
     selected_class_row = class_lookup.get(selected_class)
 
     if selected_class != "All Classes":
-        if role in ["Teacher", "Admin+Teacher"] and selected_class_row:
+        if role == "Teacher" and selected_class_row:
             target_name = str(selected_class_row.get("class_name") or "").strip().lower()
             target_section = str(selected_class_row.get("section") or "").strip().lower()
             students_data = [
@@ -4400,7 +4400,8 @@ def print_templates():
 
     if role not in [
         "SuperAdmin",
-        "Admin"
+        "Admin",
+        "Admin+Teacher"
     ]:
 
         st.error(
@@ -4907,7 +4908,7 @@ def attendance():
     # Class Teacher can see/fill attendance only for classes assigned
     # to them as Class Teacher. Admin/SuperAdmin retain full access.
     assigned_class_rows = []
-    if role in ["Teacher", "Admin+Teacher"]:
+    if role == "Teacher":
         try:
             assigned_class_rows = (
                 sb.table("classes")
@@ -4972,7 +4973,7 @@ def attendance():
     selected_class_row = class_lookup.get(selected_class)
 
     if selected_class != "All Classes":
-        if role in ["Teacher", "Admin+Teacher"] and selected_class_row:
+        if role == "Teacher" and selected_class_row:
             target_name = str(selected_class_row.get("class_name") or "").strip().lower()
             target_section = str(selected_class_row.get("section") or "").strip().lower()
             students_data = [
@@ -7125,7 +7126,7 @@ def report_cards():
 
         template_map[label] = template
 
-    if role in ["SuperAdmin", "Admin"]:
+    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         selected_template_label = st.selectbox(
             "🖨️ Select Active Report Card Template",
             list(template_map.keys()),
@@ -7149,7 +7150,7 @@ def report_cards():
         selected_template
     )
 
-    if role in ["SuperAdmin", "Admin"]:
+    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         with st.expander(
             "🏫 School Logo (Left Side)",
             expanded=False
@@ -7404,7 +7405,7 @@ def report_cards():
         st.code(str(e))
         return
 
-    if role in ["SuperAdmin", "Admin"]:
+    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         st.success(
             f"Active template: "
             f"{selected_template.get('template_name') or selected_template.get('name')}"
@@ -7451,7 +7452,7 @@ def report_cards():
         st.code(str(e))
         return
 
-    if role in ["Teacher", "Admin+Teacher"]:
+    if role == "Teacher":
         try:
             teacher_report_classes = (
                 sb.table("classes")
@@ -7504,7 +7505,7 @@ def report_cards():
 
         st.warning(
             "No active students found in your assigned Class Teacher class(es)."
-            if role in ["Teacher", "Admin+Teacher"]
+            if role == "Teacher"
             else "No active students found."
         )
 
@@ -8607,7 +8608,7 @@ def reports():
             return
 
         # Class Teacher sees only students from classes assigned to them.
-        if role in ["Teacher", "Admin+Teacher"]:
+        if role == "Teacher":
             try:
                 teacher_classes = (
                     sb.table("classes")
@@ -8644,7 +8645,7 @@ def reports():
         # above and can also use the class dropdown.
         filtered_students = students_data
 
-        if role in ["Teacher", "Admin+Teacher"]:
+        if role == "Teacher":
             teacher_class_options = sorted({
                 (
                     f"{x.get('class_name') or '-'}"
@@ -8811,7 +8812,7 @@ def reports():
         return
 
     teacher_assignments = []
-    if role in ["Teacher", "Admin+Teacher"]:
+    if role == "Teacher":
         try:
             teacher_assignments = (
                 sb.table("teacher_subject_assignments")
@@ -8914,7 +8915,7 @@ def reports():
             st.code(str(e))
             return
 
-        if role in ["Teacher", "Admin+Teacher"]:
+        if role == "Teacher":
             allowed = {
                 str(x.get("subject_id"))
                 for x in teacher_assignments
@@ -9085,7 +9086,7 @@ def reports():
             st.code(str(e))
             return
 
-        if role in ["Teacher", "Admin+Teacher"]:
+        if role == "Teacher":
             allowed = {
                 str(x.get("subject_id"))
                 for x in teacher_assignments
@@ -9199,7 +9200,7 @@ def reports():
         )
         for x in class_data
     }
-    if role in ["Teacher", "Admin+Teacher"]:
+    if role == "Teacher":
         students_data = [
             s for s in students_data
             if (
@@ -9254,7 +9255,7 @@ def dashboard():
     # Keep the Class Teacher's assigned class name(s) visible
     # at every Teacher working place because all Teacher modules
     # are rendered from this dashboard.
-    if role in ["Teacher", "Admin+Teacher"]:
+    if role == "Teacher":
         try:
             teacher_working_classes = (
                 sb.table("classes")
@@ -9511,7 +9512,7 @@ def dashboard():
     # TEACHER
     # =====================================================
 
-    elif role in ["Teacher", "Admin+Teacher"]:
+    elif role == "Teacher":
 
         st.title("👨‍🏫 Teacher Dashboard")
 
