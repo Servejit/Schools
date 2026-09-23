@@ -77,78 +77,9 @@ if (
 
 
 # =========================================================
-# SAVE BUTTON STATE
+# SAVE STATUS
 # =========================================================
-def _save_state_signature(key=None):
-    values = {}
-    for k, v in st.session_state.items():
-        if k.startswith("_save_") or "password" in k.lower():
-            continue
-        if not isinstance(v, (str, int, float, bool, type(None), list, tuple, dict)):
-            continue
-
-        # Track only the controls belonging to this save action.
-        if key:
-            prefixes = {
-                "school_save_": ("school_edit_",),
-                "save_user_": ("edit_user_", "class_teacher_assign_", "subject_teacher_assign_"),
-                "save_student_": ("edit_",),
-                "save_teacher_": ("assign_teacher_",),
-                "save_class_": ("edit_class_",),
-                "save_subject_": ("subject_",),
-                "save_exam_assessment": ("new_exam_assessment_name",),
-                "save_all_marks": ("marks_editor_",),
-                "save_attendance_button": ("attendance_", "attendance_date"),
-                "upload_template_button": ("template_name_", "template_type_", "template_page_size_", "template_orientation_"),
-                "save_report_school_logo_size_": ("report_school_logo_size_", "save_report_school_logo_size_"),
-                "save_report_school_logo": ("report_school_logo",),
-            }
-            matched = False
-            for marker, wanted in prefixes.items():
-                if key == marker or key.startswith(marker):
-                    matched = any(k.startswith(p) or k == p for p in wanted)
-                    break
-            if matched:
-                values = {k: values[k] for k in sorted(values) if any(
-                    k.startswith(p) or k == p for p in wanted
-                )}
-
-    try:
-        return json.dumps(values, sort_keys=True, default=str)
-    except Exception:
-        return repr(values)
-
-def _save_values_signature(values):
-    if isinstance(values, pd.DataFrame):
-        return values.to_json(orient="split", date_format="iso")
-    try:
-        return json.dumps(values, sort_keys=True, default=str)
-    except Exception:
-        return repr(values)
-
-def save_enabled(key, values=None):
-    current = (
-        _save_values_signature(values)
-        if values is not None
-        else _save_state_signature(key)
-    )
-    signature_key = "_save_sig_" + key
-
-    # For explicit form values, establish the first rendered values as the
-    # database/saved baseline. Later changes enable the save operation.
-    if signature_key not in st.session_state:
-        st.session_state[signature_key] = current
-        return False
-
-    return st.session_state.get(signature_key) != current
-
 def mark_saved(key, values=None):
-    current = (
-        _save_values_signature(values)
-        if values is not None
-        else _save_state_signature(key)
-    )
-    st.session_state["_save_sig_" + key] = current
     st.session_state["_save_msg_" + key] = "Saved successfully."
 
 def show_save_message(key):
@@ -426,9 +357,6 @@ def schools():
                     "Save",
                     key=save_key,
                 ):
-                    if not save_enabled(save_key):
-                        st.info("ℹ️ Already Saved.")
-                        st.stop()
 
                     try:
 
@@ -1039,9 +967,6 @@ def users():
                     key=save_key,
                     use_container_width=True,
                 ):
-                    if not save_enabled(save_key):
-                        st.info("ℹ️ Already Saved.")
-                        st.stop()
 
                     if not edit_name.strip():
                         st.warning("Full Name is required.")
@@ -1206,9 +1131,6 @@ def exam_assessment_settings():
         if st.button("💾 Save Exam / Assessment", type="primary",
                      use_container_width=True, key=save_key,
                      ):
-            if not save_enabled(save_key):
-                st.info("ℹ️ Already Saved.")
-                st.stop()
             if not new_name:
                 st.warning("Enter an Exam / Assessment name.")
                 return
@@ -2231,9 +2153,6 @@ def students():
                     key=save_key,
                     use_container_width=True,
                 ):
-                    if not save_enabled(save_key):
-                        st.info("ℹ️ Already Saved.")
-                        st.stop()
 
                     if role == "Teacher" and (
                         str(student.get("class_name") or "").strip().lower(),
@@ -2720,9 +2639,6 @@ def classes_subjects():
                     key=save_key,
                     use_container_width=True,
                 ):
-                    if not save_enabled(save_key):
-                        st.info("ℹ️ Already Saved.")
-                        st.stop()
                     try:
                         (
                             sb.table("classes")
@@ -2796,9 +2712,6 @@ def classes_subjects():
                         "💾 Save Class",
                         key=save_key,
                     ):
-                        if not save_enabled(save_key):
-                            st.info("ℹ️ Already Saved.")
-                            st.stop()
     
                         try:
     
@@ -3008,9 +2921,6 @@ def classes_subjects():
                                 key=save_key,
                                 use_container_width=True,
                             ):
-                                if not save_enabled(save_key):
-                                    st.info("ℹ️ Already Saved.")
-                                    st.stop()
 
                                 if edit_pass > edit_max:
 
@@ -3591,9 +3501,6 @@ def bulk_marks():
         use_container_width=True,
         key=save_key,
     ):
-        if not save_enabled(save_key, marks_save_values):
-            st.info("ℹ️ Already Saved.")
-            st.stop()
 
         errors = []
         records_to_insert = []
@@ -3854,9 +3761,6 @@ def attendance():
         use_container_width=True,
         key=save_key,
     ):
-        if not save_enabled(save_key):
-            st.info("ℹ️ Already Saved.")
-            st.stop()
         try:
             for sid, status, old_id in entries:
                 if old_id:
@@ -4031,9 +3935,6 @@ def print_templates():
             use_container_width=True,
             key=save_key,
         ):
-            if not save_enabled(save_key):
-                st.info("ℹ️ Already Saved.")
-                st.stop()
 
             if not template_name.strip():
 
@@ -4534,9 +4435,6 @@ def attendance():
         use_container_width=True,
         key=save_key,
     ):
-        if not save_enabled(save_key):
-            st.info("ℹ️ Already Saved.")
-            st.stop()
         try:
             for sid, status, old_id in entries:
                 if old_id:
@@ -6689,9 +6587,6 @@ def report_cards():
                     use_container_width=True,
                     key=save_key,
                 ):
-                    if not save_enabled(save_key):
-                        st.info("ℹ️ Already Saved.")
-                        st.stop()
                     try:
                         logo_config = get_template_config(
                             selected_template
@@ -6749,9 +6644,6 @@ def report_cards():
                 type="primary",
                 key=save_key,
             ):
-                if not save_enabled(save_key):
-                    st.info("ℹ️ Already Saved.")
-                    st.stop()
                 try:
                     ext = uploaded_logo.name.split(".")[-1].lower()
                     logo_path = (
