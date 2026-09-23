@@ -11202,13 +11202,13 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
             for item in ranking_rows:
                 rank_value = item["Rank"]
                 if rank_value.startswith("🥇"):
-                    rank_html = '<span style="display:inline-block; background:#FFD700; color:#000; border-radius:50%; width:34px; height:34px; line-height:34px; font-weight:700; font-size:17px;">1</span>'
+                    rank_html = ":first_place_medal: **1**"
                 elif rank_value.startswith("🥈"):
-                    rank_html = '<span style="display:inline-block; background:#C0C0C0; color:#000; border-radius:50%; width:34px; height:34px; line-height:34px; font-weight:700; font-size:17px;">2</span>'
+                    rank_html = ":second_place_medal: **2**"
                 elif rank_value.startswith("🥉"):
-                    rank_html = '<span style="display:inline-block; background:#CD7F32; color:#fff; border-radius:50%; width:34px; height:34px; line-height:34px; font-weight:700; font-size:17px;">3</span>'
+                    rank_html = ":third_place_medal: **3**"
                 else:
-                    rank_html = f"<b>{rank_value}</b>"
+                    rank_html = f"**{rank_value}**"
 
                 table_html += f"""
                     <tr>
@@ -11227,7 +11227,15 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
             </table>
             """
 
-            st.markdown(table_html, unsafe_allow_html=True)
+            # Use Streamlit's native Markdown emoji shortcodes so the
+            # medals are rendered by Streamlit itself, not by browser HTML.
+            st.markdown(table_html.replace(
+                ":first_place_medal:", "🥇"
+            ).replace(
+                ":second_place_medal:", "🥈"
+            ).replace(
+                ":third_place_medal:", "🥉"
+            ), unsafe_allow_html=True)
 
 
 def school_academic_status(school_id):
