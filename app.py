@@ -7,7 +7,6 @@ import json
 import io
 import zipfile
 import fitz
-import math
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment
 
@@ -5284,8 +5283,7 @@ def create_report_overlay(
     total_attendance=0,
     present_days=0,
     school_logo_path=None,
-    school_logo_size=52,
-    top3_subject_rank=0
+    school_logo_size=52
 ):
 
     width, height = pdf_page_size(
@@ -5477,24 +5475,6 @@ def create_report_overlay(
         height - 82,
         str(exam_name)    )
 
-
-    def draw_golden_star(cx, cy, outer_radius=4.0, inner_radius=1.7):
-        path = pdf.beginPath()
-        for point_index in range(10):
-            angle = (math.pi / 2) + (point_index * math.pi / 5)
-            radius = outer_radius if point_index % 2 == 0 else inner_radius
-            px = cx + (radius * math.cos(angle))
-            py = cy + (radius * math.sin(angle))
-            if point_index == 0:
-                path.moveTo(px, py)
-            else:
-                path.lineTo(px, py)
-        path.close()
-        pdf.setFillColorRGB(1.0, 0.72, 0.05)
-        pdf.setStrokeColorRGB(0.88, 0.55, 0.0)
-        pdf.setLineWidth(0.35)
-        pdf.drawPath(path, stroke=1, fill=1)
-
     # -----------------------------------------------------
     # Student details
     # -----------------------------------------------------
@@ -5573,41 +5553,11 @@ def create_report_overlay(
             9
         )
 
-        value_text = str(value)
-
         pdf.drawString(
             x + 78,
             y,
-            value_text
+            str(value)
         )
-
-        # Golden star sprinkle for students who rank in the top 3
-        # in at least one subject for this exam.
-        if label == "Student Name" and int(top3_subject_rank or 0) in (1, 2, 3):
-            rank = int(top3_subject_rank)
-            star_count = {1: 7, 2: 5, 3: 4}[rank]
-            value_width = pdf.stringWidth(value_text, "Helvetica", 9)
-
-            star_positions = [
-                (x + 70, y + 7),
-                (x + 74 + value_width * 0.28, y + 8),
-                (x + 74 + value_width * 0.58, y + 7),
-                (x + 74 + value_width * 0.86, y + 8),
-                (x + 82 + value_width, y + 6),
-                (x + 88 + value_width * 0.42, y - 3),
-                (x + 82 + value_width * 0.78, y - 4),
-            ]
-
-            for star_index in range(star_count):
-                sx, sy = star_positions[star_index]
-                draw_golden_star(
-                    sx,
-                    sy,
-                    outer_radius=3.6 if rank == 1 else 3.2,
-                    inner_radius=1.5
-                )
-
-        pdf.setFillColorRGB(0, 0, 0)
 
     # -----------------------------------------------------
     # Student photo
@@ -6015,8 +5965,7 @@ def make_report_card_pdf(
     total_attendance=0,
     present_days=0,
     school_logo_path=None,
-    school_logo_size=52,
-    top3_subject_rank=0
+    school_logo_size=52
 ):
 
     overlay_bytes = create_report_overlay(
@@ -6028,8 +5977,7 @@ def make_report_card_pdf(
         total_attendance=total_attendance,
         present_days=present_days,
         school_logo_path=school_logo_path,
-        school_logo_size=school_logo_size,
-        top3_subject_rank=top3_subject_rank
+        school_logo_size=school_logo_size
     )
     overlay_doc = fitz.open(
         stream=overlay_bytes,
@@ -7815,8 +7763,7 @@ def create_report_overlay(
     total_attendance=0,
     present_days=0,
     school_logo_path=None,
-    school_logo_size=52,
-    top3_subject_rank=0
+    school_logo_size=52
 ):
 
     width, height = pdf_page_size(
@@ -8011,24 +7958,6 @@ def create_report_overlay(
         height - 82,
         str(exam_name)    )
 
-
-    def draw_golden_star(cx, cy, outer_radius=4.0, inner_radius=1.7):
-        path = pdf.beginPath()
-        for point_index in range(10):
-            angle = (math.pi / 2) + (point_index * math.pi / 5)
-            radius = outer_radius if point_index % 2 == 0 else inner_radius
-            px = cx + (radius * math.cos(angle))
-            py = cy + (radius * math.sin(angle))
-            if point_index == 0:
-                path.moveTo(px, py)
-            else:
-                path.lineTo(px, py)
-        path.close()
-        pdf.setFillColorRGB(1.0, 0.72, 0.05)
-        pdf.setStrokeColorRGB(0.88, 0.55, 0.0)
-        pdf.setLineWidth(0.35)
-        pdf.drawPath(path, stroke=1, fill=1)
-
     # -----------------------------------------------------
     # Student details
     # -----------------------------------------------------
@@ -8107,49 +8036,10 @@ def create_report_overlay(
             9
         )
 
-        value_text = str(value)
-
-        # Reliable PDF-safe highlight for Top-3 subject performers.
-        if label == "Student Name" and int(top3_subject_rank or 0) in (1, 2, 3):
-            rank = int(top3_subject_rank)
-            value_width = pdf.stringWidth(
-                value_text,
-                "Helvetica",
-                9
-            )
-
-            pad_x = 5
-            highlight_x = x + 78 - pad_x
-            highlight_y = y - 3
-            highlight_w = value_width + (pad_x * 2)
-            highlight_h = 13
-
-            if rank == 1:
-                pdf.setFillColorRGB(1.0, 0.94, 0.68)
-                pdf.setStrokeColorRGB(0.85, 0.60, 0.08)
-            elif rank == 2:
-                pdf.setFillColorRGB(1.0, 0.96, 0.80)
-                pdf.setStrokeColorRGB(0.90, 0.70, 0.20)
-            else:
-                pdf.setFillColorRGB(1.0, 0.98, 0.90)
-                pdf.setStrokeColorRGB(0.92, 0.78, 0.35)
-
-            pdf.roundRect(
-                highlight_x,
-                highlight_y,
-                highlight_w,
-                highlight_h,
-                4,
-                stroke=1,
-                fill=1
-            )
-
-        pdf.setFillColorRGB(0, 0, 0)
-
         pdf.drawString(
             x + 78,
             y,
-            value_text
+            str(value)
         )
 
     # -----------------------------------------------------
@@ -8558,8 +8448,7 @@ def make_report_card_pdf(
     total_attendance=0,
     present_days=0,
     school_logo_path=None,
-    school_logo_size=52,
-    top3_subject_rank=0
+    school_logo_size=52
 ):
 
     overlay_bytes = create_report_overlay(
@@ -8571,8 +8460,7 @@ def make_report_card_pdf(
         total_attendance=total_attendance,
         present_days=present_days,
         school_logo_path=school_logo_path,
-        school_logo_size=school_logo_size,
-        top3_subject_rank=top3_subject_rank
+        school_logo_size=school_logo_size
     )
     overlay_doc = fitz.open(
         stream=overlay_bytes,
@@ -10348,81 +10236,6 @@ def report_cards():
 
         return result
 
-
-    def get_top3_subject_rank_map():
-        # Returns the best (1/2/3) subject rank for each visible student.
-        # Ranking is calculated separately for each subject and class.
-        student_ids = {
-            str(student.get("id"))
-            for student in student_data
-            if student.get("id")
-        }
-
-        if not student_ids:
-            return {}
-
-        try:
-            all_exam_marks = (
-                sb.table("marks")
-                .select("student_id,subject_id,marks,class_id")
-                .eq("school_id", school_id)
-                .eq("exam_name", exam_name)
-                .execute()
-                .data or []
-            )
-        except Exception:
-            return {}
-
-        visible_marks = [
-            row for row in all_exam_marks
-            if str(row.get("student_id")) in student_ids
-        ]
-
-        student_lookup = {
-            str(student.get("id")): student
-            for student in student_data
-        }
-
-        groups = {}
-        for row in visible_marks:
-            student_id = str(row.get("student_id") or "")
-            subject_id = str(row.get("subject_id") or "")
-            if not student_id or not subject_id:
-                continue
-
-            class_key = str(row.get("class_id") or "")
-            if not class_key:
-                student = student_lookup.get(student_id, {})
-                class_key = (
-                    str(student.get("class_name") or "").strip().lower()
-                    + "|"
-                    + str(student.get("section") or "").strip().lower()
-                )
-
-            try:
-                marks_value = float(row.get("marks") or 0)
-            except Exception:
-                continue
-
-            groups.setdefault(
-                (class_key, subject_id),
-                []
-            ).append(
-                (student_id, marks_value)
-            )
-
-        rank_map = {}
-        for rows in groups.values():
-            rows.sort(key=lambda item: item[1], reverse=True)
-            for rank, (student_id, _marks) in enumerate(rows[:3], start=1):
-                current_rank = rank_map.get(student_id)
-                if current_rank is None or rank < current_rank:
-                    rank_map[student_id] = rank
-
-        return rank_map
-
-    top3_subject_rank_map = get_top3_subject_rank_map()
-
     # -----------------------------------------------------
     # GENERATE SINGLE
     # -----------------------------------------------------
@@ -10501,13 +10314,7 @@ def report_cards():
                             ),
 
                         school_logo_size=
-                            logo_size,
-
-                        top3_subject_rank=
-                            top3_subject_rank_map.get(
-                                str(selected_student.get("id")),
-                                0
-                            )
+                            logo_size
                     )
 
                     safe_name = (
@@ -10653,13 +10460,7 @@ def report_cards():
                                 ),
 
                             school_logo_size=
-                                logo_size,
-
-                            top3_subject_rank=
-                                top3_subject_rank_map.get(
-                                    str(student.get("id")),
-                                    0
-                                )
+                                logo_size
                         )
 
                         safe_name = (
@@ -11102,6 +10903,30 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
         "Full Subject-wise Premium access: Topper, >70%, >80% and >90%."
     )
 
+    st.markdown("""
+<style>
+.premium-gold-name {
+    display: inline-block;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #8a5a00;
+    padding: 6px 14px;
+    border: 1px solid #d6a72c;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #fff8cf, #ffd95a, #fff8cf);
+    background-size: 200% auto;
+    box-shadow: 0 0 12px rgba(255, 193, 7, 0.45);
+    animation: premiumGoldShine 2.4s linear infinite;
+}
+@keyframes premiumGoldShine {
+    0% { background-position: 200% center; }
+    100% { background-position: -200% center; }
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+
     if not school_id or not student_ids:
         st.info(
             f"No linked student record is available for this {viewer_label} account."
@@ -11338,7 +11163,14 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 if not filtered:
                     continue
                 shown = True
-                st.markdown(f"#### 📚 {subject_name}")
+                if rows:
+                top_student_name = str(rows[0].get("Student Name") or "").strip()
+                if top_student_name:
+                    st.markdown(
+                        f'<div class="premium-gold-name">✨ {top_student_name}</div>',
+                        unsafe_allow_html=True
+                    )
+            st.markdown(f"#### 📚 {subject_name}")
                 st.dataframe(
                     pd.DataFrame(filtered),
                     hide_index=True,
