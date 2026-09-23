@@ -617,11 +617,30 @@ def users():
     # -----------------------------------------------------
     with st.expander("➕ Create User", expanded=True):
 
-        selected_school = st.selectbox(
-            "School",
-            list(school_map.keys()),
-            key="create_user_school"
-        )
+        # SuperAdmin can create users in any active school.
+        # Admin can create users only inside their own school.
+        if st.session_state.profile.get("role") == "Admin":
+            admin_school_id = str(st.session_state.profile.get("school_id") or "")
+            admin_school_label = next(
+                (
+                    label for label, sid in school_map.items()
+                    if str(sid) == admin_school_id
+                ),
+                None
+            )
+
+            if not admin_school_label:
+                st.error("Your Admin account is not linked to an active school.")
+                return
+
+            st.info(f"🏫 School: **{admin_school_label}**")
+            selected_school = admin_school_label
+        else:
+            selected_school = st.selectbox(
+                "School",
+                list(school_map.keys()),
+                key="create_user_school"
+            )
 
         name = st.text_input("Full Name", key="create_user_name")
         email = st.text_input("Email", key="create_user_email")
@@ -700,9 +719,20 @@ def users():
     st.subheader("📋 Existing Users")
 
     try:
-        user_data = (
+        user_query = (
             sb.table("profiles")
             .select("id,email,full_name,role,active,school_id")
+        )
+
+        # Admin must only load users belonging to their own school.
+        if st.session_state.profile.get("role") == "Admin":
+            user_query = user_query.eq(
+                "school_id",
+                st.session_state.profile.get("school_id")
+            )
+
+        user_data = (
+            user_query
             .order("full_name")
             .execute()
             .data or []
@@ -921,12 +951,27 @@ def users():
                     school_labels[0]
                 )
 
-                edit_school_label = st.selectbox(
-                    "School",
-                    school_labels,
-                    index=school_labels.index(current_school_label),
-                    key=f"edit_user_school_{user_id}"
-                )
+                # Admin cannot move a user to another school.
+                if role == "Admin":
+                    admin_school_id = str(
+                        st.session_state.profile.get("school_id") or ""
+                    )
+                    if current_school_id != admin_school_id:
+                        st.error("This user does not belong to your school.")
+                        continue
+
+                    st.info(
+                        f"🏫 School: **{current_school_label}** "
+                        "(Admin can manage users only in this school.)"
+                    )
+                    edit_school_label = current_school_label
+                else:
+                    edit_school_label = st.selectbox(
+                        "School",
+                        school_labels,
+                        index=school_labels.index(current_school_label),
+                        key=f"edit_user_school_{user_id}"
+                    )
 
                 st.text_input(
                     "Email",
