@@ -6124,6 +6124,7 @@ def build_marks_backup_workbook(school_id):
         ["Restore Rule", "Rows in exam sheets are matched by Student ID + Subject ID + Exam Name"],
     ]
 
+    info_ws.append(["Key", "Value"])
     for row in info_rows:
         info_ws.append(row)
 
