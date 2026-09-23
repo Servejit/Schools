@@ -11123,20 +11123,30 @@ def subject_wise_parent_student_premium_enabled(school_id):
 def subject_wise_premium_view(school_id, student_ids, viewer_label):
     """Full Subject-wise Premium view for permitted Parent/Student accounts.
 
-    This intentionally exposes only Subject-wise Premium:
+    Parents and Students receive the school-wide Subject-wise Premium view:
     - Subject toppers
     - Students above 70%
     - Students above 80%
     - Students above 90%
 
-    It never exposes the general <30/<40/<50 or full Marks Percentage Premium analysis.
+    The general <30/<40/<50 or full Marks Percentage Premium analysis
+    is never exposed here.
     """
     st.header("💎 Subject-wise Premium")
     st.caption(
-        "Full Subject-wise Premium access: Topper, >70%, >80% and >90%."
+        "Subject-wise Premium: Top students, >70%, >80% and >90%."
     )
 
-    if not school_id or not student_ids:
+    # Parent/Student Premium is school-wide. It is not restricted to the
+    # particular student linked to a Parent account, because a Parent may
+    # need to see the school-wide topper/percentage lists.
+    school_wide_view = viewer_label in {"Parent", "Student"}
+
+    if not school_id:
+        st.info("School information is not available for this account.")
+        return
+
+    if not school_wide_view and not student_ids:
         st.info(
             f"No linked student record is available for this {viewer_label} account."
         )
@@ -11153,26 +11163,40 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
             .execute()
             .data or []
         )
-        allowed_students = [
-            x for x in students
-            if str(x.get("id")) in {str(v) for v in student_ids}
-        ]
+
+        if school_wide_view:
+            allowed_students = students
+        else:
+            allowed_ids = {str(v) for v in student_ids}
+            allowed_students = [
+                x for x in students
+                if str(x.get("id")) in allowed_ids
+            ]
     except Exception as e:
-        st.error("Could not load linked student records.")
+        st.error("Could not load student records.")
         st.code(str(e))
         return
 
     if not allowed_students:
-        st.info("No active linked student records were found.")
+        st.info("No active student records were found.")
         return
 
-    class_pairs = {
-        (
-            str(x.get("class_name") or "").strip().lower(),
-            str(x.get("section") or "").strip().lower()
-        )
-        for x in allowed_students
-    }
+    if school_wide_view:
+        class_pairs = {
+            (
+                str(x.get("class_name") or "").strip().lower(),
+                str(x.get("section") or "").strip().lower()
+            )
+            for x in allowed_students
+        }
+    else:
+        class_pairs = {
+            (
+                str(x.get("class_name") or "").strip().lower(),
+                str(x.get("section") or "").strip().lower()
+            )
+            for x in allowed_students
+        }
 
     try:
         classes = (
@@ -11196,7 +11220,7 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
         return
 
     if not class_rows:
-        st.info("No active class is available for the linked student.")
+        st.info("No active class is available.")
         return
 
     sessions = sorted({
@@ -11245,7 +11269,10 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
         )
         all_students = (
             sb.table("students")
-            .select("id,name,admission_no,class_name,section,father_name,parent_name,active")
+            .select(
+                "id,name,admission_no,class_name,section,"
+                "father_name,parent_name,active"
+            )
             .eq("school_id", school_id)
             .eq("active", True)
             .execute()
@@ -11266,30 +11293,37 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
         st.code(str(e))
         return
 
-    # Subject-wise Premium is shown for the linked student's class/section(s),
-    # so the feature is useful for class-level comparison without exposing
-    # other classes.
-    visible_students = [
-        x for x in all_students
-        if (
-            str(x.get("class_name") or "").strip().lower(),
-            str(x.get("section") or "").strip().lower()
-        ) in {
-            (
-                str(cl.get("class_name") or "").strip().lower(),
-                str(cl.get("section") or "").strip().lower()
-            )
-            for cl in session_class_rows
-        }
-    ]
-    visible_subjects = [
-        x for x in subjects
-        if str(x.get("class_id")) in class_ids
-    ]
+    if school_wide_view:
+        visible_students = all_students
+        visible_subjects = [
+            x for x in subjects
+            if str(x.get("class_id")) in class_ids
+        ]
+        visible_class_ids = class_ids
+    else:
+        visible_students = [
+            x for x in all_students
+            if (
+                str(x.get("class_name") or "").strip().lower(),
+                str(x.get("section") or "").strip().lower()
+            ) in {
+                (
+                    str(cl.get("class_name") or "").strip().lower(),
+                    str(cl.get("section") or "").strip().lower()
+                )
+                for cl in session_class_rows
+            }
+        ]
+        visible_subjects = [
+            x for x in subjects
+            if str(x.get("class_id")) in class_ids
+        ]
+        visible_class_ids = class_ids
+
     subject_ids = {str(x["id"]) for x in visible_subjects}
     visible_marks = [
         x for x in marks
-        if str(x.get("class_id")) in class_ids
+        if str(x.get("class_id")) in visible_class_ids
         and str(x.get("subject_id")) in subject_ids
     ]
 
@@ -11382,25 +11416,23 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 st.info(f"No students are above {threshold}% in the selected subjects.")
 
     with tab_topper:
+        top_n = st.selectbox(
+            "Show Top",
+            [10, 20, 30, 50],
+            index=0,
+            key=f"subject_premium_top_n_{viewer_label}"
+        )
+
         for subject_name, rows in subject_rows.items():
             if not rows:
                 continue
 
-            # Always start ranking at position 1. Even when there is only
-            # one student, that student is Rank 1 and receives 🥇.
-            # Positions 2 and 3 receive 🥈 and 🥉 respectively.
-            top_rows = rows[:10]
-            ranking_rows = []
+            top_rows = rows[:top_n]
+            display_rows = []
 
             for index, row in enumerate(top_rows, start=1):
-                medal = {
-                    1: "\\U0001F947",
-                    2: "\\U0001F948",
-                    3: "\\U0001F949"
-                }.get(index, "")
-
-                ranking_rows.append({
-                    "Rank": f"{medal} {index}".strip(),
+                display_rows.append({
+                    "Rank": index,
                     "Student Name": row["Student Name"],
                     "Class": row["Class"],
                     "Section": row["Section"],
@@ -11412,22 +11444,6 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 })
 
             st.markdown(f"#### 📚 {subject_name}")
-
-            # Top 10 leaderboard with a simple Rank column.
-            # No medal images or emoji processing.
-            display_rows = []
-            for item in ranking_rows:
-                rank_number = str(item["Rank"]).split()[-1]
-                display_rows.append({
-                    "Rank": rank_number,
-                    "Student Name": item["Student Name"],
-                    "Class": item["Class"],
-                    "Section": item["Section"],
-                    "Father Name": item["Father Name"],
-                    "Marks": item["Marks"],
-                    "Percentage": item["Percentage"],
-                })
-
             st.dataframe(
                 pd.DataFrame(display_rows),
                 hide_index=True,
@@ -13055,9 +13071,8 @@ def dashboard():
 
         st.title("👨‍👩‍👧 Parent Dashboard")
 
-        # Load the Parent ↔ Student links first. The linked student's school
-        # is used as a reliable fallback when the Parent profile does not yet
-        # have school_id populated.
+        # Parent Premium is school-wide. The Parent does not need to be
+        # linked to the topper students whose results appear in the lists.
         current_user_id = str(st.session_state.user.id)
         linked_ids = []
         try:
@@ -13078,9 +13093,9 @@ def dashboard():
 
         school_id = profile.get("school_id")
 
-        # If the Parent profile has no school_id, derive it from the linked
-        # student so Premium access is checked against the correct school.
-        if linked_ids and not school_id:
+        # Keep the linked-student fallback only for Parent accounts whose
+        # profile does not have school_id populated.
+        if not school_id and linked_ids:
             try:
                 linked_student = (
                     sb.table("students")
@@ -13094,15 +13109,13 @@ def dashboard():
             except Exception:
                 school_id = None
 
-        if linked_ids and school_id and subject_wise_parent_student_premium_enabled(school_id):
+        if school_id and subject_wise_parent_student_premium_enabled(school_id):
+            # Parent sees school-wide Subject-wise Premium, not only the
+            # students linked to this Parent.
             subject_wise_premium_view(
                 school_id,
                 linked_ids,
                 "Parent"
-            )
-        elif not linked_ids:
-            st.info(
-                "Your Parent account is not linked to a student record yet."
             )
         else:
             st.info(
