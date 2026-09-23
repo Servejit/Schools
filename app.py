@@ -13070,24 +13070,15 @@ def _notice_html(message):
     return safe
 
 
-def show_dashboard_notices(school_id, title="📢 Notices"):
-    """Show notices for the current Parent/Student dashboard."""
+def show_dashboard_notices(school_id, title="📢 Notices", student_mode=False):
+    """Show dashboard notices. Student mode always uses the Student RPC."""
     if not school_id:
         return
 
     notice_rows = []
 
     try:
-        # Students use a SECURITY DEFINER RPC so their notices are based
-        # directly on their linked Student record and class, rather than
-        # depending on the normal school_notices SELECT RLS path.
-        current_role = ""
-        try:
-            current_role = str(st.session_state.get("profile", {}).get("role") or "")
-        except Exception:
-            current_role = ""
-
-        if current_role == "Student":
+        if student_mode:
             rpc_response = sb.rpc(
                 "get_student_notices",
                 {"p_school_id": school_id}
@@ -13832,7 +13823,8 @@ def dashboard():
 
         show_dashboard_notices(
             profile.get("school_id"),
-            "📢 Notices"
+            "📢 Notices",
+            student_mode=True
         )
 
         student = None
