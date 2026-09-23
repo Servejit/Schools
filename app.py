@@ -14120,9 +14120,10 @@ def dashboard():
                 else None
             )
 
-            # Backward-compatible linking: if the Student record has not yet
-            # been linked, match only by the authenticated account email and
-            # an explicitly stored students.email value. Never match by name.
+            # Backward-compatible linking for Student accounts.
+            # Prefer an existing user_id link. If missing, safely link by the
+            # authenticated email when students.email exists. This never uses
+            # name, class, roll number, or any other ambiguous field.
             if not student:
                 try:
                     auth_email = str(
@@ -14140,7 +14141,7 @@ def dashboard():
                             )
                             .eq("school_id", student_school_id)
                             .eq("active", True)
-                            .eq("email", auth_email)
+                            .ilike("email", auth_email)
                             .is_("user_id", "null")
                             .limit(1)
                             .execute()
@@ -14153,18 +14154,27 @@ def dashboard():
 
                         if email_rows:
                             candidate = email_rows[0]
-                            sb.table("students").update({
-                                "user_id": st.session_state.user.id
-                            }).eq(
-                                "id", candidate["id"]
-                            ).eq(
-                                "school_id", student_school_id
-                            ).is_(
-                                "user_id", "null"
-                            ).execute()
+                            update_result = (
+                                sb.table("students")
+                                .update({"user_id": st.session_state.user.id})
+                                .eq("id", candidate["id"])
+                                .eq("school_id", student_school_id)
+                                .is_("user_id", "null")
+                                .execute()
+                            )
 
-                            student = candidate.copy()
-                            student["user_id"] = st.session_state.user.id
+                            updated_rows = (
+                                getattr(update_result, "data", None)
+                                if update_result is not None
+                                else None
+                            ) or []
+
+                            # Use the record only if the link was actually
+                            # established. This prevents showing another
+                            # student's report card.
+                            if updated_rows:
+                                student = candidate.copy()
+                                student["user_id"] = st.session_state.user.id
                 except Exception:
                     pass
 
