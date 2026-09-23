@@ -109,11 +109,26 @@ def show_save_message(key):
 # ROLE-BASED DASHBOARD THEME
 # =========================================================
 ROLE_THEMES = {
-    "SuperAdmin": {"bg": "#EAF7EA", "accent": "#1B5E20", "accent2": "#2E7D32", "text": "#16351A", "card": "#FFFFFF"},
-    "Admin": {"bg": "#EAF2FF", "accent": "#1565C0", "accent2": "#1976D2", "text": "#102A43", "card": "#FFFFFF"},
-    "Teacher": {"bg": "#FFF0F6", "accent": "#C2185B", "accent2": "#E91E63", "text": "#4A1230", "card": "#FFFFFF"},
-    "Student": {"bg": "#111111", "accent": "#FFFFFF", "accent2": "#DDDDDD", "text": "#FFFFFF", "card": "#1E1E1E"},
-    "Parent": {"bg": "#F5EEFF", "accent": "#6A1B9A", "accent2": "#8E24AA", "text": "#32143F", "card": "#FFFFFF"},
+    "SuperAdmin": {
+        "bg": "#EAF7EE", "surface": "#FFFFFF", "accent": "#198754",
+        "accent2": "#146C43", "soft": "#D1E7DD", "text": "#123524"
+    },
+    "Admin": {
+        "bg": "#EAF2FF", "surface": "#FFFFFF", "accent": "#0D6EFD",
+        "accent2": "#084298", "soft": "#CFE2FF", "text": "#102A43"
+    },
+    "Teacher": {
+        "bg": "#FFF0F6", "surface": "#FFFFFF", "accent": "#D63384",
+        "accent2": "#A61E4D", "soft": "#F7D6E6", "text": "#4A1230"
+    },
+    "Student": {
+        "bg": "#ECECEC", "surface": "#FFFFFF", "accent": "#6C757D",
+        "accent2": "#495057", "soft": "#D3D6D8", "text": "#212529"
+    },
+    "Parent": {
+        "bg": "#F5EEFF", "surface": "#FFFFFF", "accent": "#7B2CBF",
+        "accent2": "#5A189A", "soft": "#E9D8FD", "text": "#32143F"
+    },
 }
 
 def apply_role_theme():
@@ -121,15 +136,92 @@ def apply_role_theme():
     theme = ROLE_THEMES.get(role)
     if not theme:
         return
+
     st.markdown(f"""<style>
-    .stApp {{ background: {theme["bg"]}; color: {theme["text"]}; }}
+    /* Main role theme */
+    .stApp {{
+        background: linear-gradient(180deg, {theme["bg"]} 0%, #FFFFFF 100%);
+        color: {theme["text"]};
+    }}
     [data-testid="stHeader"] {{ background: transparent; }}
-    [data-testid="stSidebar"] {{ background: {theme["accent"]}; }}
+    [data-testid="stSidebar"] {{
+        background: linear-gradient(180deg, {theme["accent2"]} 0%, {theme["accent"]} 100%);
+    }}
     [data-testid="stSidebar"] * {{ color: #FFFFFF !important; }}
-    .role-theme-card {{ background: {theme["card"]}; border: 1px solid rgba(0,0,0,.08); border-left: 5px solid {theme["accent2"]}; border-radius: 12px; padding: 14px 16px; margin: 8px 0; }}
-    .stButton > button {{ border-color: {theme["accent2"]}; }}
-    .stButton > button:hover {{ border-color: {theme["accent"]}; color: {theme["accent"]}; }}
-    div[data-testid="stMetric"] {{ background: {theme["card"]}; border: 1px solid rgba(0,0,0,.08); border-radius: 12px; padding: 10px; }}
+
+    /* Titles, headings and dividers follow the role colour */
+    .stApp h1, .stApp h2, .stApp h3 {{
+        color: {theme["accent2"]};
+    }}
+    .stApp hr {{ border-color: {theme["soft"]}; }}
+
+    /* Navigation / radio buttons */
+    div[role="radiogroup"] label {{
+        border-radius: 10px;
+        padding: 5px 9px;
+    }}
+    div[role="radiogroup"] label:hover {{
+        background: {theme["soft"]};
+    }}
+
+    /* Buttons */
+    .stButton > button {{
+        border: 1px solid {theme["accent"]};
+        color: {theme["accent2"]};
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all .15s ease;
+    }}
+    .stButton > button:hover {{
+        background: {theme["accent"]};
+        color: #FFFFFF;
+        border-color: {theme["accent2"]};
+    }}
+    .stButton > button[kind="primary"] {{
+        background: {theme["accent"]};
+        color: #FFFFFF;
+        border-color: {theme["accent"]};
+    }}
+
+    /* Inputs and select controls */
+    .stTextInput input:focus, .stTextArea textarea:focus {{
+        border-color: {theme["accent"]} !important;
+        box-shadow: 0 0 0 1px {theme["accent"]} !important;
+    }}
+    div[data-baseweb="select"] > div:focus-within {{
+        border-color: {theme["accent"]} !important;
+        box-shadow: 0 0 0 1px {theme["accent"]} !important;
+    }}
+
+    /* Cards / metrics */
+    div[data-testid="stMetric"] {{
+        background: {theme["surface"]};
+        border: 1px solid {theme["soft"]};
+        border-top: 4px solid {theme["accent"]};
+        border-radius: 14px;
+        padding: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }}
+    .role-theme-card {{
+        background: {theme["surface"]};
+        border: 1px solid {theme["soft"]};
+        border-left: 5px solid {theme["accent"]};
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin: 8px 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    }}
+
+    /* Streamlit expanders */
+    div[data-testid="stExpander"] {{
+        border-color: {theme["soft"]};
+        border-radius: 12px;
+    }}
+
+    /* Keep data tables/forms readable while the dashboard carries the role theme */
+    div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {{
+        border-radius: 10px;
+    }}
     </style>""", unsafe_allow_html=True)
 
 
