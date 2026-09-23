@@ -753,11 +753,6 @@ def users():
                         "full_name": name.strip(),
                         "role": role,
                         "school_id": school_map[selected_school],
-                        "admin_teacher_created_by": (
-                            st.session_state.user.id
-                            if role == "Admin+Teacher" and creator_role == "Admin"
-                            else None
-                        )
                     },
                     headers={
                         "Authorization": f"Bearer {token}",
@@ -1364,13 +1359,6 @@ def users():
                                 "full_name": edit_name.strip(),
                                 "role": edit_role,
                                 "school_id": school_map[edit_school_label],
-                                "admin_teacher_created_by": (
-                                    st.session_state.user.id
-                                    if edit_role == "Admin+Teacher"
-                                    and current_role != "Admin+Teacher"
-                                    and role == "Admin"
-                                    else user.get("admin_teacher_created_by")
-                                )
                             })
                             .eq("id", user_id)
                             .execute()
