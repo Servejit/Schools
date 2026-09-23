@@ -8109,39 +8109,48 @@ def create_report_overlay(
 
         value_text = str(value)
 
+        # Reliable PDF-safe highlight for Top-3 subject performers.
+        if label == "Student Name" and int(top3_subject_rank or 0) in (1, 2, 3):
+            rank = int(top3_subject_rank)
+            value_width = pdf.stringWidth(
+                value_text,
+                "Helvetica",
+                9
+            )
+
+            pad_x = 5
+            highlight_x = x + 78 - pad_x
+            highlight_y = y - 3
+            highlight_w = value_width + (pad_x * 2)
+            highlight_h = 13
+
+            if rank == 1:
+                pdf.setFillColorRGB(1.0, 0.94, 0.68)
+                pdf.setStrokeColorRGB(0.85, 0.60, 0.08)
+            elif rank == 2:
+                pdf.setFillColorRGB(1.0, 0.96, 0.80)
+                pdf.setStrokeColorRGB(0.90, 0.70, 0.20)
+            else:
+                pdf.setFillColorRGB(1.0, 0.98, 0.90)
+                pdf.setStrokeColorRGB(0.92, 0.78, 0.35)
+
+            pdf.roundRect(
+                highlight_x,
+                highlight_y,
+                highlight_w,
+                highlight_h,
+                4,
+                stroke=1,
+                fill=1
+            )
+
+        pdf.setFillColorRGB(0, 0, 0)
+
         pdf.drawString(
             x + 78,
             y,
             value_text
         )
-
-        # Golden star sprinkle for students who rank in the top 3
-        # in at least one subject for this exam.
-        if label == "Student Name" and int(top3_subject_rank or 0) in (1, 2, 3):
-            rank = int(top3_subject_rank)
-            star_count = {1: 7, 2: 5, 3: 4}[rank]
-            value_width = pdf.stringWidth(value_text, "Helvetica", 9)
-
-            star_positions = [
-                (x + 70, y + 7),
-                (x + 74 + value_width * 0.28, y + 8),
-                (x + 74 + value_width * 0.58, y + 7),
-                (x + 74 + value_width * 0.86, y + 8),
-                (x + 82 + value_width, y + 6),
-                (x + 88 + value_width * 0.42, y - 3),
-                (x + 82 + value_width * 0.78, y - 4),
-            ]
-
-            for star_index in range(star_count):
-                sx, sy = star_positions[star_index]
-                draw_golden_star(
-                    sx,
-                    sy,
-                    outer_radius=3.6 if rank == 1 else 3.2,
-                    inner_radius=1.5
-                )
-
-        pdf.setFillColorRGB(0, 0, 0)
 
     # -----------------------------------------------------
     # Student photo
