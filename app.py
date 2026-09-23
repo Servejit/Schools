@@ -664,6 +664,176 @@ def users():
                         st.code(str(e))
 
     # -----------------------------------------------------
+    # PARENT → STUDENT LINK MANAGEMENT
+    # -----------------------------------------------------
+    # Admin / SuperAdmin: all students in the school.
+    # Admin+Teacher: full school access.
+    # Teacher: only students belonging to classes assigned to
+    # this teacher as Class Teacher.
+    management_role = st.session_state.profile.get("role")
+
+    if management_role in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
+        with st.expander("👨‍👩‍👧 Parent → Student Linking", expanded=False):
+            manager_school_id = st.session_state.profile.get("school_id")
+
+            if management_role == "SuperAdmin":
+                link_school_label = st.selectbox(
+                    "🏫 School",
+                    list(school_map.keys()),
+                    key="parent_link_school"
+                )
+                manager_school_id = school_map[link_school_label]
+
+            if not manager_school_id:
+                st.warning("Your account is not assigned to a school.")
+            else:
+                try:
+                    link_parents = (
+                        sb.table("profiles")
+                        .select("id,email,full_name")
+                        .eq("school_id", manager_school_id)
+                        .eq("role", "Parent")
+                        .eq("active", True)
+                        .order("full_name")
+                        .execute()
+                        .data or []
+                    )
+                except Exception:
+                    link_parents = []
+
+                try:
+                    link_students = (
+                        sb.table("students")
+                        .select("id,name,admission_no,class_name,section,active")
+                        .eq("school_id", manager_school_id)
+                        .eq("active", True)
+                        .order("name")
+                        .execute()
+                        .data or []
+                    )
+                except Exception:
+                    link_students = []
+
+                # Teachers can only manage students from their assigned
+                # Class Teacher classes.
+                if management_role == "Teacher":
+                    try:
+                        teacher_classes = (
+                            sb.table("classes")
+                            .select("class_name,section")
+                            .eq("school_id", manager_school_id)
+                            .eq("class_teacher_id", st.session_state.user.id)
+                            .eq("active", True)
+                            .execute()
+                            .data or []
+                        )
+                    except Exception:
+                        teacher_classes = []
+
+                    allowed_classes = {
+                        (
+                            str(x.get("class_name") or "").strip().lower(),
+                            str(x.get("section") or "").strip().lower()
+                        )
+                        for x in teacher_classes
+                    }
+
+                    link_students = [
+                        s for s in link_students
+                        if (
+                            str(s.get("class_name") or "").strip().lower(),
+                            str(s.get("section") or "").strip().lower()
+                        ) in allowed_classes
+                    ]
+
+                if not link_parents:
+                    st.info("No active Parent accounts found in this school.")
+                elif not link_students:
+                    st.info("No students are available for your assigned class(es).")
+                else:
+                    parent_options = {
+                        f"{p.get('full_name') or 'Parent'} — {p.get('email') or '-'}": p["id"]
+                        for p in link_parents
+                    }
+                    selected_parent_label = st.selectbox(
+                        "👤 Parent",
+                        list(parent_options.keys()),
+                        key="parent_link_parent"
+                    )
+                    selected_parent_id = parent_options[selected_parent_label]
+
+                    try:
+                        existing_links = (
+                            sb.table("parent_student_links")
+                            .select("student_id")
+                            .eq("parent_id", selected_parent_id)
+                            .execute()
+                            .data or []
+                        )
+                    except Exception:
+                        existing_links = []
+
+                    existing_link_ids = {
+                        str(x.get("student_id"))
+                        for x in existing_links
+                        if x.get("student_id")
+                    }
+
+                    student_options = {}
+                    for s in link_students:
+                        label = (
+                            f"{s.get('name') or 'Student'}"
+                            f" — Admission: {s.get('admission_no') or '-'}"
+                            f" — Class: {s.get('class_name') or '-'}"
+                            f" — Section: {s.get('section') or '-'}"
+                        )
+                        student_options[label] = s["id"]
+
+                    selected_student_labels = st.multiselect(
+                        "🎓 Linked Student(s)",
+                        list(student_options.keys()),
+                        default=[
+                            label
+                            for label, sid in student_options.items()
+                            if str(sid) in existing_link_ids
+                        ],
+                        key="parent_link_students"
+                    )
+
+                    if st.button(
+                        "💾 Save Parent → Student Links",
+                        use_container_width=True,
+                        key="save_parent_student_links"
+                    ):
+                        selected_student_ids = [
+                            student_options[x]
+                            for x in selected_student_labels
+                            if x in student_options
+                        ]
+                        try:
+                            (
+                                sb.table("parent_student_links")
+                                .delete()
+                                .eq("parent_id", selected_parent_id)
+                                .execute()
+                            )
+
+                            if selected_student_ids:
+                                sb.table("parent_student_links").insert([
+                                    {
+                                        "parent_id": selected_parent_id,
+                                        "student_id": student_id
+                                    }
+                                    for student_id in selected_student_ids
+                                ]).execute()
+
+                            st.success("✅ Parent → Student links saved successfully.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error("Could not save Parent → Student links.")
+                            st.code(str(e))
+
+    # -----------------------------------------------------
     # CREATE USER
     # -----------------------------------------------------
     with st.expander("➕ Create User", expanded=True):
