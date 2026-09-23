@@ -11180,37 +11180,25 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
             st.markdown(f"#### 📚 {subject_name}")
 
-            # Use text-based medal symbols in addition to the emoji so the
-            # first three positions remain unmistakable even if the browser
-            # does not have a color-emoji font.
-            medal_labels = {
-                1: "🥇 GOLD MEDAL",
-                2: "🥈 SILVER MEDAL",
-                3: "🥉 BRONZE MEDAL",
-            }
-
+            # Top 10 leaderboard: Rank is the first column.
+            # The first three ranks receive medal emojis.
             for item in ranking_rows:
-                rank_text = item["Rank"]
-                try:
-                    rank_number = int(rank_text.split()[-1])
-                except Exception:
-                    rank_number = 0
-
-                if rank_number == 1:
+                rank_number = str(item["Rank"]).split()[-1]
+                if rank_number == "1":
                     rank_display = chr(0x1F947) + " 1"
-                elif rank_number == 2:
+                elif rank_number == "2":
                     rank_display = chr(0x1F948) + " 2"
-                elif rank_number == 3:
+                elif rank_number == "3":
                     rank_display = chr(0x1F949) + " 3"
                 else:
-                    rank_display = str(rank_number)
+                    rank_display = rank_number
 
                 st.markdown(
-                    f'**{rank_display}** &nbsp;&nbsp; '
-                    f'**{item["Student Name"]}** &nbsp;&nbsp; '
+                    f'**Rank:** {rank_display} &nbsp;&nbsp; '
+                    f'**Student Name:** {item["Student Name"]} &nbsp;&nbsp; '
                     f'**Class:** {item["Class"]} &nbsp;&nbsp; '
                     f'**Section:** {item["Section"]} &nbsp;&nbsp; '
-                    f'**Father:** {item["Father Name"]} &nbsp;&nbsp; '
+                    f'**Father Name:** {item["Father Name"]} &nbsp;&nbsp; '
                     f'**Marks:** {item["Marks"]} &nbsp;&nbsp; '
                     f'**Percentage:** {item["Percentage"]}'
                 )
