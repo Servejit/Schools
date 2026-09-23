@@ -8879,6 +8879,7 @@ def dashboard():
         menu = st.radio(
             "Management",
             [
+                "👥 Users",
                 "🎓 Students",
                 "📚 Classes & Subjects",
                 "📝 Exam / Assessment",
@@ -8891,7 +8892,10 @@ def dashboard():
             horizontal=True
         )
 
-        if menu == "🎓 Students":
+        if menu == "👥 Users":
+            users()
+
+        elif menu == "🎓 Students":
             students()
 
         elif menu == "📚 Classes & Subjects":
