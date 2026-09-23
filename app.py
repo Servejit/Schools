@@ -11202,11 +11202,11 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
             for item in ranking_rows:
                 rank_value = item["Rank"]
                 if rank_value.startswith("🥇"):
-                    rank_html = "🥇 <b>1</b>"
+                    rank_html = '<span style="display:inline-block; background:#FFD700; color:#000; border-radius:50%; width:34px; height:34px; line-height:34px; font-weight:700; font-size:17px;">1</span>'
                 elif rank_value.startswith("🥈"):
-                    rank_html = "🥈 <b>2</b>"
+                    rank_html = '<span style="display:inline-block; background:#C0C0C0; color:#000; border-radius:50%; width:34px; height:34px; line-height:34px; font-weight:700; font-size:17px;">2</span>'
                 elif rank_value.startswith("🥉"):
-                    rank_html = "🥉 <b>3</b>"
+                    rank_html = '<span style="display:inline-block; background:#CD7F32; color:#fff; border-radius:50%; width:34px; height:34px; line-height:34px; font-weight:700; font-size:17px;">3</span>'
                 else:
                     rank_html = f"<b>{rank_value}</b>"
 
