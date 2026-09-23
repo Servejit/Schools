@@ -273,6 +273,47 @@ def apply_role_theme():
     div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {{
         border-radius: 10px;
     }}
+
+    /* Golden flashing school notices */
+    .school-notice-card {
+        background: #FFFDF0;
+        border: 2px solid #D4AF37;
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin: 10px 0;
+        box-shadow: 0 3px 12px rgba(212,175,55,.20);
+    }
+    .school-notice-heading {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+    }
+    .school-notice-flash {
+        color: #D4AF37;
+        font-size: 1.35rem;
+        font-weight: 900;
+        letter-spacing: 1.5px;
+        text-shadow: 0 0 6px rgba(212,175,55,.65);
+        animation: schoolNoticeGoldenFlash 1.15s infinite;
+    }
+    .school-notice-date {
+        color: #6B5500;
+        font-weight: 700;
+        font-size: 1rem;
+    }
+    .school-notice-message {
+        color: #2F2600;
+        font-size: 1rem;
+        line-height: 1.55;
+        white-space: normal;
+    }
+    @keyframes schoolNoticeGoldenFlash {
+        0%, 100% { opacity: 1; text-shadow: 0 0 5px rgba(212,175,55,.45); }
+        50% { opacity: .35; text-shadow: 0 0 18px rgba(255,215,0,1); }
+    }
+
     </style>""", unsafe_allow_html=True)
 
 
@@ -12974,6 +13015,165 @@ def reports():
 
 
 # =========================================================
+# CLASS TEACHER NOTICES
+# =========================================================
+
+def _notice_html(message):
+    safe = (
+        str(message or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\\n", "<br>")
+    )
+    return safe
+
+
+def show_dashboard_notices(school_id, title="📢 Notices"):
+    """Show notices allowed for the currently logged-in Parent/Student."""
+    if not school_id:
+        return
+
+    try:
+        notice_rows = (
+            sb.table("school_notices")
+            .select("id,notice_date,message,created_at")
+            .eq("school_id", school_id)
+            .order("notice_date", desc=True)
+            .order("created_at", desc=True)
+            .execute()
+            .data or []
+        )
+    except Exception:
+        notice_rows = []
+
+    if not notice_rows:
+        return
+
+    st.divider()
+    st.subheader(title)
+
+    for notice in notice_rows:
+        notice_date = notice.get("notice_date") or ""
+        try:
+            display_date = datetime.datetime.strptime(
+                str(notice_date), "%Y-%m-%d"
+            ).strftime("%d-%m-%Y")
+        except Exception:
+            display_date = str(notice_date)
+
+        st.markdown(
+            f'''
+            <div class="school-notice-card">
+                <div class="school-notice-heading">
+                    <span class="school-notice-flash">NOTICE</span>
+                    <span class="school-notice-date">Dated {display_date}</span>
+                </div>
+                <div class="school-notice-message">{_notice_html(notice.get("message"))}</div>
+            </div>
+            ''',
+            unsafe_allow_html=True
+        )
+
+
+def class_teacher_notices(profile):
+    """Class Teacher can publish notices for their assigned class(es)."""
+    school_id = profile.get("school_id")
+    teacher_id = st.session_state.user.id
+
+    if not school_id:
+        st.info("Your account is not assigned to a school.")
+        return
+
+    try:
+        assigned_classes = (
+            sb.table("classes")
+            .select("id,class_name,section,academic_year")
+            .eq("school_id", school_id)
+            .eq("class_teacher_id", teacher_id)
+            .eq("active", True)
+            .order("class_name")
+            .order("section")
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error("Could not load your Class Teacher classes.")
+        st.code(str(e))
+        return
+
+    if not assigned_classes:
+        st.warning("No class has been assigned to you as Class Teacher yet.")
+        return
+
+    show_save_message("class_teacher_notice")
+
+    st.subheader("📢 Send Notice to Parents & Students")
+    st.caption(
+        "The notice will automatically appear on the dashboards of the "
+        "Parents linked to students in the selected class and the Students "
+        "of that class."
+    )
+
+    class_options = {
+        (
+            f"{x.get('class_name') or '-'}"
+            f" — Section {x.get('section') or '-'}"
+            f" — {x.get('academic_year') or '-'}"
+        ): x
+        for x in assigned_classes
+    }
+
+    selected_label = st.selectbox(
+        "🏫 Class / Section",
+        list(class_options.keys()),
+        key="class_teacher_notice_class"
+    )
+    selected_class = class_options[selected_label]
+
+    notice_date = st.date_input(
+        "📅 Notice Dated",
+        value=datetime.date.today(),
+        key="class_teacher_notice_date"
+    )
+
+    message = st.text_area(
+        "Common Message for Parents and Students",
+        height=160,
+        placeholder="Write the notice/message here...",
+        key="class_teacher_notice_message"
+    )
+
+    if st.button(
+        "📢 Send Notice",
+        type="primary",
+        use_container_width=True,
+        key="send_class_teacher_notice"
+    ):
+        clean_message = message.strip()
+
+        if not clean_message:
+            st.warning("Please write the notice message.")
+            return
+
+        try:
+            sb.table("school_notices").insert({
+                "school_id": school_id,
+                "class_id": selected_class["id"],
+                "teacher_id": teacher_id,
+                "notice_date": notice_date.isoformat(),
+                "message": clean_message
+            }).execute()
+
+            mark_saved("class_teacher_notice")
+            st.success("✅ Notice sent successfully.")
+            st.rerun()
+
+        except Exception as e:
+            st.error("Could not send the notice.")
+            st.code(str(e))
+
+# =========================================================
 # DASHBOARD# =========================================================
 
 def dashboard():
@@ -13307,6 +13507,7 @@ def dashboard():
                 "🎓 Students",
                 "📝 Marks",
                 "📅 Attendance",
+                "📢 Notices",
                 "📄 Report Cards",
                 "📊 Reports"
             ],
@@ -13321,6 +13522,9 @@ def dashboard():
 
         elif menu == "📅 Attendance":
             attendance()
+
+        elif menu == "📢 Notices":
+            class_teacher_notices(profile)
 
         elif menu == "📄 Report Cards":
             report_cards()
@@ -13340,6 +13544,11 @@ def dashboard():
     elif role == "Student":
 
         st.title("🎓 Student Dashboard")
+
+        show_dashboard_notices(
+            profile.get("school_id"),
+            "📢 Notices"
+        )
 
         student = None
 
@@ -13475,6 +13684,11 @@ def dashboard():
         st.title("👨‍👩‍👧 Parent Dashboard")
 
         school_id = profile.get("school_id")
+
+        show_dashboard_notices(
+            school_id,
+            "📢 Notices"
+        )
 
         # -------------------------------------------------
         # PARENT REPORT CARDS
