@@ -9674,50 +9674,6 @@ def report_cards():
     st.header("📄 Report Card Generator")
 
     role = st.session_state.profile.get("role")
-    show_save_message("parent_report_card_permission")
-
-    if role == "Admin" and role:
-        school_id_for_parent_access = st.session_state.profile.get("school_id")
-        if school_id_for_parent_access:
-            try:
-                current_parent_report_access = (
-                    sb.table("premium_feature_access")
-                    .select("active")
-                    .eq("school_id", school_id_for_parent_access)
-                    .eq("admin_id", st.session_state.user.id)
-                    .eq("feature_key", "parent_report_cards")
-                    .maybe_single()
-                    .execute()
-                    .data
-                )
-                allow_parent_reports = st.toggle(
-                    "👨‍👩‍👧 Allow Parents to view linked children's Report Cards",
-                    value=bool(
-                        current_parent_report_access
-                        and current_parent_report_access.get("active") is True
-                    ),
-                    key=f"allow_parent_report_cards_{school_id_for_parent_access}"
-                )
-                if st.button(
-                    "💾 Save Parent Report Card Permission",
-                    use_container_width=True,
-                    key=f"save_parent_report_cards_{school_id_for_parent_access}"
-                ):
-                    sb.table("premium_feature_access").upsert(
-                        {
-                            "school_id": school_id_for_parent_access,
-                            "admin_id": st.session_state.user.id,
-                            "feature_key": "parent_report_cards",
-                            "active": bool(allow_parent_reports),
-                            "updated_at": datetime.datetime.now(
-                                datetime.timezone.utc
-                            ).isoformat()
-                        },
-                        on_conflict="school_id,admin_id,feature_key"
-                    ).execute()
-                    mark_saved("parent_report_card_permission")
-                    st.rerun()
-        st.divider()
 
     if role not in [
         "SuperAdmin",
