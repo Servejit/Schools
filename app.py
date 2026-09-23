@@ -38,7 +38,37 @@ KEY = st.secrets["SUPABASE_PUBLISHABLE_KEY"]
 
 CREATE_USER = f"{URL}/functions/v1/Create-User"
 
-sb = create_client(URL, KEY)
+
+# =========================================================
+# SESSION-SAFE SUPABASE CLIENT
+# =========================================================
+# Create a fresh client for each Streamlit session/run instead of sharing
+# one mutable authenticated client between users. This prevents one user's
+# auth token from ever being applied to another user's requests.
+def get_supabase_client():
+    client = create_client(URL, KEY)
+
+    access_token = st.session_state.get("access_token")
+    refresh_token = st.session_state.get("refresh_token")
+
+    if access_token and refresh_token:
+        try:
+            client.auth.set_session(
+                access_token,
+                refresh_token
+            )
+        except Exception:
+            try:
+                client.postgrest.auth(access_token)
+            except Exception:
+                pass
+    elif access_token:
+        try:
+            client.postgrest.auth(access_token)
+        except Exception:
+            pass
+
+    return client
 
 
 # =========================================================
@@ -58,21 +88,9 @@ for key in [
         )
 
 
-if (
-    st.session_state.access_token
-    and st.session_state.refresh_token
-):
-    try:
-        sb.auth.set_session(
-            st.session_state.access_token,
-            st.session_state.refresh_token
-        )
-
-        sb.postgrest.auth(
-            st.session_state.access_token
-        )
-    except Exception:
-        pass
+# Each Streamlit user/session gets its own Supabase client.
+# No authenticated client object is shared between users.
+sb = get_supabase_client()
 
 
 
