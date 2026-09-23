@@ -11679,7 +11679,7 @@ def premium_feature_management():
 
         # Parent/Student Report Card permission is a separate Admin-controlled
         # school feature. Parents see linked children; Students see only their own record.
-        st.subheader("📄 Parent Report Card Access")
+        st.subheader("📄 Parent / Student Report Card Access")
         report_card_feature_key = "parent_report_card"
         try:
             report_existing = (
@@ -11705,7 +11705,7 @@ def premium_feature_management():
         )
 
         if st.button(
-            "💾 Save Parent Report Card Permission",
+            "💾 Save Parent / Student Report Card Permission",
             use_container_width=True,
             key=f"save_parent_report_card_{school_id}"
         ):
@@ -11738,7 +11738,7 @@ def premium_feature_management():
                 st.success("✅ Saved successfully.")
                 st.rerun()
             except Exception as e:
-                st.error("Could not save Parent Report Card permission.")
+                st.error("Could not save Parent / Student Report Card permission.")
                 st.code(str(e))
 
 
