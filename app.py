@@ -10838,54 +10838,39 @@ def premium_feature_management():
 
 
 def subject_wise_parent_student_premium_enabled(school_id):
-    """Return True only when an active Admin has both Premium and downstream permission."""
+    """Check Parent/Student Subject-wise Premium through a secure Supabase RPC.
+
+    Parents/Students do not have direct SELECT permission on
+    premium_feature_access, so this check must not query that table from
+    the Parent/Student session. The database function performs the full
+    Admin Premium + downstream permission check securely.
+    """
     if not school_id:
         return False
 
     try:
-        admin_rows = (
-            sb.table("profiles")
-            .select("id")
-            .eq("school_id", school_id)
-            .eq("role", "Admin")
-            .eq("active", True)
-            .execute()
-            .data or []
-        )
-
-        for admin in admin_rows:
-            admin_id = admin.get("id")
-            if not admin_id:
-                continue
-
-            if not premium_feature_enabled(
-                school_id,
-                admin_id,
-                "school_academic_status"
-            ):
-                continue
-
-            permission = (
-                sb.table("premium_feature_access")
-                .select("active")
-                .eq("school_id", school_id)
-                .eq("admin_id", admin_id)
-                .eq(
-                    "feature_key",
-                    "subject_wise_premium_parent_student"
-                )
-                .maybe_single()
-                .execute()
-                .data
+        result = (
+            sb.rpc(
+                "parent_student_subject_wise_premium_enabled",
+                {"p_school_id": school_id}
             )
-
-            if permission and permission.get("active") is True:
-                return True
+            .execute()
+        )
+        data = result.data
+        if isinstance(data, bool):
+            return data
+        if isinstance(data, list) and data:
+            return bool(data[0])
+        if isinstance(data, dict):
+            return bool(
+                data.get("parent_student_subject_wise_premium_enabled")
+                or data.get("enabled")
+                or data.get("result")
+            )
     except Exception:
         return False
 
     return False
-
 
 def subject_wise_premium_view(school_id, student_ids, viewer_label):
     """Full Subject-wise Premium view for permitted Parent/Student accounts.
