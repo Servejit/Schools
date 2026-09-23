@@ -11171,6 +11171,268 @@ def parent_report_cards_view(school_id, parent_user_id):
             st.error("Could not generate the Report Card.")
             st.code(str(e))
 
+
+def student_report_card_view(school_id, student_id):
+    """Show Report Cards only for the authenticated Student's own linked record.
+
+    Students never receive a student selector here. The student_id comes from
+    the authenticated Student dashboard record, so one Student cannot choose
+    or generate another student's Report Card.
+    """
+    if not school_id or not student_id:
+        return
+
+    if not parent_report_card_enabled(school_id):
+        st.info(
+            "📄 Report Cards are not currently enabled by Admin for Parents/Students."
+        )
+        return
+
+    st.subheader("📄 My Report Cards")
+
+    try:
+        own_student = (
+            sb.table("students")
+            .select(
+                "id,school_id,user_id,name,admission_no,class_name,section,"
+                "date_of_birth,gender,father_name,parent_name,parent_phone,"
+                "remarks,photo_path,active"
+            )
+            .eq("id", str(student_id))
+            .eq("school_id", school_id)
+            .eq("user_id", st.session_state.user.id)
+            .eq("active", True)
+            .maybe_single()
+            .execute()
+            .data
+        )
+    except Exception:
+        own_student = None
+
+    if not own_student:
+        st.info(
+            "Your Student account is not linked to an active Student record yet."
+        )
+        return
+
+    try:
+        exam_options = get_exam_assessments(school_id)
+    except Exception:
+        exam_options = []
+
+    exam_names = [
+        str(x.get("name") or "").strip()
+        for x in exam_options
+        if x.get("name")
+    ]
+    if not exam_names:
+        st.info("No Exam / Assessment is available yet.")
+        return
+
+    exam_name = st.selectbox(
+        "📝 Exam / Assessment",
+        exam_names,
+        key="student_own_report_card_exam"
+    )
+
+    try:
+        template_data = (
+            sb.table("print_templates")
+            .select(
+                "id,name,template_name,page_size,orientation,storage_path,"
+                "file_path,file_type,config_json,active,created_at"
+            )
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .order("created_at", desc=True)
+            .execute()
+            .data or []
+        )
+        report_templates = [
+            x for x in template_data
+            if get_template_config(x).get("template_type") == "Report Card"
+        ]
+    except Exception:
+        report_templates = []
+
+    if not report_templates:
+        st.info("No active Report Card template is available.")
+        return
+
+    selected_template = report_templates[0]
+    template_path = (
+        selected_template.get("file_path")
+        or selected_template.get("storage_path")
+    )
+    if not template_path:
+        st.info("The Report Card template is not configured yet.")
+        return
+
+    try:
+        template_bytes = (
+            sb.storage.from_("school-assets").download(template_path)
+        )
+    except Exception:
+        template_bytes = None
+
+    if not template_bytes:
+        st.info("The Report Card template could not be loaded.")
+        return
+
+    try:
+        school_info = (
+            sb.table("schools")
+            .select("id,name,code,address")
+            .eq("id", school_id)
+            .maybe_single()
+            .execute()
+            .data or {}
+        )
+        subject_data = (
+            sb.table("subjects")
+            .select(
+                "id,school_id,class_id,name,subject_name,code,"
+                "max_marks,passing_marks,active"
+            )
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .order("subject_name")
+            .execute()
+            .data or []
+        )
+        marks_rows = (
+            sb.table("marks")
+            .select(
+                "id,student_id,subject_id,exam_name,marks,max_marks,class_id"
+            )
+            .eq("school_id", school_id)
+            .eq("student_id", str(own_student["id"]))
+            .eq("exam_name", exam_name)
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error("Could not load your Report Card data.")
+        st.code(str(e))
+        return
+
+    if not marks_rows:
+        st.info(
+            f"No marks found for {own_student.get('name') or 'you'} "
+            f"for {exam_name}."
+        )
+        return
+
+    marks_by_subject = {
+        str(x.get("subject_id")): x
+        for x in marks_rows
+        if x.get("subject_id") is not None
+    }
+    marked_class_ids = {
+        str(x.get("class_id"))
+        for x in marks_rows
+        if x.get("class_id") is not None
+    }
+
+    child_marks = []
+    for subject in subject_data:
+        sid = str(subject.get("id"))
+        if marked_class_ids:
+            if str(subject.get("class_id")) not in marked_class_ids:
+                continue
+        elif sid not in marks_by_subject:
+            continue
+
+        row = marks_by_subject.get(sid)
+        combined = dict(row) if row else {
+            "id": None,
+            "student_id": own_student["id"],
+            "subject_id": subject.get("id"),
+            "exam_name": exam_name,
+            "marks": None,
+            "max_marks": subject.get("max_marks"),
+            "class_id": subject.get("class_id")
+        }
+        combined["subject_name"] = (
+            subject.get("subject_name")
+            or subject.get("name")
+            or "Subject"
+        )
+        combined["passing_marks"] = (
+            subject.get("passing_marks")
+            if subject.get("passing_marks") is not None
+            else 33
+        )
+        if combined.get("max_marks") is None:
+            combined["max_marks"] = (
+                subject.get("max_marks")
+                if subject.get("max_marks") is not None
+                else 100
+            )
+        child_marks.append(combined)
+
+    if not child_marks:
+        st.info("No subject marks are available for your Report Card.")
+        return
+
+    orientation = selected_template.get("orientation") or "Portrait"
+    file_type = (selected_template.get("file_type") or "pdf").lower()
+    logo_path = school_logo_from_template(selected_template)
+    logo_size = school_logo_size_from_template(selected_template)
+
+    if st.button(
+        "📄 View / Download My Report Card",
+        type="primary",
+        use_container_width=True,
+        key="student_view_own_report_card"
+    ):
+        try:
+            total_attendance, present_days = attendance_summary(
+                own_student["id"], school_id
+            )
+            pdf_bytes = make_report_card_pdf(
+                template_bytes=template_bytes,
+                template_type="Report Card",
+                orientation=orientation,
+                student=own_student,
+                school_info=school_info,
+                subjects=subject_data,
+                marks_rows=child_marks,
+                exam_name=exam_name,
+                file_type=file_type,
+                total_attendance=total_attendance,
+                present_days=present_days,
+                school_logo_path=logo_path,
+                school_logo_size=logo_size
+            )
+
+            safe_name = (
+                str(own_student.get("name") or "Student")
+                .replace("/", "_")
+                .replace(chr(92), "_")
+                .replace(" ", "_")
+            )
+            safe_exam = (
+                str(exam_name)
+                .replace("/", "_")
+                .replace(chr(92), "_")
+                .replace(" ", "_")
+            )
+
+            st.success("✅ Report card generated successfully.")
+            st.download_button(
+                "⬇️ Download My Report Card PDF",
+                data=pdf_bytes,
+                file_name=f"{safe_name}_{safe_exam}_ReportCard.pdf",
+                mime="application/pdf",
+                type="primary",
+                use_container_width=True,
+                key="student_download_own_report_card"
+            )
+        except Exception as e:
+            st.error("Could not generate your Report Card.")
+            st.code(str(e))
+
 # =========================================================
 # REPORTS
 # =========================================================
@@ -11416,8 +11678,8 @@ def premium_feature_management():
         st.header("💎 Premium Features")
         st.subheader("👨‍👩‍👧 Parent / Student Access")
 
-        # Parent Report Card permission is a separate Admin-controlled
-        # school feature. It is not tied to Premium Academic Status.
+        # Parent/Student Report Card permission is a separate Admin-controlled
+        # school feature. Parents see linked children; Students see only their own record.
         st.subheader("📄 Parent Report Card Access")
         report_card_feature_key = "parent_report_card"
         try:
@@ -11438,7 +11700,7 @@ def premium_feature_management():
             report_existing and report_existing.get("active") is True
         )
         new_report_card_active = st.toggle(
-            "Allow Parents to view Report Cards of their linked children",
+            "Allow Parents and Students to view Report Cards (Parents: linked children; Students: own record)",
             value=report_card_active,
             key=f"allow_parent_report_cards_{school_id}"
         )
@@ -13833,39 +14095,35 @@ def dashboard():
 
         st.title("🎓 Student Dashboard")
 
-        # Load the Student record first.  The Student's actual school is
-        # the authoritative school for notices; do not depend only on the
-        # profile's school_id because older Student profiles may not have it.
+        # Student and Parent dashboards intentionally expose the same
+        # parent-facing information. The only difference is Report Cards:
+        # a Student can see only the Report Card belonging to their own
+        # authenticated Student record. There is no student selector.
+
         student = None
 
         try:
-
-            student_query = (
+            student_response = (
                 sb.table("students")
                 .select(
-                    "id,school_id,user_id,name,"
-                    "admission_no,class_name,section,"
-                    "date_of_birth,gender,father_name,"
-                    "parent_name,parent_phone,photo_path,"
-                    "remarks,active"
+                    "id,school_id,user_id,name,admission_no,class_name,section,"
+                    "date_of_birth,gender,father_name,parent_name,parent_phone,"
+                    "photo_path,remarks,active"
                 )
-                .eq(
-                    "user_id",
-                    st.session_state.user.id
-                )
+                .eq("user_id", st.session_state.user.id)
+                .eq("active", True)
                 .maybe_single()
+                .execute()
             )
-            student_response = student_query.execute()
             student = (
                 getattr(student_response, "data", None)
                 if student_response is not None
                 else None
             )
 
-            # Some older student records were created before the Student login
-            # was linked and therefore have user_id = NULL. If that happens,
-            # use the authenticated Student profile email to find an exact
-            # unlinked student record in the same school, then link it once.
+            # Backward-compatible linking: if the Student record has not yet
+            # been linked, match only by the authenticated account email and
+            # an explicitly stored students.email value. Never match by name.
             if not student:
                 try:
                     auth_email = str(
@@ -13874,125 +14132,62 @@ def dashboard():
                     student_school_id = profile.get("school_id")
 
                     if auth_email and student_school_id:
-                        profile_rows = (
-                            sb.table("profiles")
-                            .select("id,email,role,school_id,active")
-                            .eq("id", st.session_state.user.id)
-                            .eq("role", "Student")
+                        email_response = (
+                            sb.table("students")
+                            .select(
+                                "id,school_id,user_id,name,admission_no,class_name,"
+                                "section,date_of_birth,gender,father_name,parent_name,"
+                                "parent_phone,photo_path,remarks,active,email"
+                            )
                             .eq("school_id", student_school_id)
                             .eq("active", True)
+                            .eq("email", auth_email)
+                            .is_("user_id", "null")
                             .limit(1)
                             .execute()
                         )
-                        profile_data = (
-                            getattr(profile_rows, "data", None)
-                            if profile_rows is not None
+                        email_rows = (
+                            getattr(email_response, "data", None)
+                            if email_response is not None
                             else None
                         ) or []
 
-                        if profile_data:
-                            # Match an unlinked record by the Student account's
-                            # email only when the students table has an email
-                            # column. If it does not, no unsafe name matching is
-                            # attempted.
-                            try:
-                                email_response = (
-                                    sb.table("students")
-                                    .select(
-                                        "id,school_id,user_id,name,admission_no,"
-                                        "class_name,section,date_of_birth,gender,"
-                                        "father_name,parent_name,parent_phone,photo_path,"
-                                        "remarks,active,email"
-                                    )
-                                    .eq("school_id", student_school_id)
-                                    .eq("active", True)
-                                    .eq("email", auth_email)
-                                    .is_("user_id", "null")
-                                    .limit(1)
-                                    .execute()
-                                )
-                                email_rows = (
-                                    getattr(email_response, "data", None)
-                                    if email_response is not None
-                                    else None
-                                ) or []
-                            except Exception:
-                                email_rows = []
+                        if email_rows:
+                            candidate = email_rows[0]
+                            sb.table("students").update({
+                                "user_id": st.session_state.user.id
+                            }).eq(
+                                "id", candidate["id"]
+                            ).eq(
+                                "school_id", student_school_id
+                            ).is_(
+                                "user_id", "null"
+                            ).execute()
 
-                            if email_rows:
-                                candidate = email_rows[0]
-                                link_response = (
-                                    sb.table("students")
-                                    .update({"user_id": st.session_state.user.id})
-                                    .eq("id", candidate.get("id"))
-                                    .eq("school_id", student_school_id)
-                                    .is_("user_id", "null")
-                                    .execute()
-                                )
-                                if link_response is not None:
-                                    student = candidate.copy()
-                                    student["user_id"] = st.session_state.user.id
+                            student = candidate.copy()
+                            student["user_id"] = st.session_state.user.id
                 except Exception:
-                    # Never block the Student Dashboard because automatic
-                    # linking is unavailable; show the normal link message.
                     pass
 
             if student:
-
-                photo_path = student.get(
-                    "photo_path"
-                )
-
+                photo_path = student.get("photo_path")
                 if photo_path:
-
                     try:
-
                         photo_bytes = (
                             sb.storage
                             .from_("school-assets")
                             .download(photo_path)
                         )
-
-                        st.image(
-                            photo_bytes,
-                            width=140
-                        )
-
+                        st.image(photo_bytes, width=140)
                     except Exception:
                         pass
 
-                st.subheader(
-                    student.get(
-                        "name",
-                        "Student"
-                    )
-                )
+                st.subheader(student.get("name") or "Student")
 
                 a, b, c = st.columns(3)
-
-                a.metric(
-                    "Class",
-                    student.get(
-                        "class_name",
-                        "-"
-                    )
-                )
-
-                b.metric(
-                    "Section",
-                    student.get(
-                        "section",
-                        "-"
-                    )
-                )
-
-                c.metric(
-                    "Admission No.",
-                    student.get(
-                        "admission_no",
-                        "-"
-                    )
-                )
+                a.metric("Class", student.get("class_name") or "-")
+                b.metric("Section", student.get("section") or "-")
+                c.metric("Admission No.", student.get("admission_no") or "-")
 
                 st.write(
                     "**Father Name:** "
@@ -14000,36 +14195,22 @@ def dashboard():
                 )
 
                 if student.get("remarks"):
-
-                    st.write(
-                        "**Remarks:** "
-                        f"{student.get('remarks')}"
-                    )
-
+                    st.write(f"**Remarks:** {student.get('remarks')}")
             else:
-
-                st.info(
-                    "Your student record is not linked yet."
-                )
+                st.info("Your student record is not linked yet.")
 
         except Exception as e:
-
-            st.error(
-                "Could not load student information."
-            )
-
+            st.error("Could not load student information.")
             st.code(str(e))
 
-        # Subject-wise Premium is school-wide. It does not depend on
-        # this Student being linked to a particular student record.
         student_school_id = (
             (student or {}).get("school_id")
             or profile.get("school_id")
         )
 
-        # Student notices must use the same class-linked notice access
-        # regardless of whether the profile school_id is populated.
         if student_school_id and student:
+            # Same parent-facing notice area. The database RPC still limits
+            # Student notices to the Student's permitted class/record scope.
             show_dashboard_notices(
                 student_school_id,
                 "📢 Notices",
@@ -14037,6 +14218,7 @@ def dashboard():
                 student_id=student.get("id")
             )
 
+        # Same school-wide Subject-wise Premium area available to Parents.
         if student_school_id and subject_wise_parent_student_premium_enabled(
             student_school_id
         ):
@@ -14048,6 +14230,14 @@ def dashboard():
         elif student_school_id:
             st.info(
                 "💎 Subject-wise Premium is not enabled for Students by Admin."
+            )
+
+        # Same Report Card permission as Parents, but strictly own record.
+        # No Student can select, view or generate another Student's card.
+        if student_school_id and student:
+            student_report_card_view(
+                student_school_id,
+                student.get("id")
             )
 
     # =====================================================
