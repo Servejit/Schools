@@ -11182,10 +11182,9 @@ def student_report_card_view(school_id, student_id):
     if not school_id or not student_id:
         return
 
+    # If Report Cards are disabled for Parents/Students, show nothing.
+    # Do not expose the Admin permission state or any internal message.
     if not parent_report_card_enabled(school_id):
-        st.info(
-            "📄 Report Cards are not currently enabled by Admin for Parents/Students."
-        )
         return
 
     st.subheader("📄 My Report Cards")
