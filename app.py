@@ -10903,28 +10903,6 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
         "Full Subject-wise Premium access: Topper, >70%, >80% and >90%."
     )
 
-    st.markdown("""<style>
-.premium-gold-name {
-    display:inline-block;
-    font-size:1.15rem;
-    font-weight:800;
-    color:#8a5a00;
-    padding:6px 14px;
-    border:1px solid #d6a72c;
-    border-radius:10px;
-    background:linear-gradient(90deg,#fff8cf,#ffd95a,#fff8cf);
-    background-size:200% auto;
-    box-shadow:0 0 12px rgba(255,193,7,.45);
-    animation:premiumGoldShine 2.4s linear infinite;
-}
-@keyframes premiumGoldShine {
-    0% { background-position:200% center; }
-    100% { background-position:-200% center; }
-}
-</style>""", unsafe_allow_html=True)
-
-
-
     if not school_id or not student_ids:
         st.info(
             f"No linked student record is available for this {viewer_label} account."
@@ -11199,11 +11177,6 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                     ),
                     "Percentage": f'{format_mark(row["Percentage"])}%'
                 })
-
-            st.markdown(
-                f'<div class="premium-gold-name">✨ {rows[0]["Student Name"]}</div>',
-                unsafe_allow_html=True,
-            )
 
             st.markdown(f"#### 📚 {subject_name}")
 
