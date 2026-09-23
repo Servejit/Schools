@@ -96,7 +96,11 @@ function json(data: unknown, status = 200) {
     const callerRole = String(callerProfile.role ?? "").trim();
 
     // Only SuperAdmin and Admin may use Create-User.
-    if (callerRole !== "SuperAdmin" && callerRole !== "Admin") {
+    if (
+      callerRole !== "SuperAdmin" &&
+      callerRole !== "Admin" &&
+      callerRole !== "Admin+Teacher"
+    ) {
       return json(
         { error: "Only an active SuperAdmin or Admin can create users." },
         403,
@@ -125,7 +129,13 @@ function json(data: unknown, status = 200) {
       return json({ error: "Password must be at least 6 characters." }, 400);
     }
 
-    const allowedRoles = ["Admin", "Teacher", "Student", "Parent"];
+    const allowedRoles = [
+      "Admin",
+      "Admin+Teacher",
+      "Teacher",
+      "Student",
+      "Parent"
+    ];
 
     // SuperAdmin itself is not created through this endpoint.
     if (!allowedRoles.includes(requestedRole)) {
@@ -137,13 +147,37 @@ function json(data: unknown, status = 200) {
 
     // Admin is permanently restricted to the Admin's own school.
     if (
-      callerRole === "Admin" &&
+      (callerRole === "Admin" || callerRole === "Admin+Teacher") &&
       String(callerProfile.school_id ?? "") !== requestedSchoolId
     ) {
       return json(
         { error: "Admin can create users only for their own school." },
         403,
       );
+    }
+
+    // Admin + Teacher is a hybrid role limited to 3 ACTIVE users per school.
+    if (requestedRole === "Admin+Teacher") {
+      const { count: hybridCount, error: hybridCountError } = await adminClient
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("school_id", requestedSchoolId)
+        .eq("role", "Admin+Teacher")
+        .eq("active", true);
+
+      if (hybridCountError) {
+        return json(
+          { error: "Could not verify the Admin + Teacher limit.", details: hybridCountError.message },
+          500,
+        );
+      }
+
+      if ((hybridCount ?? 0) >= 3) {
+        return json(
+          { error: "Maximum 3 active Admin + Teacher users are allowed in this school." },
+          400,
+        );
+      }
     }
 
     // Verify the target school exists and is active.
