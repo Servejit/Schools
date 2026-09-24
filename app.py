@@ -5706,7 +5706,7 @@ def attendance():
                 return
 
             mark_saved(save_key)
-            st.rerun()
+            st.success("✅ Attendance saved successfully.")
 
         except Exception as e:
             st.error("Could not save attendance.")
