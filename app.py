@@ -2326,8 +2326,34 @@ def students():
     # Admin/Admin+Teacher in their assigned Class Teacher classes.
     can_add_students = role in ["SuperAdmin", "Admin", "Admin+Teacher"]
 
+    # Load the classes already created for this school so the Add Student
+    # form always uses the existing Class/Section records. This prevents
+    # spelling differences and ensures students are attached to a real
+    # school class instead of free-text class names.
+    existing_class_rows = []
+    if can_add_students:
+        try:
+            existing_class_rows = (
+                sb.table("classes")
+                .select("id,class_name,section,academic_year,active")
+                .eq("school_id", school_id)
+                .eq("active", True)
+                .order("class_name")
+                .order("section")
+                .execute()
+                .data or []
+            )
+        except Exception as e:
+            st.error("Could not load existing classes for the Add Student form.")
+            st.code(str(e))
+            return
+
     if can_add_students:
         with st.expander("➕ Add New Student"):
+
+            if not existing_class_rows:
+                st.warning("Create a Class first in Classes & Subjects before adding a student.")
+                return
 
             name = st.text_input(
                 "Student Name",
@@ -2339,14 +2365,64 @@ def students():
                 key="student_add_admission"
             )
 
-            class_name = st.text_input(
-                "Class",
-                key="student_add_class"
-            )
+            # Class is selected only from classes already created for this school.
+            # Academic year is included in the label when the same class exists
+            # in more than one academic year, while the database receives only
+            # the actual class_name value.
+            class_choice_rows = []
+            seen_class_choices = set()
+            for row in existing_class_rows:
+                class_value = str(row.get("class_name") or "").strip()
+                year_value = str(row.get("academic_year") or "").strip()
+                if not class_value:
+                    continue
+                choice_key = (class_value.lower(), year_value.lower())
+                if choice_key in seen_class_choices:
+                    continue
+                seen_class_choices.add(choice_key)
+                label = class_value
+                if year_value:
+                    label = f"{class_value} | {year_value}"
+                class_choice_rows.append((label, class_value, year_value))
 
-            section = st.text_input(
+            class_choice_map = {label: (class_value, year_value) for label, class_value, year_value in class_choice_rows}
+            class_labels = list(class_choice_map.keys())
+
+            selected_class_label = st.selectbox(
+                "Class",
+                class_labels,
+                key="student_add_class_select"
+            )
+            class_name, selected_academic_year = class_choice_map[selected_class_label]
+
+            # Section choices come directly from the selected existing class.
+            selected_class_key = (
+                class_name.strip().lower(),
+                selected_academic_year.strip().lower()
+            )
+            section_options = []
+            seen_sections = set()
+            for row in existing_class_rows:
+                row_class = str(row.get("class_name") or "").strip()
+                row_section = str(row.get("section") or "").strip()
+                row_year = str(row.get("academic_year") or "").strip()
+                if (
+                    row_class.lower(), row_year.lower()
+                ) != selected_class_key:
+                    continue
+                if not row_section or row_section.lower() in seen_sections:
+                    continue
+                seen_sections.add(row_section.lower())
+                section_options.append(row_section)
+
+            if not section_options:
+                st.warning("No section is available for the selected class.")
+                return
+
+            section = st.selectbox(
                 "Section",
-                key="student_add_section"
+                section_options,
+                key="student_add_section_select"
             )
 
             date_of_birth = st.date_input(
