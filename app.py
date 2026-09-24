@@ -6729,6 +6729,39 @@ def build_marks_backup_workbook(school_id):
         .data or []
     )
 
+    # Class Teacher Excel must also keep the Subjects sheet inside the
+    # assigned class scope.
+    if allowed_class_pairs is not None:
+        normalized_pairs = {
+            (
+                str(pair[0] or "").strip().lower(),
+                str(pair[1] or "").strip().lower()
+            )
+            for pair in allowed_class_pairs
+        }
+
+        allowed_class_ids = {
+            str(row.get("id"))
+            for row in (
+                sb.table("classes")
+                .select("id,class_name,section")
+                .eq("school_id", school_id)
+                .eq("active", True)
+                .execute()
+                .data or []
+            )
+            if (
+                str(row.get("class_name") or "").strip().lower(),
+                str(row.get("section") or "").strip().lower()
+            ) in normalized_pairs
+        }
+
+        if allowed_class_ids:
+            subjects = [
+                subject for subject in subjects
+                if str(subject.get("class_id") or "") in allowed_class_ids
+            ]
+
     marks = (
         sb.table("marks")
         .select(
@@ -10692,9 +10725,11 @@ def report_cards():
 
     if role == "Teacher":
         try:
+            # Class Teacher access is determined only by the current
+            # class_teacher_id on Classes.
             teacher_report_classes = (
                 sb.table("classes")
-                .select("class_name,section,academic_year")
+                .select("id,class_name,section,academic_year,class_teacher_id")
                 .eq("school_id", school_id)
                 .eq("class_teacher_id", st.session_state.user.id)
                 .eq("active", True)
@@ -10714,8 +10749,37 @@ def report_cards():
                 str(x.get("section") or "").strip().lower()
             )
             for x in teacher_report_classes
+            if str(x.get("class_name") or "").strip()
+            and str(x.get("section") or "").strip()
         }
 
+        if not assigned_pairs:
+            st.warning(
+                "You are not assigned as Class Teacher to any active class."
+            )
+            return
+
+        # If normal student RLS hides the rows, use the same secured
+        # Class Teacher RPC used by the student-management area.
+        if not student_data:
+            try:
+                rpc_rows = (
+                    sb.rpc(
+                        "get_class_teacher_students",
+                        {
+                            "p_school_id": school_id,
+                            "p_teacher_id": st.session_state.user.id
+                        }
+                    )
+                    .execute()
+                    .data or []
+                )
+                if rpc_rows:
+                    student_data = rpc_rows
+            except Exception:
+                pass
+
+        # Final hard filter: only assigned Class + Section can appear.
         student_data = [
             student for student in student_data
             if (
@@ -10724,20 +10788,14 @@ def report_cards():
             ) in assigned_pairs
         ]
 
-        if teacher_report_classes:
-            class_labels = [
-                f"{x.get('class_name') or '-'} - Section {x.get('section') or '-'}"
-                for x in teacher_report_classes
-            ]
-            st.info(
-                "🏫 **Class Teacher Report Cards:** "
-                + "  |  ".join(class_labels)
-            )
-        else:
-            st.warning(
-                "You are not assigned as Class Teacher to any class."
-            )
-            return
+        class_labels = [
+            f"{x.get('class_name') or '-'} - Section {x.get('section') or '-'}"
+            for x in teacher_report_classes
+        ]
+        st.info(
+            "🏫 **Class Teacher Report Cards:** "
+            + "  |  ".join(class_labels)
+        )
 
     if not student_data:
 
