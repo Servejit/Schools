@@ -10988,7 +10988,8 @@ def restore_report_cards_from_excel(uploaded_file, school_id):
     attendance_inserted = 0
     attendance_updated = 0
 
-    attendance_df = workbook.get("Attendance")    if attendance_df is not None and not attendance_df.empty:
+    attendance_df = workbook.get("Attendance")
+    if attendance_df is not None and not attendance_df.empty:
         att_norm = {
             str(c).strip().lower(): c
             for c in attendance_df.columns
@@ -16187,5 +16188,3 @@ if st.session_state.logged_in:
     dashboard()
 
 else:
-
-    login()
