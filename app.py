@@ -159,26 +159,14 @@ ROLE_THEMES = {
 
 def get_active_theme_role():
     """
-    Admin+Teacher has two working modes:
-    - Admin-only work uses the Admin theme.
-    - Teacher-only work uses the Teacher theme.
-    All other roles keep their normal role theme.
+    Admin+Teacher has an explicit working mode selected from the
+    dashboard. The selected mode controls both the visible menu and theme.
     """
     role = (st.session_state.get("profile") or {}).get("role")
 
     if role == "Admin+Teacher":
-        teacher_menu_items = {
-            "🎓 Students",
-            "📝 Marks",
-            "📅 Attendance",
-            "📢 Notices",
-            "📄 Report Cards",
-            "📊 Reports",
-        }
-        selected_menu = st.session_state.get("admin_dashboard_menu")
-        if selected_menu in teacher_menu_items:
-            return "Teacher"
-        return "Admin"
+        mode = st.session_state.get("admin_teacher_mode", "Admin")
+        return "Teacher" if mode == "Teacher" else "Admin"
 
     return role
 
@@ -14125,85 +14113,149 @@ def dashboard():
 
     elif role in ["Admin", "Admin+Teacher"]:
 
+        # Admin+Teacher can explicitly choose which interface to use.
+        # The selected mode controls the menu, dashboard heading and theme.
         if role == "Admin+Teacher":
-            st.title("🛠️ Admin + Teacher Dashboard")
+            if "admin_teacher_mode" not in st.session_state:
+                st.session_state["admin_teacher_mode"] = "Admin"
+
+            st.subheader("🛠️👨‍🏫 Choose Working Mode")
+            mode_col1, mode_col2 = st.columns(2)
+
+            with mode_col1:
+                if st.button(
+                    "🛠️ Admin Mode",
+                    key="admin_teacher_admin_mode",
+                    use_container_width=True,
+                    type=(
+                        "primary"
+                        if st.session_state["admin_teacher_mode"] == "Admin"
+                        else "secondary"
+                    )
+                ):
+                    st.session_state["admin_teacher_mode"] = "Admin"
+                    st.rerun()
+
+            with mode_col2:
+                if st.button(
+                    "👨‍🏫 Teacher Mode",
+                    key="admin_teacher_teacher_mode",
+                    use_container_width=True,
+                    type=(
+                        "primary"
+                        if st.session_state["admin_teacher_mode"] == "Teacher"
+                        else "secondary"
+                    )
+                ):
+                    st.session_state["admin_teacher_mode"] = "Teacher"
+                    st.rerun()
+
+            active_mode = st.session_state["admin_teacher_mode"]
+
+        else:
+            active_mode = "Admin"
+
+        if active_mode == "Teacher":
+            st.title("👨‍🏫 Teacher Dashboard")
+
+            teacher_menu_items = [
+                "🎓 Students",
+                "📝 Marks",
+                "📅 Attendance",
+                "📢 Notices",
+                "📄 Report Cards",
+                "📊 Reports"
+            ]
+
+            menu = st.radio(
+                "Teacher Menu",
+                teacher_menu_items,
+                horizontal=True,
+                key="admin_teacher_teacher_menu"
+            )
+
+            if menu == "🎓 Students":
+                students()
+
+            elif menu == "📝 Marks":
+                bulk_marks()
+
+            elif menu == "📅 Attendance":
+                attendance()
+
+            elif menu == "📢 Notices":
+                class_teacher_notices(profile)
+
+            elif menu == "📄 Report Cards":
+                report_cards()
+
+            elif menu == "📊 Reports":
+                reports()
+
         else:
             st.title("🛠️ Admin Dashboard")
 
-        # Admin has full access to every Teacher module and
-        # also retains all Admin-only management functions.
-        admin_menu_items = [
-            "👥 Users",
-            "🎓 Students",
-            "📚 Classes & Subjects",
-            "📝 Exam / Assessment",
-            "📝 Marks",
-            "📅 Attendance",
-            "📢 Notices",
-            "🖨️ Print Templates",
-            "📄 Report Cards",
-            "📊 Reports"
-        ]
+            admin_menu_items = [
+                "👥 Users",
+                "🎓 Students",
+                "📚 Classes & Subjects",
+                "📝 Exam / Assessment",
+                "📝 Marks",
+                "📅 Attendance",
+                "📢 Notices",
+                "🖨️ Print Templates",
+                "📄 Report Cards",
+                "📊 Reports"
+            ]
 
-        # Premium Features is visible to Admin only when SuperAdmin
-        # has activated Premium access for this Admin.
-        if role in ["Admin", "Admin+Teacher"] and premium_feature_enabled(
-            profile.get("school_id"),
-            st.session_state.user.id,
-            "school_academic_status"
-        ):
-            admin_menu_items.append("💎 Premium Features")
+            # Premium Features is visible to Admin only when SuperAdmin
+            # has activated Premium access for this Admin.
+            if role in ["Admin", "Admin+Teacher"] and premium_feature_enabled(
+                profile.get("school_id"),
+                st.session_state.user.id,
+                "school_academic_status"
+            ):
+                admin_menu_items.append("💎 Premium Features")
 
-        menu = st.radio(
-            "Management",
-            admin_menu_items,
-            horizontal=True,
-            key="admin_dashboard_menu"
-        )
-
-        # Admin+Teacher has both Admin and Teacher authority at the same time.
-        # Keep the Admin dashboard theme while exposing every function.
-        if role == "Admin+Teacher":
-            st.caption("🛠️👨‍🏫 Full Admin + Teacher Access")
-            apply_role_theme()
-
-        if menu == "👥 Users":
-            users()
-
-        elif menu == "🎓 Students":
-            students()
-
-        elif menu == "📚 Classes & Subjects":
-            classes_subjects()
-
-        elif menu == "📝 Exam / Assessment":
-            exam_assessment_settings()
-
-        elif menu == "📝 Marks":
-            bulk_marks()
-
-        elif menu == "📅 Attendance":
-            attendance()
-
-        elif menu == "📢 Notices":
-            class_teacher_notices(profile)
-
-        elif menu == "🖨️ Print Templates":
-            print_templates()
-
-        elif menu == "📄 Report Cards":
-            report_cards()
-
-        elif menu == "📊 Reports":
-            reports()
-
-        elif menu == "💎 Premium Features":
-            premium_feature_management()
-
-        else:
-            st.info(
-                f"{menu} will be added next."
+            menu = st.radio(
+                "Admin Menu",
+                admin_menu_items,
+                horizontal=True,
+                key="admin_teacher_admin_menu"
             )
+
+            if menu == "👥 Users":
+                users()
+
+            elif menu == "🎓 Students":
+                students()
+
+            elif menu == "📚 Classes & Subjects":
+                classes_subjects()
+
+            elif menu == "📝 Exam / Assessment":
+                exam_assessment_settings()
+
+            elif menu == "📝 Marks":
+                bulk_marks()
+
+            elif menu == "📅 Attendance":
+                attendance()
+
+            elif menu == "📢 Notices":
+                class_teacher_notices(profile)
+
+            elif menu == "🖨️ Print Templates":
+                print_templates()
+
+            elif menu == "📄 Report Cards":
+                report_cards()
+
+            elif menu == "📊 Reports":
+                reports()
+
+            elif menu == "💎 Premium Features":
+                premium_feature_management()
 
     # =====================================================
     # TEACHER
@@ -14775,6 +14827,7 @@ def dashboard():
 
 if st.session_state.logged_in:
 
+    # Admin+Teacher theme follows the explicitly selected working mode.
     apply_role_theme()
     dashboard()
 
