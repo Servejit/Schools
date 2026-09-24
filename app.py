@@ -3790,6 +3790,38 @@ def classes_subjects():
         label = f"{teacher.get('full_name') or 'Teacher'} — {teacher.get('email') or ''}"
         teacher_options[label] = teacher["id"]
 
+    # Load subject-teacher assignments once for the selected school so that
+    # each subject shown inside a class can display its assigned teacher.
+    subject_teacher_rows = []
+    try:
+        subject_teacher_rows = (
+            sb.table("teacher_subject_assignments")
+            .select("teacher_id,class_id,subject_id")
+            .eq("school_id", school_id)
+            .execute()
+            .data or []
+        )
+    except Exception:
+        subject_teacher_rows = []
+
+    teacher_name_by_id = {
+        str(t.get("id")): (
+            t.get("full_name") or t.get("email") or "Teacher"
+        )
+        for t in teacher_data
+    }
+    assigned_subject_teacher = {}
+    for assignment in subject_teacher_rows:
+        pair = (
+            str(assignment.get("class_id")),
+            str(assignment.get("subject_id"))
+        )
+        teacher_name = teacher_name_by_id.get(
+            str(assignment.get("teacher_id")),
+            "Teacher"
+        )
+        assigned_subject_teacher.setdefault(pair, []).append(teacher_name)
+
     if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         with st.expander("👨‍🏫 Assign Class Teachers"):
             st.caption("Assign one class teacher to each class. Teachers will only see students from their assigned classes.")
@@ -4843,10 +4875,22 @@ def classes_subjects():
                         f"**{display_subject_name}**"
                     )
 
+                    assigned_teachers = assigned_subject_teacher.get(
+                        (str(class_id), str(subject_id)), []
+                    )
+                    assigned_teacher_text = (
+                        ", ".join(dict.fromkeys(assigned_teachers))
+                        if assigned_teachers
+                        else "Not Assigned"
+                    )
+
                     st.caption(
                         f"Code: {subject_code} "
                         f"| Maximum: {max_marks} "
                         f"| Passing: {passing_marks}"
+                    )
+                    st.caption(
+                        f"👨‍🏫 Assigned Teacher: {assigned_teacher_text}"
                     )
 
                 with s2:
