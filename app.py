@@ -2201,6 +2201,40 @@ def students():
             }
             assigned_class_keys.discard(("", ""))
 
+            # The Class Teacher relationship is intentionally dynamic:
+            # students are matched to the current classes.class_teacher_id
+            # by the SECURITY DEFINER RPC below. If normal classes-table
+            # RLS temporarily hides the assignment from the Teacher, use the
+            # same RPC as a safe fallback to discover the currently assigned
+            # class/section from the students that are already visible to
+            # that authenticated Class Teacher. This means changing a Class
+            # Teacher after students already exist takes effect immediately,
+            # without creating or editing student-teacher links.
+            if not assigned_class_keys:
+                try:
+                    preview_students = (
+                        sb.rpc(
+                            "get_class_teacher_students",
+                            {
+                                "p_school_id": school_id,
+                                "p_teacher_id": st.session_state.user.id
+                            }
+                        )
+                        .execute()
+                        .data or []
+                    )
+                    assigned_class_keys = {
+                        (
+                            str(x.get("class_name") or "").strip().lower(),
+                            str(x.get("section") or "").strip().lower()
+                        )
+                        for x in preview_students
+                        if str(x.get("class_name") or "").strip()
+                        and str(x.get("section") or "").strip()
+                    }
+                except Exception:
+                    pass
+
             if not assigned_class_keys:
                 st.info("No class is assigned to you as Class Teacher yet.")
                 return
