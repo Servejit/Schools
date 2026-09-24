@@ -4181,6 +4181,18 @@ def classes_subjects():
     # SUBJECT MASTER / MULTI-CLASS ALLOTMENT
     # -----------------------------------------------------
     if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+        subject_allot_save_key = f"subject_allot_{school_id}"
+        show_save_message(subject_allot_save_key)
+
+        detail_key = subject_allot_save_key + "_detail"
+        skipped_key = subject_allot_save_key + "_skipped"
+        detail_message = st.session_state.pop(detail_key, None)
+        skipped_message = st.session_state.pop(skipped_key, None)
+        if detail_message:
+            st.success("✅ " + detail_message)
+        if skipped_message:
+            st.info("ℹ️ " + skipped_message)
+
         with st.expander("📖 Subject Creation & Multi-Class Allotment", expanded=True):
             st.caption(
                 "Create a subject once, then allot it to one or more classes. "
@@ -4415,13 +4427,18 @@ def classes_subjects():
                             added_classes.append(class_label)
 
                         if added_classes:
-                            st.success(
-                                f"✅ Subject '{master_subject_name}' allotted to "
+                            mark_saved(subject_allot_save_key)
+                            st.session_state[
+                                subject_allot_save_key + "_detail"
+                            ] = (
+                                f"Subject '{master_subject_name}' allotted to "
                                 f"{len(added_classes)} class(es)."
                             )
                         if skipped_classes:
-                            st.info(
-                                "ℹ️ Skipped because the subject name/code already "
+                            st.session_state[
+                                subject_allot_save_key + "_skipped"
+                            ] = (
+                                "Skipped because the subject name/code already "
                                 "exists in: " + ", ".join(skipped_classes)
                             )
                         st.rerun()
