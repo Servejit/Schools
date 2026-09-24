@@ -15409,6 +15409,25 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 def dashboard():
 
+    # Reset dashboard-specific selections whenever the user changes dashboard.
+    # Login/session/navigation state is preserved; working selections are cleared.
+    def reset_dashboard_working_state(current_menu_key, current_menu_value):
+        previous = st.session_state.get("_last_dashboard_menu")
+        if previous is not None and previous != (current_menu_key, current_menu_value):
+            keep_keys = {
+                "logged_in", "user", "profile", "access_token", "refresh_token",
+                "admin_teacher_mode", "admin_teacher_admin_menu",
+                "admin_teacher_teacher_menu", "_last_dashboard_menu"
+            }
+            for key in list(st.session_state.keys()):
+                if key not in keep_keys:
+                    try:
+                        del st.session_state[key]
+                    except Exception:
+                        pass
+            st.session_state[current_menu_key] = current_menu_value
+        st.session_state["_last_dashboard_menu"] = (current_menu_key, current_menu_value)
+
     profile = st.session_state.profile
     role = profile.get("role")
 
@@ -15559,6 +15578,7 @@ def dashboard():
             ],
             horizontal=True
         )
+        reset_dashboard_working_state("_superadmin_menu", menu)
 
         if menu == "🏫 Schools":
             schools()
@@ -15671,6 +15691,7 @@ def dashboard():
                 horizontal=True,
                 key="admin_teacher_teacher_menu"
             )
+            reset_dashboard_working_state("admin_teacher_teacher_menu", menu)
 
             if menu == "🎓 Students":
                 students()
@@ -15721,6 +15742,7 @@ def dashboard():
                 horizontal=True,
                 key="admin_teacher_admin_menu"
             )
+            reset_dashboard_working_state("admin_teacher_admin_menu", menu)
 
             if menu == "👥 Users":
                 users()
