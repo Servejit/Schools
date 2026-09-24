@@ -4993,7 +4993,8 @@ def bulk_marks():
         None
     )
     if pending_backup:
-        st.success("✅ Marks were saved and a fresh Excel backup was created.")        st.download_button(
+        st.success("✅ Marks were saved and a fresh Excel backup was created.")
+        st.download_button(
             "⬇️ Download Fresh Marks Backup",
             data=pending_backup,
             file_name=pending_backup_name or "Marks_Backup.xlsx",
