@@ -3650,11 +3650,17 @@ def classes_subjects():
                     use_container_width=True,
                 ):
                     try:
+                        selected_teacher_id = teacher_options[assignment_label]
+
+                        # One class/section/academic-year has exactly ONE
+                        # class-teacher assignment. Changing the selection
+                        # replaces the previous teacher; selecting
+                        # "Not Assigned" removes the assignment.
+                        # We never assign a second teacher to the same class.
                         (
                             sb.table("classes")
                             .update({
-                                "class_teacher_id":
-                                    teacher_options[assignment_label],
+                                "class_teacher_id": selected_teacher_id,
                                 "updated_at":
                                     datetime.datetime.now(
                                         datetime.timezone.utc
