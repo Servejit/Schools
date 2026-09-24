@@ -12081,7 +12081,17 @@ def report_cards():
                             ),
 
                         school_logo_size=
-                            logo_size
+                            logo_size,
+
+                        show_school_name=
+                            bool(
+                                get_template_config(
+                                    selected_template
+                                ).get(
+                                    "show_school_name",
+                                    True
+                                )
+                            )
                     )
 
                     safe_name = (
