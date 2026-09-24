@@ -414,6 +414,125 @@ def login():
 # SCHOOL MANAGEMENT
 # =========================================================
 
+def delete_school_all_data(school_id):
+    """
+    Permanently remove one school's application data.
+
+    IMPORTANT:
+    - This function is used ONLY by the explicit SuperAdmin Delete School action.
+    - Deactivate/Activate never calls this function and therefore never removes data.
+    - Related records are removed before the school row so foreign-key protected
+      records do not prevent the school deletion.
+    """
+    school_id = str(school_id)
+
+    # Collect IDs first so records that do not carry school_id directly
+    # (students / parent links) can also be removed safely.
+    profiles_rows = (
+        sb.table("profiles")
+        .select("id")
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+    profile_ids = [
+        str(x["id"]) for x in profiles_rows if x.get("id")
+    ]
+
+    student_rows = (
+        sb.table("students")
+        .select("id")
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+    student_ids = [
+        str(x["id"]) for x in student_rows if x.get("id")
+    ]
+
+    # Remove links that point to users/students in this school.
+    for profile_id in profile_ids:
+        sb.table("parent_student_links").delete().eq(
+            "parent_id", profile_id
+        ).execute()
+        sb.table("parent_student_links").delete().eq(
+            "student_id", profile_id
+        ).execute()
+
+        sb.table("teacher_subject_assignments").delete().eq(
+            "teacher_id", profile_id
+        ).execute()
+
+    for student_id in student_ids:
+        sb.table("parent_student_links").delete().eq(
+            "student_id", student_id
+        ).execute()
+        sb.table("marks").delete().eq(
+            "student_id", student_id
+        ).execute()
+        sb.table("attendance").delete().eq(
+            "student_id", student_id
+        ).execute()
+
+    # Clear class-teacher references before deleting users/classes.
+    for profile_id in profile_ids:
+        sb.table("classes").update({
+            "class_teacher_id": None
+        }).eq(
+            "class_teacher_id", profile_id
+        ).execute()
+
+    # Remove school-owned application data.
+    # These tables all carry school_id in the current application schema.
+    for table_name in [
+        "teacher_subject_assignments",
+        "premium_feature_access",
+        "school_notices",
+        "print_templates",
+        "exam_result_weights",
+        "exam_assessments",
+        "marks",
+        "attendance",
+        "subjects",
+        "classes",
+    ]:
+        sb.table(table_name).delete().eq(
+            "school_id", school_id
+        ).execute()
+
+    # Remove all student records belonging to this school.
+    sb.table("students").delete().eq(
+        "school_id", school_id
+    ).execute()
+
+    # Remove all application user profiles belonging to this school.
+    # This removes Admin/Teacher/Student/Parent records from the app.
+    if profile_ids:
+        for profile_id in profile_ids:
+            sb.table("profiles").delete().eq(
+                "id", profile_id
+            ).execute()
+
+    # Finally remove the school itself.
+    result = (
+        sb.table("schools")
+        .delete()
+        .eq("id", school_id)
+        .select("id")
+        .execute()
+    )
+
+    deleted_school_rows = result.data or []
+    if not any(
+        str(row.get("id")) == school_id
+        for row in deleted_school_rows
+    ):
+        raise RuntimeError(
+            "School row was not deleted. Check the SuperAdmin "
+            "DELETE permission/RLS policy on the schools table."
+        )
+
+
 def schools():
 
     st.header("🏫 School Management")
@@ -576,27 +695,23 @@ def schools():
 
                 st.warning(
                     f"⚠️ You are about to permanently delete "
-                    f"**{school.get('name', '')}**. "
-                    "This is different from deactivation. "
-                    "Deactivation preserves school data; deletion is permanent."
+                    f"**{school.get('name', '')}** and ALL of its "
+                    "**users, students and school records**. "
+                    "This cannot be undone. "
+                    "If you only want to stop access temporarily, use Deactivate."
                 )
 
                 d1, d2 = st.columns(2)
 
                 with d1:
                     if st.button(
-                        "⚠️ Yes, Permanently Delete",
+                        "⚠️ Yes, Permanently Delete School + All Data",
                         type="primary",
                         use_container_width=True,
                         key=f"school_confirm_delete_{school_id}"
                     ):
                         try:
-                            (
-                                sb.table("schools")
-                                .delete()
-                                .eq("id", school_id)
-                                .execute()
-                            )
+                            delete_school_all_data(school_id)
 
                             st.session_state.pop(
                                 delete_confirm_key,
@@ -604,16 +719,16 @@ def schools():
                             )
 
                             st.success(
-                                "🗑️ School deleted successfully."
+                                "🗑️ School, all related users, students, "
+                                "and school data deleted successfully."
                             )
                             st.rerun()
 
                         except Exception as e:
                             st.error(
-                                "Could not delete the school. "
-                                "If the database has related records protected "
-                                "by foreign keys, those relationships must be "
-                                "handled before the school can be permanently deleted."
+                                "Could not completely delete the school. "
+                                "No success message was shown because the "
+                                "deletion could not be verified."
                             )
                             st.code(str(e))
 
