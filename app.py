@@ -6858,9 +6858,7 @@ def build_marks_backup_workbook(school_id):
     enriched = []
     for mark in marks:
         student_id_key = str(mark.get("student_id") or "")
-        # When a teacher export is restricted to Class Teacher classes,
-        # marks belonging to every other student must also be excluded.
-        if allowed_class_pairs is not None and student_id_key not in student_map:
+        if allowed_class_pairs is not None and student_id_key not in allowed_student_ids:
             continue
 
         student = student_map.get(student_id_key, {})
@@ -9303,6 +9301,22 @@ def build_report_cards_excel(school_id, allowed_class_pairs=None):
         )
     except Exception:
         attendance = []
+
+    # For a Teacher export, NEVER allow records from students outside
+    # the teacher's assigned Class + Section to reach any Excel sheet.
+    # The student_map was already restricted above, so use it as the
+    # single source of truth for marks and attendance as well.
+    allowed_student_ids = {str(x["id"]) for x in students}
+
+    if allowed_class_pairs is not None:
+        marks = [
+            mark for mark in marks
+            if str(mark.get("student_id") or "") in allowed_student_ids
+        ]
+        attendance = [
+            row for row in attendance
+            if str(row.get("student_id") or "") in allowed_student_ids
+        ]
 
     student_map = {str(x["id"]): x for x in students}
     subject_map = {str(x["id"]): x for x in subjects}
