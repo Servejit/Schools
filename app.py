@@ -4458,12 +4458,12 @@ def classes_subjects():
                     .data or []
                 )
 
-            if subject_search:
-                subject_data = [
-                    subject for subject in subject_data
-                    if subject_search in str(subject.get("subject_name") or subject.get("name") or "").lower()
-                    or subject_search in str(subject.get("code") or "").lower()
-                ]
+                if subject_search:
+                    subject_data = [
+                        subject for subject in subject_data
+                        if subject_search in str(subject.get("subject_name") or subject.get("name") or "").lower()
+                        or subject_search in str(subject.get("code") or "").lower()
+                    ]
 
             except Exception as e:
 
