@@ -12333,7 +12333,12 @@ def report_cards():
                                 ),
 
                             school_logo_size=
-                                logo_size
+                                 logo_size,
+
+                             show_school_name=
+                                 report_card_show_school_name(
+                                     selected_template
+                                 )
                         )
 
                         safe_name = (
