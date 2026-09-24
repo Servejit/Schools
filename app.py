@@ -3887,6 +3887,190 @@ def classes_subjects():
     if st.session_state.pop("saved_class_changes", False):
         st.success("✅ Class teacher / class changes saved successfully.")
 
+    # -----------------------------------------------------
+    # TEACHER SUBJECT ASSIGNMENTS
+    # -----------------------------------------------------
+    # Admin roles can assign one teacher to multiple Class + Subject
+    # combinations.  This is intentionally a standalone section so the
+    # assignment controls are easy to find and do not depend on opening
+    # Edit User first.
+    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+        with st.expander("📖 Teacher Subject Assignments", expanded=False):
+            st.caption(
+                "Assign multiple classes and subjects to the same teacher. "
+                "Each selected option is an exact Class + Subject permission."
+            )
+
+            assignment_teacher_options = {}
+            for teacher in teacher_data:
+                teacher_label = (
+                    f"{teacher.get('full_name') or 'Teacher'}"
+                    f" — {teacher.get('email') or ''}"
+                    f" [{teacher.get('role') or 'Teacher'}]"
+                )
+                assignment_teacher_options[teacher_label] = teacher["id"]
+
+            if not assignment_teacher_options:
+                st.info("No active Teacher or Admin+Teacher accounts are available.")
+            else:
+                assignment_teacher_label = st.selectbox(
+                    "👨‍🏫 Select Teacher",
+                    list(assignment_teacher_options.keys()),
+                    key=f"subject_assignment_teacher_{school_id}"
+                )
+                assignment_teacher_id = assignment_teacher_options[assignment_teacher_label]
+
+                # Load all active classes for the selected school.
+                assignment_class_options = {}
+                for cl in class_data:
+                    class_label = (
+                        f"{cl.get('class_name') or '-'}"
+                        f" | Section: {cl.get('section') or '-'}"
+                        f" | {cl.get('academic_year') or '-'}"
+                    )
+                    assignment_class_options[class_label] = cl
+
+                if not assignment_class_options:
+                    st.info("Create active classes first.")
+                else:
+                    selected_assignment_classes = st.multiselect(
+                        "📚 Select Class(es)",
+                        list(assignment_class_options.keys()),
+                        placeholder="Select one or more classes",
+                        key=f"subject_assignment_classes_{school_id}"
+                    )
+
+                    subject_assignment_options = {}
+                    for class_label in selected_assignment_classes:
+                        cl = assignment_class_options[class_label]
+                        try:
+                            class_subjects = (
+                                sb.table("subjects")
+                                .select("id,name,subject_name,class_id,active")
+                                .eq("school_id", school_id)
+                                .eq("class_id", cl["id"])
+                                .eq("active", True)
+                                .order("subject_name")
+                                .execute()
+                                .data or []
+                            )
+                        except Exception:
+                            class_subjects = []
+
+                        for subject in class_subjects:
+                            subject_name_value = (
+                                subject.get("subject_name")
+                                or subject.get("name")
+                                or "Subject"
+                            )
+                            option_label = f"{class_label} → {subject_name_value}"
+                            subject_assignment_options[option_label] = (
+                                cl["id"],
+                                subject["id"]
+                            )
+
+                    current_assignment_set = set()
+                    try:
+                        current_rows = (
+                            sb.table("teacher_subject_assignments")
+                            .select("class_id,subject_id")
+                            .eq("school_id", school_id)
+                            .eq("teacher_id", assignment_teacher_id)
+                            .execute()
+                            .data or []
+                        )
+                        current_assignment_set = {
+                            (str(x.get("class_id")), str(x.get("subject_id")))
+                            for x in current_rows
+                        }
+                    except Exception:
+                        pass
+
+                    # Only show current assignments for the classes selected above.
+                    current_selected_labels = [
+                        label
+                        for label, ids in subject_assignment_options.items()
+                        if (str(ids[0]), str(ids[1])) in current_assignment_set
+                    ]
+
+                    selected_assignment_subjects = st.multiselect(
+                        "📖 Select Subject(s) for the Selected Class(es)",
+                        list(subject_assignment_options.keys()),
+                        default=current_selected_labels,
+                        placeholder="Select one or more Class + Subject combinations",
+                        key=f"subject_assignment_subjects_{school_id}"
+                    )
+
+                    if selected_assignment_classes and not subject_assignment_options:
+                        st.warning("No active subjects are available in the selected class(es).")
+
+                    save_assignment_key = f"save_subject_assignments_{school_id}"
+                    show_save_message(save_assignment_key)
+                    if st.button(
+                        "💾 Save Teacher Subject Assignments",
+                        type="primary",
+                        use_container_width=True,
+                        key=save_assignment_key
+                    ):
+                        try:
+                            # Replace only the selected teacher's assignments for
+                            # this school. Existing assignments in unselected classes
+                            # are retained by loading the complete current set first.
+                            existing_rows = (
+                                sb.table("teacher_subject_assignments")
+                                .select("class_id,subject_id")
+                                .eq("school_id", school_id)
+                                .eq("teacher_id", assignment_teacher_id)
+                                .execute()
+                                .data or []
+                            )
+
+                            selected_class_ids = {
+                                str(assignment_class_options[label]["id"])
+                                for label in selected_assignment_classes
+                            }
+                            selected_pairs = {
+                                (str(subject_assignment_options[label][0]),
+                                 str(subject_assignment_options[label][1]))
+                                for label in selected_assignment_subjects
+                            }
+
+                            retained_pairs = {
+                                (str(row.get("class_id")), str(row.get("subject_id")))
+                                for row in existing_rows
+                                if str(row.get("class_id")) not in selected_class_ids
+                            }
+                            final_pairs = retained_pairs | selected_pairs
+
+                            (
+                                sb.table("teacher_subject_assignments")
+                                .delete()
+                                .eq("school_id", school_id)
+                                .eq("teacher_id", assignment_teacher_id)
+                                .execute()
+                            )
+
+                            new_rows = [
+                                {
+                                    "school_id": school_id,
+                                    "teacher_id": assignment_teacher_id,
+                                    "class_id": pair[0],
+                                    "subject_id": pair[1]
+                                }
+                                for pair in final_pairs
+                            ]
+                            if new_rows:
+                                sb.table("teacher_subject_assignments").insert(new_rows).execute()
+
+                            mark_saved(save_assignment_key)
+                            st.success(
+                                f"✅ Subject assignments saved successfully for {assignment_teacher_label}."
+                            )
+                            st.rerun()
+                        except Exception as e:
+                            st.error("Could not save Teacher Subject Assignments.")
+                            st.code(str(e))
+
     st.divider()
 
     # -----------------------------------------------------
