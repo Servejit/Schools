@@ -15069,7 +15069,8 @@ def class_teacher_notices(profile):
 
     can_select_multiple = role in {"Admin", "Admin+Teacher", "SuperAdmin"}
 
-    if can_select_multiple:        all_classes_label = "🌐 All Classes"
+    if can_select_multiple:
+        all_classes_label = "🌐 All Classes"
         selection_options = [all_classes_label] + list(class_options.keys())
 
         selected_labels = st.multiselect(
@@ -16187,5 +16188,3 @@ if st.session_state.logged_in:
     # Admin+Teacher theme follows the explicitly selected working mode.
     apply_role_theme()
     dashboard()
-
-else:
