@@ -2611,22 +2611,65 @@ def students():
     try:
 
         if role == "Teacher":
-            # Class Teachers load students through a SECURITY DEFINER RPC.
-            # This avoids normal students-table RLS hiding students that were
-            # created by Admin/Admin+Teacher, while the RPC itself verifies
-            # that the supplied teacher is the authenticated user and only
-            # returns students from that teacher's assigned classes.
-            student_data = (
-                sb.rpc(
-                    "get_class_teacher_students",
-                    {
-                        "p_school_id": school_id,
-                        "p_teacher_id": st.session_state.user.id
-                    }
-                )
+            # Class Teacher visibility is automatic:
+            # a student belongs to a Class + Section, and the current
+            # class_teacher_id on that Class + Section determines which
+            # Teacher can see the student. No student-level teacher link
+            # is required.
+            #
+            # Use the classes table as the source of truth and then load
+            # students from those exact Class + Section combinations.
+            teacher_class_rows = (
+                sb.table("classes")
+                .select("class_name,section,academic_year")
+                .eq("school_id", school_id)
+                .eq("class_teacher_id", st.session_state.user.id)
+                .eq("active", True)
                 .execute()
                 .data or []
             )
+
+            teacher_class_keys = {
+                (
+                    str(row.get("class_name") or "").strip().lower(),
+                    str(row.get("section") or "").strip().lower()
+                )
+                for row in teacher_class_rows
+                if str(row.get("class_name") or "").strip()
+                and str(row.get("section") or "").strip()
+            }
+
+            if not teacher_class_keys:
+                student_data = []
+            else:
+                # Load the school's students and filter strictly by the
+                # Class Teacher's currently assigned Class + Section.
+                all_school_students = (
+                    sb.table("students")
+                    .select(
+                        "id,school_id,user_id,name,"
+                        "admission_no,class_name,section,"
+                        "date_of_birth,gender,father_name,"
+                        "parent_name,mother_name,parent_phone,address,remarks,"
+                        "photo_path,teacher_signature_path,"
+                        "principal_signature_path,active,"
+                        "created_at,updated_at"
+                    )
+                    .eq("school_id", school_id)
+                    .eq("active", True)
+                    .order("name")
+                    .execute()
+                    .data or []
+                )
+
+                student_data = [
+                    student
+                    for student in all_school_students
+                    if (
+                        str(student.get("class_name") or "").strip().lower(),
+                        str(student.get("section") or "").strip().lower()
+                    ) in teacher_class_keys
+                ]
         else:
             student_data = (
                 sb.table("students")
