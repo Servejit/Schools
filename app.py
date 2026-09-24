@@ -923,8 +923,8 @@ def users():
         creator_role = st.session_state.profile.get("role")
         create_role_options = ["Admin", "Teacher", "Student", "Parent"]
 
-        # Only SuperAdmin/Admin may create a new Admin+Teacher.
-        if creator_role in ["SuperAdmin", "Admin"]:
+        # SuperAdmin, Admin and Admin+Teacher have full user-management authority.
+        if creator_role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
             create_role_options.insert(1, "Admin+Teacher")
 
         role = st.selectbox(
@@ -961,16 +961,15 @@ def users():
                 st.error("Session expired. Logout and login again.")
                 return
 
-            # Only SuperAdmin/Admin are authorized to assign the
-            # Admin+Teacher role. The Edge Function enforces this too.
-            if role == "Admin+Teacher" and creator_role not in ["SuperAdmin", "Admin"]:
-                st.error("Only SuperAdmin or Admin can create an Admin+Teacher user.")
+            # SuperAdmin, Admin and Admin+Teacher can assign the Admin+Teacher role.
+            if role == "Admin+Teacher" and creator_role not in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+                st.error("Only SuperAdmin, Admin or Admin+Teacher can create an Admin+Teacher user.")
                 return
 
             # SuperAdmin has no Admin+Teacher limit.
             # Each school can have at most 3 ACTIVE Admin+Teacher users
             # created/managed by its Admin. The limit is school-wide.
-            if role == "Admin+Teacher" and creator_role == "Admin":
+            if role == "Admin+Teacher" and creator_role in ["Admin", "Admin+Teacher"]:
                 try:
                     hybrid_count = (
                         sb.table("profiles")
@@ -1033,7 +1032,7 @@ def users():
         )
 
         # Admin must only load users belonging to their own school.
-        if st.session_state.profile.get("role") == "Admin":
+        if st.session_state.profile.get("role") in ["Admin", "Admin+Teacher"]:
             user_query = user_query.eq(
                 "school_id",
                 st.session_state.profile.get("school_id")
@@ -1218,7 +1217,7 @@ def users():
                         if (
                             not active
                             and user.get("role") == "Admin+Teacher"
-                            and role == "Admin"
+                            and role in ["Admin", "Admin+Teacher"]
                         ):
                             hybrid_count = (
                                 sb.table("profiles")
@@ -1348,13 +1347,15 @@ def users():
                     )
 
                 elif role == "Admin+Teacher":
-                    # Admin+Teacher is NOT allowed to reverse or otherwise
-                    # change another user's role.
+                    # Admin+Teacher has the same role-management authority as Admin.
+                    if current_role == "Admin+Teacher":
+                        role_options = ["Admin+Teacher", "Admin", "Teacher"]
+                    else:
+                        role_options = ["Admin", "Admin+Teacher", "Teacher", "Student", "Parent"]
                     edit_role = st.selectbox(
                         "Role",
-                        [current_role],
-                        index=0,
-                        disabled=True,
+                        role_options,
+                        index=(role_options.index(current_role) if current_role in role_options else 0),
                         key=f"edit_user_role_{user_id}"
                     )
 
@@ -1654,7 +1655,7 @@ def users():
                         if (
                             current_role == "Admin+Teacher"
                             and edit_role != "Admin+Teacher"
-                            and role not in ["SuperAdmin", "Admin"]
+                            and role not in ["SuperAdmin", "Admin", "Admin+Teacher"]
                         ):
                             st.error(
                                 "Admin+Teacher cannot change or reverse user roles."
@@ -1665,7 +1666,7 @@ def users():
                         if (
                             edit_role == "Admin+Teacher"
                             and current_role != "Admin+Teacher"
-                            and role not in ["SuperAdmin", "Admin"]
+                            and role not in ["SuperAdmin", "Admin", "Admin+Teacher"]
                         ):
                             st.error(
                                 "Only Admin or SuperAdmin can assign the Admin+Teacher role."
@@ -1684,18 +1685,13 @@ def users():
                             )
                             continue
 
-                        # Admin+Teacher cannot reverse or change roles at all.
-                        if role == "Admin+Teacher" and edit_role != current_role:
-                            st.error(
-                                "Admin+Teacher is not authorized to change user roles."
-                            )
-                            continue
+                        # Admin+Teacher has the same role-change authority as Admin.
 
-                        # Admin: maximum 3 ACTIVE Admin+Teacher users per school.
+                        # Admin/Admin+Teacher: maximum 3 ACTIVE Admin+Teacher users per school.
                         if (
                             edit_role == "Admin+Teacher"
                             and current_role != "Admin+Teacher"
-                            and role == "Admin"
+                            and role in ["Admin", "Admin+Teacher"]
                         ):
                             target_school_id = school_map[edit_school_label]
                             hybrid_count = (
@@ -14001,19 +13997,7 @@ def dashboard():
     elif role in ["Admin", "Admin+Teacher"]:
 
         if role == "Admin+Teacher":
-            teacher_mode_items = {
-                "🎓 Students",
-                "📝 Marks",
-                "📅 Attendance",
-                "📢 Notices",
-                "📄 Report Cards",
-                "📊 Reports",
-            }
-            current_menu = st.session_state.get("admin_dashboard_menu")
-            if current_menu in teacher_mode_items:
-                st.title("👨‍🏫 Teacher Dashboard")
-            else:
-                st.title("🛠️ Admin Dashboard")
+            st.title("🛠️ Admin + Teacher Dashboard")
         else:
             st.title("🛠️ Admin Dashboard")
 
@@ -14034,7 +14018,7 @@ def dashboard():
 
         # Premium Features is visible to Admin only when SuperAdmin
         # has activated Premium access for this Admin.
-        if role == "Admin" and premium_feature_enabled(
+        if role in ["Admin", "Admin+Teacher"] and premium_feature_enabled(
             profile.get("school_id"),
             st.session_state.user.id,
             "school_academic_status"
@@ -14048,27 +14032,10 @@ def dashboard():
             key="admin_dashboard_menu"
         )
 
-        # Admin+Teacher automatically switches visual mode according
-        # to the work being performed. Admin-only modules use the
-        # Admin theme; Teacher modules use the Teacher theme.
+        # Admin+Teacher has both Admin and Teacher authority at the same time.
+        # Keep the Admin dashboard theme while exposing every function.
         if role == "Admin+Teacher":
-            active_mode = (
-                "Teacher"
-                if menu in {
-                    "🎓 Students",
-                    "📝 Marks",
-                    "📅 Attendance",
-                    "📢 Notices",
-                    "📄 Report Cards",
-                    "📊 Reports",
-                }
-                else "Admin"
-            )
-            if active_mode == "Teacher":
-                st.caption("👨‍🏫 Teacher Mode")
-            else:
-                st.caption("🛠️ Admin Mode")
-
+            st.caption("🛠️👨‍🏫 Full Admin + Teacher Access")
             apply_role_theme()
 
         if menu == "👥 Users":
