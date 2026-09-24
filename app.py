@@ -6603,6 +6603,17 @@ def template_show_school_name(template_or_config):
     return value is not False
 
 
+def report_card_show_school_name(template_or_config):
+    """Read the saved Report Card name/address switch as a real boolean."""
+    config = template_or_config if isinstance(template_or_config, dict) else {}
+    if "config_json" in config:
+        config = get_template_config(config)
+    value = config.get("show_school_name", True)
+    if isinstance(value, str):
+        return value.strip().lower() not in ("false", "0", "off", "no", "disabled", "hide", "hidden")
+    return bool(value)
+
+
 def grade_from_percentage(percentage):
     try:
         p = float(percentage)
@@ -12910,7 +12921,7 @@ def student_report_card_view(school_id, student_id):
                 present_days=present_days,
                 school_logo_path=logo_path,
                 school_logo_size=logo_size,
-                show_school_name=bool(get_template_config(selected_template).get("show_school_name", True))
+                show_school_name=report_card_show_school_name(selected_template)
             )
 
             safe_name = (
