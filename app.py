@@ -6155,6 +6155,37 @@ def print_templates():
             # from the Print Templates dashboard.
             # -------------------------------------------------
             if template_type_value == "Report Card":
+                # -------------------------------------------------
+                # REPORT CARD CONTENT CONTROLS
+                # -------------------------------------------------
+                st.markdown("#### ⚙️ Report Card Content Controls")
+                st.caption("These settings are saved separately for each Report Card template.")
+
+                show_school_name = st.checkbox(
+                    "🏫 Show School Name on Report Card",
+                    value=bool(config.get("show_school_name", True)),
+                    key=f"template_show_school_name_{template_id}",
+                    help="Show or hide the school name generated on top of the Report Card."
+                )
+
+                if st.button(
+                    "💾 Save Content Settings",
+                    use_container_width=True,
+                    key=f"save_template_content_settings_{template_id}"
+                ):
+                    try:
+                        content_config = get_template_config(template)
+                        content_config["show_school_name"] = bool(show_school_name)
+                        sb.table("print_templates").update({
+                            "config_json": json.dumps(content_config),
+                            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                        }).eq("id", template_id).eq("school_id", school_id).execute()
+                        st.success("✅ Report Card content settings saved successfully.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Could not save Report Card content settings.")
+                        st.code(str(e))
+
                 st.markdown("#### 🏫 School Logo")
 
                 current_logo_path = school_logo_from_template(template)
@@ -6187,27 +6218,6 @@ def print_templates():
                     key=f"template_logo_size_{template_id}",
                     help="Controls the logo size on generated Report Cards."
                 )
-
-                show_school_name = st.checkbox(
-                    "Show School Name on Report Card",
-                    value=bool(config.get("show_school_name", True)),
-                    key=f"template_show_school_name_{template_id}",
-                    help="Show or hide the school name on generated Report Cards."
-                )
-
-                if show_school_name != bool(config.get("show_school_name", True)):
-                    try:
-                        name_config = get_template_config(template)
-                        name_config["show_school_name"] = bool(show_school_name)
-                        sb.table("print_templates").update({
-                            "config_json": json.dumps(name_config),
-                            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                        }).eq("id", template_id).eq("school_id", school_id).execute()
-                        config["show_school_name"] = bool(show_school_name)
-                        st.success("✅ School name display setting saved.")
-                    except Exception as e:
-                        st.error("Could not save school name setting.")
-                        st.code(str(e))
 
                 lc1, lc2 = st.columns(2)
                 with lc1:
