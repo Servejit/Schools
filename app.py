@@ -1127,53 +1127,23 @@ def users():
         st.info("No users found for the selected filters.")
         return
 
-    select_all_key = (
-        "superadmin_user_select_all"
-        if role == "SuperAdmin"
-        else "admin_user_select_all"
-    )
-    selected_users_key = (
-        "superadmin_selected_users"
-        if role == "SuperAdmin"
-        else "admin_selected_users"
-    )
-    previous_key = selected_users_key + "_previous"
-
-    select_all_users = st.checkbox(
-        "☑️ Select All Users",
-        key=select_all_key
-    )
-
-    previous_select_all = st.session_state.get(previous_key, False)
-
-    if select_all_users and not previous_select_all:
-        st.session_state[selected_users_key] = list(user_labels.keys())
-    elif not select_all_users and previous_select_all:
-        st.session_state[selected_users_key] = []
-
-    st.session_state[previous_key] = select_all_users
-
-    selected_user_labels = st.multiselect(
-        "👥 Select Users",
+    # Show users only through a dropdown. Do not display the complete
+    # user list on the page at once.
+    selected_user_label = st.selectbox(
+        "👥 Select User",
         list(user_labels.keys()),
-        placeholder="Select one or more users",
-        key=selected_users_key
+        index=None,
+        placeholder="Select a user from the dropdown",
+        key="selected_user_dropdown"
     )
 
-    selected_users = [
-        user_labels[label]
-        for label in selected_user_labels
-        if label in user_labels
-    ]
-
-    st.caption(
-        f"Selected {len(selected_users)} of {len(filtered_users)} user(s)."
-    )
-
-    if not selected_users:
-        st.info("Select user(s) from the dropdown above to modify or manage them.")
+    if not selected_user_label:
+        st.info("Select a user from the dropdown above to modify or manage them.")
         return
 
+    selected_users = [
+        user_labels[selected_user_label]
+    ]
     # -----------------------------------------------------
     # MODIFY USERS
     # -----------------------------------------------------
