@@ -2287,13 +2287,10 @@ def students():
     # -----------------------------------------------------
     # ADD STUDENT
     # -----------------------------------------------------
-    # SuperAdmin, Admin and Admin+Teacher can add students school-wide.
-    # A normal Teacher can add students only for classes where they are
-    # assigned as Class Teacher. Subject-only Teachers cannot add students.
-    can_add_students = (
-        role in ["SuperAdmin", "Admin", "Admin+Teacher"]
-        or (role == "Teacher" and assigned_class_keys)
-    )
+    # Only SuperAdmin, Admin and Admin+Teacher can add new students.
+    # Normal Teachers only see and modify the students already added by
+    # Admin/Admin+Teacher in their assigned Class Teacher classes.
+    can_add_students = role in ["SuperAdmin", "Admin", "Admin+Teacher"]
 
     if can_add_students:
         with st.expander("➕ Add New Student"):
@@ -2395,16 +2392,6 @@ def students():
                 use_container_width=True,
                 key="add_student_button"
             ):
-
-                if role == "Teacher":
-                    entered_class_key = (
-                        str(class_name or "").strip().lower(),
-                        str(section or "").strip().lower()
-                    )
-                    if entered_class_key not in assigned_class_keys:
-                        st.error("You can only add a student to your assigned Class Teacher class.")
-                        return
-
 
                 if not name.strip():
                     st.warning(
