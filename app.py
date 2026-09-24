@@ -2499,20 +2499,40 @@ def students():
 
     try:
 
-        student_data = (
-            sb.table("students")
-            .select(
-                "id,school_id,user_id,name,"
-                "admission_no,class_name,section,"
-                "date_of_birth,gender,father_name,"
-                "parent_name,mother_name,parent_phone,address,remarks,"
-                "photo_path,teacher_signature_path,"
-                "principal_signature_path,active,"
-                "created_at,updated_at"
+        if role == "Teacher":
+            # Class Teachers load students through a SECURITY DEFINER RPC.
+            # This avoids normal students-table RLS hiding students that were
+            # created by Admin/Admin+Teacher, while the RPC itself verifies
+            # that the supplied teacher is the authenticated user and only
+            # returns students from that teacher's assigned classes.
+            student_data = (
+                sb.rpc(
+                    "get_class_teacher_students",
+                    {
+                        "p_school_id": school_id,
+                        "p_teacher_id": st.session_state.user.id
+                    }
+                )
+                .execute()
+                .data or []
             )
-            .eq("school_id", school_id)            .order("name")
-            .execute()            .data or []
-        )
+        else:
+            student_data = (
+                sb.table("students")
+                .select(
+                    "id,school_id,user_id,name,"
+                    "admission_no,class_name,section,"
+                    "date_of_birth,gender,father_name,"
+                    "parent_name,mother_name,parent_phone,address,remarks,"
+                    "photo_path,teacher_signature_path,"
+                    "principal_signature_path,active,"
+                    "created_at,updated_at"
+                )
+                .eq("school_id", school_id)
+                .order("name")
+                .execute()
+                .data or []
+            )
     except Exception as e:
 
         st.error("Could not load students.")
@@ -2520,6 +2540,7 @@ def students():
         return
 
     if role == "Teacher" and assigned_class_keys is not None:
+        # Keep a second application-level check as defence in depth.
         student_data = [
             student
             for student in student_data
