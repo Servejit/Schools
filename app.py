@@ -48,6 +48,7 @@ URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_PUBLISHABLE_KEY"]
 
 CREATE_USER = f"{URL}/functions/v1/Create-User"
+DELETE_USER = f"{URL}/functions/v1/Delete-User"
 
 
 # =========================================================
@@ -1520,6 +1521,35 @@ def users():
                                 # Remove the application profile. We verify the
                                 # deletion instead of assuming that an RLS-blocked
                                 # DELETE succeeded.
+                                # Delete the Supabase Auth account first through
+                                # the protected Edge Function. This is required so the
+                                # same email can be registered again later.
+                                delete_auth_response = requests.post(
+                                    DELETE_USER,
+                                    json={"user_id": str(user_id)},
+                                    headers={
+                                        "Authorization": f"Bearer {st.session_state.access_token}",
+                                        "apikey": KEY,
+                                        "Content-Type": "application/json"
+                                    },
+                                    timeout=30
+                                )
+
+                                if not (200 <= delete_auth_response.status_code < 300):
+                                    try:
+                                        delete_error = delete_auth_response.json().get(
+                                            "error",
+                                            delete_auth_response.text
+                                        )
+                                    except Exception:
+                                        delete_error = delete_auth_response.text
+                                    raise RuntimeError(
+                                        f"Auth user deletion failed: {delete_error}"
+                                    )
+
+                                # Remove the application profile as well. The Edge
+                                # Function normally deletes this, but this is safe
+                                # if the row still exists.
                                 delete_result = (
                                     sb.table("profiles")
                                     .delete()
@@ -1529,9 +1559,12 @@ def users():
                                 )
 
                                 deleted_rows = delete_result.data or []
-                                if any(
-                                    str(row.get("id")) == str(user_id)
-                                    for row in deleted_rows
+                                if (
+                                    not deleted_rows
+                                    or any(
+                                        str(row.get("id")) == str(user_id)
+                                        for row in deleted_rows
+                                    )
                                 ):
                                     # Keep the confirmation visible after the
                                     # rerun, instead of losing it immediately.
