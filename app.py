@@ -11363,6 +11363,64 @@ def report_cards():
         selected_template_label = next(iter(template_map.keys()))
         selected_template = template_map[selected_template_label]
 
+    # -----------------------------------------------------
+    # REPORT CARD CONTENT CONTROLS
+    # -----------------------------------------------------
+    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+        report_config = get_template_config(selected_template)
+
+        st.markdown("### ⚙️ Report Card Content Controls")
+        st.caption(
+            "These settings apply to the selected Report Card template "
+            "and are used when generating the report card."
+        )
+
+        show_school_name_dashboard = st.checkbox(
+            "🏫 Show School Name on Report Card",
+            value=bool(report_config.get("show_school_name", True)),
+            key=f"dashboard_show_school_name_{selected_template['id']}"
+        )
+
+        if st.button(
+            "💾 Save Report Card Content Settings",
+            type="primary",
+            use_container_width=True,
+            key=f"dashboard_save_report_card_content_{selected_template['id']}"
+        ):
+            try:
+                save_config = get_template_config(selected_template)
+                save_config["show_school_name"] = bool(show_school_name_dashboard)
+
+                (
+                    sb.table("print_templates")
+                    .update({
+                        "config_json": json.dumps(save_config),
+                        "updated_at": datetime.datetime.now(
+                            datetime.timezone.utc
+                        ).isoformat()
+                    })
+                    .eq("id", selected_template["id"])
+                    .eq("school_id", school_id)
+                    .execute()
+                )
+
+                st.success(
+                    "✅ Report Card content settings saved successfully."
+                )
+                st.rerun()
+
+            except Exception as e:
+                st.error("Could not save Report Card content settings.")
+                st.code(str(e))
+
+        selected_template = dict(selected_template)
+        selected_template["config_json"] = json.dumps(
+            dict(
+                report_config,
+                show_school_name=bool(show_school_name_dashboard)
+            )
+        )
+
     current_logo_path = school_logo_from_template(
         selected_template
     )
