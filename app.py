@@ -6161,30 +6161,58 @@ def print_templates():
                 st.markdown("#### ⚙️ Report Card Content Controls")
                 st.caption("These settings are saved separately for each Report Card template.")
 
-                show_school_name = st.checkbox(
-                    "🏫 Show School Name on Report Card",
-                    value=bool(config.get("show_school_name", True)),
-                    key=f"template_show_school_name_{template_id}",
-                    help="Show or hide the school name generated on top of the Report Card."
+                show_school_name = bool(
+                    config.get("show_school_name", True)
+                )
+
+                status_label = (
+                    "🟢 ON — School Name & Address WILL PRINT"
+                    if show_school_name
+                    else "🔴 OFF — School Name & Address WILL NOT PRINT"
                 )
 
                 if st.button(
-                    "💾 Save Content Settings",
+                    status_label,
                     use_container_width=True,
-                    key=f"save_template_content_settings_{template_id}"
+                    key=f"template_toggle_school_name_{template_id}"
                 ):
                     try:
                         content_config = get_template_config(template)
-                        content_config["show_school_name"] = bool(show_school_name)
+                        content_config["show_school_name"] = not show_school_name
+
                         sb.table("print_templates").update({
                             "config_json": json.dumps(content_config),
-                            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                        }).eq("id", template_id).eq("school_id", school_id).execute()
-                        st.success("✅ Report Card content settings saved successfully.")
+                            "updated_at": datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat()
+                        }).eq(
+                            "id", template_id
+                        ).eq(
+                            "school_id", school_id
+                        ).execute()
+
                         st.rerun()
+
                     except Exception as e:
-                        st.error("Could not save Report Card content settings.")
+                        st.error("Could not update Report Card content setting.")
                         st.code(str(e))
+
+                st.markdown(
+                    f"""
+                    <div style="
+                        display:inline-block;
+                        padding:10px 18px;
+                        border-radius:10px;
+                        font-weight:700;
+                        margin-top:4px;
+                        background:{'#198754' if show_school_name else '#DC3545'};
+                        color:white;
+                    ">
+                        {'NAME + ADDRESS WILL PRINT' if show_school_name else 'NAME + ADDRESS HIDDEN'}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
                 st.markdown("#### 🏫 School Logo")
 
