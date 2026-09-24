@@ -3278,9 +3278,9 @@ def classes_subjects():
     try:
         teacher_data = (
             sb.table("profiles")
-            .select("id,full_name,email")
+            .select("id,full_name,email,role")
             .eq("school_id", school_id)
-            .eq("role", "Teacher")
+            .in_("role", ["Teacher", "Admin+Teacher"])
             .eq("active", True)
             .order("full_name")
             .execute()
