@@ -621,9 +621,9 @@ def users():
 
     st.header("👥 User Management")
 
-    # Persistent save confirmation: show after Streamlit reruns as well,
-    # so Parent → Student linkage changes remain visibly confirmed.
+    # Persistent confirmations remain visible after reruns.
     show_save_message("parent_student_links")
+    show_save_message("user_delete")
 
     try:
         school_data = (
@@ -1263,7 +1263,9 @@ def users():
                                     "id", user_id
                                 ).execute()
 
-                                st.success("✅ User deleted successfully.")
+                                # Keep the confirmation visible after the
+                                # rerun, instead of losing it immediately.
+                                mark_saved("user_delete")
                                 st.rerun()
                             except Exception as e:
                                 st.error("Could not delete user.")
