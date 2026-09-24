@@ -5921,7 +5921,8 @@ def print_templates():
 
                 config = {
                     "template_type": template_type,
-                    "original_file_name": original_name
+                    "original_file_name": original_name,
+                    "show_school_name": True
                 }
 
                 (
@@ -6186,6 +6187,27 @@ def print_templates():
                     key=f"template_logo_size_{template_id}",
                     help="Controls the logo size on generated Report Cards."
                 )
+
+                show_school_name = st.checkbox(
+                    "Show School Name on Report Card",
+                    value=bool(config.get("show_school_name", True)),
+                    key=f"template_show_school_name_{template_id}",
+                    help="Show or hide the school name on generated Report Cards."
+                )
+
+                if show_school_name != bool(config.get("show_school_name", True)):
+                    try:
+                        name_config = get_template_config(template)
+                        name_config["show_school_name"] = bool(show_school_name)
+                        sb.table("print_templates").update({
+                            "config_json": json.dumps(name_config),
+                            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                        }).eq("id", template_id).eq("school_id", school_id).execute()
+                        config["show_school_name"] = bool(show_school_name)
+                        st.success("✅ School name display setting saved.")
+                    except Exception as e:
+                        st.error("Could not save school name setting.")
+                        st.code(str(e))
 
                 lc1, lc2 = st.columns(2)
                 with lc1:
@@ -6764,7 +6786,8 @@ def create_report_overlay(
     present_days=0,
     school_logo_path=None,
     school_logo_size=52,
-    page_size=None
+    page_size=None,
+    show_school_name=True
 ):
 
     width, height = pdf_page_size(
@@ -6843,45 +6866,44 @@ def create_report_overlay(
         or ""
     )
 
-    # Fit the school name inside the 2 cm protected area.
-    name_max_width = usable_width - 90
-    name_font = 19
-    try:
-        while (
-            name_font > 10
-            and pdfmetrics.stringWidth(
-                str(school_name),
-                "Helvetica-Bold",
-                name_font
-            ) > name_max_width
-        ):
-            name_font -= 0.5
-    except Exception:
-        pass
-
-    pdf.setFont(
-        "Helvetica-Bold",
-        name_font
-    )
-
-    pdf.drawCentredString(
-        width / 2,
-        height - margin - 2,
-        str(school_name)
-    )
-
-    if school_address:
+    if show_school_name:
+        # Fit the school name inside the 2 cm protected area.
+        name_max_width = usable_width - 90
+        name_font = 19
+        try:
+            while (
+                name_font > 10
+                and pdfmetrics.stringWidth(
+                    str(school_name),
+                    "Helvetica-Bold",
+                    name_font
+                ) > name_max_width
+            ):
+                name_font -= 0.5
+        except Exception:
+            pass
 
         pdf.setFont(
-            "Helvetica",
-            8
+            "Helvetica-Bold",
+            name_font
         )
 
         pdf.drawCentredString(
             width / 2,
-            height - margin - 16,
-            school_address
+            height - margin - 2,
+            str(school_name)
         )
+
+        if school_address:
+            pdf.setFont(
+                "Helvetica",
+                8
+            )
+            pdf.drawCentredString(
+                width / 2,
+                height - margin - 16,
+                school_address
+            )
 
     # School logo on the LEFT side
     if school_logo_path:
@@ -7472,7 +7494,8 @@ def make_report_card_pdf(
     total_attendance=0,
     present_days=0,
     school_logo_path=None,
-    school_logo_size=52
+    school_logo_size=52,
+    show_school_name=True
 ):
 
     # Always inspect the selected template before drawing the report.
@@ -9317,7 +9340,8 @@ def create_report_overlay(
     total_attendance=0,
     present_days=0,
     school_logo_path=None,
-    school_logo_size=52
+    school_logo_size=52,
+    show_school_name=True
 ):
 
     width, height = pdf_page_size(
@@ -10015,7 +10039,8 @@ def make_report_card_pdf(
     total_attendance=0,
     present_days=0,
     school_logo_path=None,
-    school_logo_size=52
+    school_logo_size=52,
+    show_school_name=True
 ):
 
     overlay_bytes = create_report_overlay(
@@ -10027,7 +10052,8 @@ def make_report_card_pdf(
         total_attendance=total_attendance,
         present_days=present_days,
         school_logo_path=school_logo_path,
-        school_logo_size=school_logo_size
+        school_logo_size=school_logo_size,
+        show_school_name=show_school_name
     )
     overlay_doc = fitz.open(
         stream=overlay_bytes,
@@ -12469,7 +12495,8 @@ def parent_report_cards_view(school_id, parent_user_id):
                 total_attendance=total_attendance,
                 present_days=present_days,
                 school_logo_path=logo_path,
-                school_logo_size=logo_size
+                school_logo_size=logo_size,
+                show_school_name=bool(get_template_config(selected_template).get("show_school_name", True))
             )
 
             st.success("✅ Report card generated successfully.")
@@ -12719,7 +12746,8 @@ def student_report_card_view(school_id, student_id):
                 total_attendance=total_attendance,
                 present_days=present_days,
                 school_logo_path=logo_path,
-                school_logo_size=logo_size
+                school_logo_size=logo_size,
+                show_school_name=bool(get_template_config(selected_template).get("show_school_name", True))
             )
 
             safe_name = (
@@ -15924,7 +15952,8 @@ def dashboard():
                                                     school_logo_path=school_logo_from_template(
                                                         selected_template
                                                     ),
-                                                    school_logo_size=logo_size
+                                                    school_logo_size=logo_size,
+                                                    show_school_name=bool(get_template_config(selected_template).get("show_school_name", True))
                                                 )
 
                                                 safe_name = (
