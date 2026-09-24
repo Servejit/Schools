@@ -9427,29 +9427,31 @@ def create_report_overlay(
         or ""
     )
 
-    pdf.setFont(
-        "Helvetica-Bold",
-        19
-    )
-
-    pdf.drawCentredString(
-        width / 2,
-        height - 38,
-        school_name
-    )
-
-    if school_address:
-
+    # School name/address are optional content.  The dashboard setting
+    # controls the generated overlay, so OFF means neither is drawn.
+    if show_school_name:
         pdf.setFont(
-            "Helvetica",
-            8
+            "Helvetica-Bold",
+            19
         )
 
         pdf.drawCentredString(
             width / 2,
-            height - 49,
-            school_address
+            height - 38,
+            school_name
         )
+
+        if school_address:
+            pdf.setFont(
+                "Helvetica",
+                8
+            )
+
+            pdf.drawCentredString(
+                width / 2,
+                height - 49,
+                school_address
+            )
 
     # School logo on the LEFT side
     if school_logo_path:
