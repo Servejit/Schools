@@ -3131,17 +3131,6 @@ def students():
             if str(s.get("class_name") or "").strip()
         })
 
-        class_search = st.text_input(
-            "🔎 Search Class",
-            placeholder="Type class, section or academic year...",
-            key=f"{role.lower()}_class_subject_search"
-        ).strip().lower()
-
-        filtered_class_filter_options = [
-            option for option in class_filter_options
-            if option == "All Classes" or not class_search or class_search in option.lower()
-        ]
-
         class_filter = st.selectbox(
             "🏫 Select Class",
             ["All Classes"] + class_options,
@@ -3790,76 +3779,6 @@ def classes_subjects():
         label = f"{teacher.get('full_name') or 'Teacher'} — {teacher.get('email') or ''}"
         teacher_options[label] = teacher["id"]
 
-    # Load subject-teacher assignments once for the selected school so that
-    # each subject shown inside a class can display its assigned teacher.
-    subject_teacher_rows = []
-    try:
-        subject_teacher_rows = (
-            sb.table("teacher_subject_assignments")
-            .select("teacher_id,class_id,subject_id")
-            .eq("school_id", school_id)
-            .execute()
-            .data or []
-        )
-    except Exception:
-        subject_teacher_rows = []
-
-    # Build a reliable teacher-name map for every teacher who has a
-    # subject assignment in this school.  Do not depend only on the
-    # active teacher dropdown list, because an existing assignment may
-    # belong to a teacher whose current profile is inactive.
-    teacher_name_by_id = {
-        str(t.get("id")): (
-            t.get("full_name") or t.get("email") or "Teacher"
-        )
-        for t in teacher_data
-    }
-
-    assigned_teacher_ids = {
-        str(x.get("teacher_id"))
-        for x in subject_teacher_rows
-        if x.get("teacher_id")
-    }
-
-    missing_teacher_ids = [
-        teacher_id
-        for teacher_id in assigned_teacher_ids
-        if teacher_id not in teacher_name_by_id
-    ]
-
-    if missing_teacher_ids:
-        try:
-            extra_teacher_rows = (
-                sb.table("profiles")
-                .select("id,full_name,email")
-                .eq("school_id", school_id)
-                .in_("id", missing_teacher_ids)
-                .execute()
-                .data or []
-            )
-            for teacher in extra_teacher_rows:
-                teacher_name_by_id[str(teacher.get("id"))] = (
-                    teacher.get("full_name")
-                    or teacher.get("email")
-                    or "Teacher"
-                )
-        except Exception:
-            pass
-
-    assigned_subject_teacher = {}
-    for assignment in subject_teacher_rows:
-        pair = (
-            str(assignment.get("class_id")),
-            str(assignment.get("subject_id"))
-        )
-        teacher_name = teacher_name_by_id.get(
-            str(assignment.get("teacher_id")),
-            "Teacher"
-        )
-        assigned_subject_teacher.setdefault(pair, [])
-        if teacher_name not in assigned_subject_teacher[pair]:
-            assigned_subject_teacher[pair].append(teacher_name)
-
     if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         with st.expander("👨‍🏫 Assign Class Teachers"):
             st.caption("Assign one class teacher to each class. Teachers will only see students from their assigned classes.")
@@ -4014,59 +3933,14 @@ def classes_subjects():
                 if not assignment_class_options:
                     st.info("Create active classes first.")
                 else:
-                    assignment_class_search = st.text_input(
-                        "🔎 Search Class",
-                        placeholder="Type class, section or academic year...",
-                        key=f"subject_assignment_class_search_{school_id}"
-                    ).strip().lower()
-
-                    filtered_assignment_class_options = {
-                        label: value for label, value in assignment_class_options.items()
-                        if not assignment_class_search or assignment_class_search in label.lower()
-                    }
-
                     selected_assignment_classes = st.multiselect(
                         "📚 Select Class(es)",
-                        list(filtered_assignment_class_options.keys()),
+                        list(assignment_class_options.keys()),
                         placeholder="Select one or more classes",
                         key=f"subject_assignment_classes_{school_id}"
                     )
 
-                    # Load ALL subject assignments for this school so every
-                    # Class + Subject shows the teacher who currently owns it.
-                    all_assignment_rows = []
-                    try:
-                        all_assignment_rows = (
-                            sb.table("teacher_subject_assignments")
-                            .select("teacher_id,class_id,subject_id")
-                            .eq("school_id", school_id)
-                            .execute()
-                            .data or []
-                        )
-                    except Exception:
-                        all_assignment_rows = []
-
-                    teacher_name_by_id = {
-                        str(t.get("id")): (
-                            t.get("full_name")
-                            or t.get("email")
-                            or "Teacher"
-                        )
-                        for t in teacher_data
-                    }
-
-                    assigned_teacher_by_pair = {}
-                    for row in all_assignment_rows:
-                        pair = (str(row.get("class_id")), str(row.get("subject_id")))
-                        tid = str(row.get("teacher_id"))
-                        if pair not in assigned_teacher_by_pair:
-                            assigned_teacher_by_pair[pair] = []
-                        name = teacher_name_by_id.get(tid, "Teacher")
-                        if name not in assigned_teacher_by_pair[pair]:
-                            assigned_teacher_by_pair[pair].append(name)
-
                     subject_assignment_options = {}
-                    blocked_subject_labels = []
                     for class_label in selected_assignment_classes:
                         cl = assignment_class_options[class_label]
                         try:
@@ -4089,35 +3963,11 @@ def classes_subjects():
                                 or subject.get("name")
                                 or "Subject"
                             )
-                            pair = (str(cl["id"]), str(subject["id"]))
-                            assigned_names = assigned_teacher_by_pair.get(pair, [])
-                            other_names = [
-                                name for name in assigned_names
-                                if name != (
-                                    teacher_name_by_id.get(
-                                        str(assignment_teacher_id), ""
-                                    )
-                                )
-                            ]
-
-                            if other_names:
-                                option_label = (
-                                    f"{class_label} → {subject_name_value}"
-                                    f" — 👨‍🏫 Assigned: {', '.join(other_names)}"
-                                )
-                                blocked_subject_labels.append(option_label)
-                            else:
-                                option_label = (
-                                    f"{class_label} → {subject_name_value}"
-                                    + (
-                                        f" — 👨‍🏫 Assigned: {assigned_names[0]}"
-                                        if assigned_names else ""
-                                    )
-                                )
-                                subject_assignment_options[option_label] = (
-                                    cl["id"],
-                                    subject["id"]
-                                )
+                            option_label = f"{class_label} → {subject_name_value}"
+                            subject_assignment_options[option_label] = (
+                                cl["id"],
+                                subject["id"]
+                            )
 
                     current_assignment_set = set()
                     try:
@@ -4143,37 +3993,13 @@ def classes_subjects():
                         if (str(ids[0]), str(ids[1])) in current_assignment_set
                     ]
 
-                    assignment_subject_search = st.text_input(
-                        "🔎 Search Subject",
-                        placeholder="Type subject name or code...",
-                        key=f"subject_assignment_subject_search_{school_id}"
-                    ).strip().lower()
-
-                    filtered_subject_assignment_options = {
-                        label: value for label, value in subject_assignment_options.items()
-                        if not assignment_subject_search or assignment_subject_search in label.lower()
-                    }
-
-                    filtered_current_selected_labels = [
-                        label for label in current_selected_labels
-                        if label in filtered_subject_assignment_options
-                    ]
-
                     selected_assignment_subjects = st.multiselect(
                         "📖 Select Subject(s) for the Selected Class(es)",
-                        list(filtered_subject_assignment_options.keys()),
-                        default=filtered_current_selected_labels,
+                        list(subject_assignment_options.keys()),
+                        default=current_selected_labels,
                         placeholder="Select one or more Class + Subject combinations",
                         key=f"subject_assignment_subjects_{school_id}"
                     )
-
-                    if blocked_subject_labels:
-                        st.info(
-                            "🔒 The following Class + Subject combinations are already "
-                            "assigned to another teacher and cannot be assigned twice:"
-                        )
-                        for blocked_label in blocked_subject_labels:
-                            st.write(f"• {blocked_label}")
 
                     if selected_assignment_classes and not subject_assignment_options:
                         st.warning("No active subjects are available in the selected class(es).")
@@ -4244,278 +4070,6 @@ def classes_subjects():
                         except Exception as e:
                             st.error("Could not save Teacher Subject Assignments.")
                             st.code(str(e))
-
-    st.divider()
-
-    # -----------------------------------------------------
-    # SUBJECT MASTER / MULTI-CLASS ALLOTMENT
-    # -----------------------------------------------------
-    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
-        subject_allot_save_key = f"subject_allot_{school_id}"
-        show_save_message(subject_allot_save_key)
-
-        detail_key = subject_allot_save_key + "_detail"
-        skipped_key = subject_allot_save_key + "_skipped"
-        detail_message = st.session_state.pop(detail_key, None)
-        skipped_message = st.session_state.pop(skipped_key, None)
-        if detail_message:
-            st.success("✅ " + detail_message)
-        if skipped_message:
-            st.info("ℹ️ " + skipped_message)
-
-        with st.expander("📖 Subject Creation & Multi-Class Allotment", expanded=True):
-            st.caption(
-                "Create a subject once, then allot it to one or more classes. "
-                "Already allotted classes are shown and are not duplicated."
-            )
-
-            # Load one clean subject list for the school.  A subject is identified
-            # by name + code + marks settings, while each class gets its own row.
-            try:
-                all_school_subjects = (
-                    sb.table("subjects")
-                    .select(
-                        "id,school_id,class_id,name,subject_name,code,"
-                        "max_marks,passing_marks,active"
-                    )
-                    .eq("school_id", school_id)
-                    .eq("active", True)
-                    .order("subject_name")
-                    .execute()
-                    .data or []
-                )
-            except Exception:
-                all_school_subjects = []
-
-            unique_subjects = {}
-            for sub in all_school_subjects:
-                sname = str(
-                    sub.get("subject_name") or sub.get("name") or ""
-                ).strip()
-                scode = str(sub.get("code") or "").strip()
-                if not sname:
-                    continue
-
-                subject_key = (
-                    sname.lower(),
-                    scode.lower(),
-                    str(sub.get("max_marks") or ""),
-                    str(sub.get("passing_marks") or "")
-                )
-                if subject_key not in unique_subjects:
-                    unique_subjects[subject_key] = sub
-
-            existing_subject_options = {
-                (
-                    f"{str(s.get('subject_name') or s.get('name') or '').strip()} "
-                    f"| Code: {str(s.get('code') or '').strip() or '-'} "
-                    f"| Max: {s.get('max_marks') or '-'} "
-                    f"| Pass: {s.get('passing_marks') or '-'}"
-                ): s
-                for s in unique_subjects.values()
-            }
-
-            subject_choice_labels = [
-                "➕ Create New Subject"
-            ] + list(existing_subject_options.keys())
-
-            selected_subject_choice = st.selectbox(
-                "📖 Subject",
-                subject_choice_labels,
-                key=f"subject_allot_choice_{school_id}"
-            )
-
-            selected_master_subject = None
-            if selected_subject_choice != "➕ Create New Subject":
-                selected_master_subject = existing_subject_options[
-                    selected_subject_choice
-                ]
-                master_subject_name = str(
-                    selected_master_subject.get("subject_name")
-                    or selected_master_subject.get("name")
-                    or ""
-                ).strip()
-                master_subject_code = str(
-                    selected_master_subject.get("code") or ""
-                ).strip()
-                master_max_marks = float(
-                    selected_master_subject.get("max_marks") or 100
-                )
-                master_passing_marks = float(
-                    selected_master_subject.get("passing_marks") or 0
-                )
-
-                st.info(
-                    f"Existing subject selected: **{master_subject_name}**. "
-                    "Choose additional classes below."
-                )
-            else:
-                master_subject_name = st.text_input(
-                    "📖 New Subject Name",
-                    placeholder="Example: Mathematics",
-                    key=f"master_subject_name_{school_id}"
-                ).strip()
-
-                mc1, mc2 = st.columns(2)
-                with mc1:
-                    master_subject_code = st.text_input(
-                        "Subject Code",
-                        placeholder="Example: MATH",
-                        key=f"master_subject_code_{school_id}"
-                    ).strip()
-                with mc2:
-                    master_max_marks = st.number_input(
-                        "Maximum Marks",
-                        min_value=1.0,
-                        value=100.0,
-                        key=f"master_subject_max_{school_id}"
-                    )
-
-                master_passing_marks = st.number_input(
-                    "Passing Marks",
-                    min_value=0.0,
-                    value=33.0,
-                    key=f"master_subject_pass_{school_id}"
-                )
-
-            master_class_search = st.text_input(
-                "🔎 Search Classes",
-                placeholder="Type class, section or academic year...",
-                key=f"master_subject_class_search_{school_id}"
-            ).strip().lower()
-
-            # Show every class exactly once and clearly mark classes where
-            # the selected subject is already allotted.
-            master_class_options = {}
-            already_allotted_labels = set()
-
-            for cl in class_data:
-                label = (
-                    f"{cl.get('class_name') or '-'} | "
-                    f"Section: {cl.get('section') or '-'} | "
-                    f"{cl.get('academic_year') or '-'}"
-                )
-                if master_class_search and master_class_search not in label.lower():
-                    continue
-
-                master_class_options[label] = cl
-
-                if selected_master_subject:
-                    already_here = any(
-                        str(x.get("class_id")) == str(cl.get("id"))
-                        and str(
-                            x.get("subject_name") or x.get("name") or ""
-                        ).strip().lower()
-                        == master_subject_name.lower()
-                        and str(x.get("code") or "").strip().lower()
-                        == master_subject_code.lower()
-                        for x in all_school_subjects
-                    )
-                    if already_here:
-                        already_allotted_labels.add(label)
-
-            available_class_options = {
-                label: cl
-                for label, cl in master_class_options.items()
-                if label not in already_allotted_labels
-            }
-
-            if already_allotted_labels:
-                st.caption(
-                    "✅ Already allotted: "
-                    + ", ".join(sorted(already_allotted_labels))
-                )
-
-            selected_master_classes = st.multiselect(
-                "🏫 Allot Subject to Additional Class(es)",
-                list(available_class_options.keys()),
-                placeholder="Select one or more classes",
-                key=f"master_subject_classes_{school_id}"
-            )
-
-            if st.button(
-                "➕ Create / Allot Subject",
-                type="primary",
-                use_container_width=True,
-                key=f"create_allot_subject_{school_id}"
-            ):
-                if not master_subject_name:
-                    st.warning("Subject name is required.")
-                elif master_passing_marks > master_max_marks:
-                    st.error("Passing marks cannot exceed maximum marks.")
-                elif not selected_master_classes:
-                    st.warning("Select at least one class.")
-                else:
-                    try:
-                        added_classes = []
-                        skipped_classes = []
-
-                        for class_label in selected_master_classes:
-                            cl = available_class_options.get(class_label)
-                            if not cl:
-                                continue
-
-                            existing = (
-                                sb.table("subjects")
-                                .select("id,subject_name,name,code")
-                                .eq("school_id", school_id)
-                                .eq("class_id", cl["id"])
-                                .execute()
-                                .data or []
-                            )
-
-                            name_exists = any(
-                                str(
-                                    x.get("subject_name") or x.get("name") or ""
-                                ).strip().lower()
-                                == master_subject_name.lower()
-                                for x in existing
-                            )
-                            code_exists = (
-                                bool(master_subject_code)
-                                and any(
-                                    str(x.get("code") or "").strip().lower()
-                                    == master_subject_code.lower()
-                                    for x in existing
-                                )
-                            )
-
-                            if name_exists or code_exists:
-                                skipped_classes.append(class_label)
-                                continue
-
-                            sb.table("subjects").insert({
-                                "school_id": school_id,
-                                "class_id": cl["id"],
-                                "name": master_subject_name,
-                                "subject_name": master_subject_name,
-                                "code": master_subject_code,
-                                "max_marks": master_max_marks,
-                                "passing_marks": master_passing_marks,
-                                "active": True
-                            }).execute()
-                            added_classes.append(class_label)
-
-                        if added_classes:
-                            mark_saved(subject_allot_save_key)
-                            st.session_state[
-                                subject_allot_save_key + "_detail"
-                            ] = (
-                                f"Subject '{master_subject_name}' allotted to "
-                                f"{len(added_classes)} class(es)."
-                            )
-                        if skipped_classes:
-                            st.session_state[
-                                subject_allot_save_key + "_skipped"
-                            ] = (
-                                "Skipped because the subject name/code already "
-                                "exists in: " + ", ".join(skipped_classes)
-                            )
-                        st.rerun()
-
-                    except Exception as e:
-                        st.error("Could not create/allot subject.")
-                        st.code(str(e))
 
     st.divider()
 
@@ -4846,12 +4400,6 @@ def classes_subjects():
 
             try:
 
-                subject_search = st.text_input(
-                    "🔎 Search Subject",
-                    placeholder="Type subject name or code...",
-                    key=f"subject_search_{class_id}"
-                ).strip().lower()
-
                 subject_data = (
                     sb.table("subjects")
                     .select(
@@ -4865,13 +4413,6 @@ def classes_subjects():
                     .execute()
                     .data or []
                 )
-
-                if subject_search:
-                    subject_data = [
-                        subject for subject in subject_data
-                        if subject_search in str(subject.get("subject_name") or subject.get("name") or "").lower()
-                        or subject_search in str(subject.get("code") or "").lower()
-                    ]
 
             except Exception as e:
 
@@ -4913,22 +4454,10 @@ def classes_subjects():
                         f"**{display_subject_name}**"
                     )
 
-                    assigned_teachers = assigned_subject_teacher.get(
-                        (str(class_id), str(subject_id)), []
-                    )
-                    assigned_teacher_text = (
-                        ", ".join(dict.fromkeys(assigned_teachers))
-                        if assigned_teachers
-                        else "Not Assigned"
-                    )
-
                     st.caption(
                         f"Code: {subject_code} "
                         f"| Maximum: {max_marks} "
                         f"| Passing: {passing_marks}"
-                    )
-                    st.caption(
-                        f"👨‍🏫 Assigned Teacher: {assigned_teacher_text}"
                     )
 
                 with s2:
@@ -5000,55 +4529,6 @@ def classes_subjects():
                             key=f"subject_active_{subject_id}"
                         )
 
-                        # Subject Teacher assignment uses the SAME shared
-                        # teacher_subject_assignments table as the standalone
-                        # Teacher Subject Assignments function.
-                        current_assignment_rows = [
-                            row for row in subject_teacher_rows
-                            if str(row.get("class_id")) == str(class_id)
-                            and str(row.get("subject_id")) == str(subject_id)
-                        ]
-                        current_teacher_id = (
-                            str(current_assignment_rows[0].get("teacher_id"))
-                            if current_assignment_rows and current_assignment_rows[0].get("teacher_id")
-                            else None
-                        )
-
-                        subject_teacher_options = {
-                            "— No Subject Teacher —": None
-                        }
-                        for teacher in teacher_data:
-                            teacher_id = str(teacher.get("id") or "")
-                            if not teacher_id:
-                                continue
-                            teacher_label = (
-                                f"{teacher.get('full_name') or 'Teacher'}"
-                                f" — {teacher.get('email') or ''}"
-                                f" [{teacher.get('role') or 'Teacher'}]"
-                            )
-                            subject_teacher_options[teacher_label] = teacher_id
-
-                        current_teacher_label = next(
-                            (
-                                label for label, teacher_id
-                                in subject_teacher_options.items()
-                                if teacher_id == current_teacher_id
-                            ),
-                            "— No Subject Teacher —"
-                        )
-
-                        edit_subject_teacher_label = st.selectbox(
-                            "👨‍🏫 Subject Teacher",
-                            list(subject_teacher_options.keys()),
-                            index=list(subject_teacher_options.keys()).index(
-                                current_teacher_label
-                            ),
-                            key=f"subject_teacher_edit_{class_id}_{subject_id}"
-                        )
-                        edit_subject_teacher_id = subject_teacher_options.get(
-                            edit_subject_teacher_label
-                        )
-
                         b1, b2 = st.columns(2)
 
                         with b1:
@@ -5099,30 +4579,6 @@ def classes_subjects():
                                             )
                                             .execute()
                                         )
-
-                                        # Synchronize the Class + Subject teacher
-                                        # through the same table used by the standalone
-                                        # Teacher Subject Assignments screen.
-                                        (
-                                            sb.table("teacher_subject_assignments")
-                                            .delete()
-                                            .eq("school_id", school_id)
-                                            .eq("class_id", class_id)
-                                            .eq("subject_id", subject_id)
-                                            .execute()
-                                        )
-
-                                        if edit_subject_teacher_id:
-                                            (
-                                                sb.table("teacher_subject_assignments")
-                                                .insert({
-                                                    "school_id": school_id,
-                                                    "teacher_id": edit_subject_teacher_id,
-                                                    "class_id": class_id,
-                                                    "subject_id": subject_id
-                                                })
-                                                .execute()
-                                            )
 
                                         mark_saved(save_key)
                                         st.success(
@@ -14071,3 +13527,2017 @@ def reports():
         return
 
     school_id = get_selected_school("reports_school")
+    if not school_id:
+        return
+
+    report_options = [
+        "Student Records (Excel)",
+        "Student Performance",
+        "Class Summary",
+        "Subject Summary",
+        "Attendance Summary"
+    ]
+    if role in ["Admin", "Admin+Teacher"] and premium_feature_enabled(
+        school_id,
+        st.session_state.user.id,
+        "school_academic_status"
+    ):
+        report_options.append("💎 School Academic Status")
+
+    report_type = st.selectbox(
+        "📊 Report Type",
+        report_options,
+        key="reports_type"
+    )
+
+    if report_type == "💎 School Academic Status":
+        school_academic_status(school_id)
+        return
+
+    # -----------------------------------------------------
+    # STUDENT RECORDS EXCEL
+    # -----------------------------------------------------
+    if report_type == "Student Records (Excel)":
+        st.subheader("📥 Student Records Excel")
+        st.caption(
+            "Choose exactly which student information you want in Excel. "
+            "Teacher access is limited to their Class Teacher class(es)."
+        )
+
+        try:
+            students_query = (
+                sb.table("students")
+                .select(
+                    "id,school_id,user_id,name,admission_no,class_name,section,"
+                    "date_of_birth,gender,father_name,mother_name,parent_name,parent_phone,address,"
+                    "remarks,photo_path,teacher_signature_path,"
+                    "principal_signature_path,active,created_at,updated_at"
+                )
+                .eq("school_id", school_id)
+                .eq("active", True)
+                .order("name")
+            )
+            students_data = students_query.execute().data or []
+        except Exception as e:
+            st.error("Could not load student records.")
+            st.code(str(e))
+            return
+
+        # Class Teacher sees only students from classes assigned to them.
+        if role == "Teacher":
+            try:
+                teacher_classes = (
+                    sb.table("classes")
+                    .select("class_name,section")
+                    .eq("school_id", school_id)
+                    .eq("class_teacher_id", st.session_state.user.id)
+                    .eq("active", True)
+                    .execute()
+                    .data or []
+                )
+            except Exception as e:
+                st.error("Could not load your Class Teacher classes.")
+                st.code(str(e))
+                return
+
+            allowed_pairs = {
+                (
+                    str(x.get("class_name") or "").strip().lower(),
+                    str(x.get("section") or "").strip().lower()
+                )
+                for x in teacher_classes
+            }
+            students_data = [
+                s for s in students_data
+                if (
+                    str(s.get("class_name") or "").strip().lower(),
+                    str(s.get("section") or "").strip().lower()
+                ) in allowed_pairs
+            ]
+
+        # Teacher: only the Class Teacher's assigned class(es).
+        # Admin: all active classes from this Admin's own school, with
+        # a class dropdown. SuperAdmin keeps access to the school selected
+        # above and can also use the class dropdown.
+        filtered_students = students_data
+
+        if role == "Teacher":
+            teacher_class_options = sorted({
+                (
+                    f"{x.get('class_name') or '-'}"
+                    f" | Section: {x.get('section') or '-'}"
+                )
+                for x in teacher_classes
+            })
+
+            if not teacher_class_options:
+                st.info("No class has been assigned to you as Class Teacher.")
+                return
+
+            selected_teacher_class = st.selectbox(
+                "🏫 My Class",
+                teacher_class_options,
+                key="reports_teacher_student_class"
+            )
+
+            selected_teacher_class_name = selected_teacher_class.split(" | Section: ", 1)[0]
+            selected_teacher_section = (
+                selected_teacher_class.split(" | Section: ", 1)[1]
+                if " | Section: " in selected_teacher_class
+                else "-"
+            )
+
+            filtered_students = [
+                s for s in filtered_students
+                if str(s.get("class_name") or "").strip() == selected_teacher_class_name
+                and str(s.get("section") or "").strip() == selected_teacher_section
+            ]
+
+        else:
+            # Admin/SuperAdmin: build the dropdown from the Classes table so
+            # every active class in the school is available even if it has
+            # no students yet.
+            try:
+                school_classes = (
+                    sb.table("classes")
+                    .select("id,class_name,section,academic_year,active")
+                    .eq("school_id", school_id)
+                    .eq("active", True)
+                    .order("class_name")
+                    .order("section")
+                    .execute()
+                    .data or []
+                )
+            except Exception as e:
+                st.error("Could not load school classes.")
+                st.code(str(e))
+                return
+
+            class_options = [
+                (
+                    f"{x.get('class_name') or '-'}"
+                    f" | Section: {x.get('section') or '-'}"
+                    f" | {x.get('academic_year') or '-'}"
+                )
+                for x in school_classes
+            ]
+
+            if not class_options:
+                st.info("No active classes are available in this school.")
+                return
+
+            class_filter = st.selectbox(
+                "🏫 Class",
+                ["All Classes"] + class_options,
+                key="reports_admin_student_records_class"
+            )
+
+            if class_filter != "All Classes":
+                selected_class_name = class_filter.split(" | Section: ", 1)[0]
+                remaining = class_filter.split(" | Section: ", 1)
+                selected_section = (
+                    remaining[1].split(" | ", 1)[0]
+                    if len(remaining) > 1
+                    else ""
+                )
+                filtered_students = [
+                    s for s in filtered_students
+                    if str(s.get("class_name") or "").strip() == selected_class_name
+                    and str(s.get("section") or "").strip() == selected_section
+                ]
+
+        # Optional section filter remains available for Admin/SuperAdmin
+        # after selecting a class, while Teacher access stays limited above.
+        if role not in ["Teacher", "Admin+Teacher"]:
+            filtered_section_options = sorted({
+                str(s.get("section") or "").strip()
+                for s in filtered_students
+                if str(s.get("section") or "").strip()
+            })
+            section_filter = st.selectbox(
+                "📚 Section",
+                ["All Sections"] + filtered_section_options,
+                key="reports_admin_student_records_section"
+            )
+            if section_filter != "All Sections":
+                filtered_students = [
+                    s for s in filtered_students
+                    if str(s.get("section") or "").strip() == section_filter
+                ]
+
+        search = st.text_input(
+            "🔍 Search Student",
+            placeholder="Student name or admission number",
+            key="reports_student_records_search"
+        ).strip().lower()
+        if search:
+            filtered_students = [
+                s for s in filtered_students
+                if search in str(s.get("name") or "").lower()
+                or search in str(s.get("admission_no") or "").lower()
+            ]
+
+        st.info(f"👥 {len(filtered_students)} student(s) available for export.")
+
+        export_fields = [
+            "Student Name",
+            "Admission No.",
+            "Class",
+            "Section",
+            "Date of Birth",
+            "Gender",
+            "Father Name",
+            "Mother Name",
+            "Parent Phone",
+            "Address",
+        ]
+
+        if not filtered_students:
+            st.warning("No student records match the selected filters.")
+            return
+
+        excel_bytes = make_student_records_excel(
+            filtered_students,
+            export_fields
+        )
+        st.download_button(
+            "⬇️ Download Student Records Excel",
+            data=excel_bytes,
+            file_name="Student_Records.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key=f"reports_student_records_download_{role}_{school_id}"
+        )
+
+        return
+
+    try:
+        class_data = (
+            sb.table("classes")
+            .select("id,class_name,section,academic_year,active")
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .order("class_name")
+            .order("section")
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error("Could not load classes.")
+        st.code(str(e))
+        return
+
+    teacher_assignments = []
+    if role == "Teacher":
+        try:
+            teacher_assignments = (
+                sb.table("teacher_subject_assignments")
+                .select("class_id,subject_id")
+                .eq("school_id", school_id)
+                .eq("teacher_id", st.session_state.user.id)
+                .execute()
+                .data or []
+            )
+        except Exception as e:
+            st.error("Could not load teacher assignments.")
+            st.code(str(e))
+            return
+
+        assigned_class_ids = {
+            str(x.get("class_id")) for x in teacher_assignments
+        }
+        class_data = [
+            x for x in class_data
+            if str(x.get("id")) in assigned_class_ids
+        ]
+
+    if not class_data:
+        st.info("No classes are available for your report access.")
+        return
+
+    class_map = {
+        (
+            f"{x.get('class_name') or '-'}"
+            f" | Section: {x.get('section') or '-'}"
+            f" | {x.get('academic_year') or '-'}"
+        ): x
+        for x in class_data
+    }
+
+    if report_type != "Attendance Summary":
+        exam_options = get_exam_assessments(school_id)
+        exam_names = [
+            str(x.get("name") or "").strip()
+            for x in exam_options
+            if x.get("name")
+        ]
+        if not exam_names:
+            st.warning("No Exam / Assessment has been created by Admin yet.")
+            return
+        exam_name = st.selectbox(
+            "📝 Exam / Assessment",
+            exam_names,
+            key="reports_exam"
+        )
+    else:
+        exam_name = None
+
+    # -----------------------------------------------------
+    # STUDENT PERFORMANCE
+    # -----------------------------------------------------
+    if report_type == "Student Performance":
+        selected_label = st.selectbox(
+            "📚 Class",
+            list(class_map.keys()),
+            key="reports_student_class"
+        )
+        selected_class = class_map[selected_label]
+
+        try:
+            students_data = (
+                sb.table("students")
+                .select("id,name,admission_no,class_name,section")
+                .eq("school_id", school_id)
+                .eq("class_name", selected_class.get("class_name") or "")
+                .eq("section", selected_class.get("section") or "")
+                .eq("active", True)
+                .order("name")
+                .execute()
+                .data or []
+            )
+
+            subjects_data = (
+                sb.table("subjects")
+                .select("id,subject_name,name,max_marks")
+                .eq("school_id", school_id)
+                .eq("class_id", selected_class["id"])
+                .eq("active", True)
+                .order("subject_name")
+                .execute()
+                .data or []
+            )
+
+            marks_data = (
+                sb.table("marks")
+                .select("student_id,subject_id,marks,max_marks")
+                .eq("school_id", school_id)
+                .eq("class_id", selected_class["id"])
+                .eq("exam_name", exam_name)
+                .execute()
+                .data or []
+            )
+        except Exception as e:
+            st.error("Could not load performance data.")
+            st.code(str(e))
+            return
+
+        if role == "Teacher":
+            allowed = {
+                str(x.get("subject_id"))
+                for x in teacher_assignments
+                if str(x.get("class_id")) == str(selected_class["id"])
+            }
+            subjects_data = [
+                x for x in subjects_data if str(x.get("id")) in allowed
+            ]
+            marks_data = [
+                x for x in marks_data if str(x.get("subject_id")) in allowed
+            ]
+
+        subject_names = {
+            str(x["id"]): (
+                x.get("subject_name") or x.get("name") or "Subject"
+            )
+            for x in subjects_data
+        }
+        subject_max = {
+            str(x["id"]): float(x.get("max_marks") or 100)
+            for x in subjects_data
+        }
+        marks_by_student = {}
+        for m in marks_data:
+            marks_by_student.setdefault(str(m["student_id"]), {})[
+                str(m["subject_id"])
+            ] = float(m.get("marks") or 0)
+
+        rows = []
+        for student in students_data:
+            sid = str(student["id"])
+            row = {
+                "Student Name": student.get("name") or "",
+                "Admission No.": student.get("admission_no") or ""
+            }
+            total = 0.0
+            maximum = 0.0
+            for subject_id, subject_name in subject_names.items():
+                value = marks_by_student.get(sid, {}).get(subject_id)
+                row[subject_name] = value if value is not None else ""
+                if value is not None:
+                    total += value
+                    maximum += subject_max.get(subject_id, 100)
+            row["Total Marks"] = round(total, 2)
+            row["Maximum Marks"] = round(maximum, 2)
+            row["Percentage"] = round(total * 100 / maximum, 2) if maximum else 0
+            row["Grade"] = grade_from_percentage(row["Percentage"])
+            rows.append(row)
+
+        df = pd.DataFrame(rows)
+        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.download_button(
+            "⬇️ Download Student Performance CSV",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name=f"Student_Performance_{exam_name}.csv".replace("/", "_"),
+            mime="text/csv",
+            use_container_width=True
+        )
+        return
+
+    # -----------------------------------------------------
+    # CLASS SUMMARY
+    # -----------------------------------------------------
+    if report_type == "Class Summary":
+        try:
+            students_data = (
+                sb.table("students")
+                .select("id,name,class_name,section")
+                .eq("school_id", school_id)
+                .eq("active", True)
+                .execute()
+                .data or []
+            )
+            marks_data = (
+                sb.table("marks")
+                .select("student_id,marks,max_marks,class_id")
+                .eq("school_id", school_id)
+                .eq("exam_name", exam_name)
+                .execute()
+                .data or []
+            )
+        except Exception as e:
+            st.error("Could not load class summary.")
+            st.code(str(e))
+            return
+
+        allowed_class_ids = {str(x["id"]) for x in class_data}
+        by_student = {}
+        for m in marks_data:
+            if str(m.get("class_id")) not in allowed_class_ids:
+                continue
+            sid = str(m["student_id"])
+            total, maximum = by_student.get(sid, (0.0, 0.0))
+            by_student[sid] = (
+                total + float(m.get("marks") or 0),
+                maximum + float(m.get("max_marks") or 0)
+            )
+
+        rows = []
+        for cl in class_data:
+            class_students = [
+                s for s in students_data
+                if str(s.get("class_name") or "").strip().lower()
+                == str(cl.get("class_name") or "").strip().lower()
+                and str(s.get("section") or "").strip().lower()
+                == str(cl.get("section") or "").strip().lower()
+            ]
+            percentages = []
+            for s in class_students:
+                total, maximum = by_student.get(str(s["id"]), (0, 0))
+                if maximum:
+                    percentages.append(total * 100 / maximum)
+
+            rows.append({
+                "Class": cl.get("class_name") or "-",
+                "Section": cl.get("section") or "-",
+                "Students": len(class_students),
+                "Students With Marks": len(percentages),
+                "Average %": round(sum(percentages) / len(percentages), 2) if percentages else 0,
+                "Highest %": round(max(percentages), 2) if percentages else 0,
+                "Lowest %": round(min(percentages), 2) if percentages else 0
+            })
+
+        df = pd.DataFrame(rows)
+        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.download_button(
+            "⬇️ Download Class Summary CSV",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name=f"Class_Summary_{exam_name}.csv".replace("/", "_"),
+            mime="text/csv",
+            use_container_width=True
+        )
+        return
+
+    # -----------------------------------------------------
+    # SUBJECT SUMMARY
+    # -----------------------------------------------------
+    if report_type == "Subject Summary":
+        selected_label = st.selectbox(
+            "📚 Class",
+            list(class_map.keys()),
+            key="reports_subject_class"
+        )
+        selected_class = class_map[selected_label]
+
+        try:
+            subjects_data = (
+                sb.table("subjects")
+                .select("id,subject_name,name,max_marks,passing_marks")
+                .eq("school_id", school_id)
+                .eq("class_id", selected_class["id"])
+                .eq("active", True)
+                .order("subject_name")
+                .execute()
+                .data or []
+            )
+            marks_data = (
+                sb.table("marks")
+                .select("student_id,subject_id,marks")
+                .eq("school_id", school_id)
+                .eq("class_id", selected_class["id"])
+                .eq("exam_name", exam_name)
+                .execute()
+                .data or []
+            )
+        except Exception as e:
+            st.error("Could not load subject summary.")
+            st.code(str(e))
+            return
+
+        if role == "Teacher":
+            allowed = {
+                str(x.get("subject_id"))
+                for x in teacher_assignments
+                if str(x.get("class_id")) == str(selected_class["id"])
+            }
+            subjects_data = [
+                x for x in subjects_data if str(x.get("id")) in allowed
+            ]
+            marks_data = [
+                x for x in marks_data if str(x.get("subject_id")) in allowed
+            ]
+
+        rows = []
+        for subject in subjects_data:
+            sid = str(subject["id"])
+            values = [
+                float(m.get("marks") or 0)
+                for m in marks_data
+                if str(m.get("subject_id")) == sid
+            ]
+            passing = float(subject.get("passing_marks") or 0)
+            rows.append({
+                "Subject": subject.get("subject_name") or subject.get("name") or "-",
+                "Students With Marks": len(values),
+                "Average Marks": round(sum(values) / len(values), 2) if values else 0,
+                "Highest Marks": round(max(values), 2) if values else 0,
+                "Lowest Marks": round(min(values), 2) if values else 0,
+                "Pass Count": sum(1 for v in values if v >= passing),
+                "Maximum Marks": float(subject.get("max_marks") or 100),
+                "Passing Marks": passing
+            })
+
+        df = pd.DataFrame(rows)
+        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.download_button(
+            "⬇️ Download Subject Summary CSV",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name=f"Subject_Summary_{exam_name}.csv".replace("/", "_"),
+            mime="text/csv",
+            use_container_width=True
+        )
+        return
+
+    # -----------------------------------------------------
+    # ATTENDANCE SUMMARY
+    # -----------------------------------------------------
+    c1, c2 = st.columns(2)
+    with c1:
+        start_date = st.date_input(
+            "From Date",
+            value=datetime.date.today().replace(day=1),
+            key="reports_att_from"
+        )
+    with c2:
+        end_date = st.date_input(
+            "To Date",
+            value=datetime.date.today(),
+            key="reports_att_to"
+        )
+
+    if start_date > end_date:
+        st.error("From Date cannot be after To Date.")
+        return
+
+    selected_label = st.selectbox(
+        "📚 Class",
+        ["All Classes"] + list(class_map.keys()),
+        key="reports_att_class"
+    )
+
+    try:
+        students_query = (
+            sb.table("students")
+            .select("id,name,admission_no,class_name,section")
+            .eq("school_id", school_id)
+            .eq("active", True)
+        )
+
+        if selected_label != "All Classes":
+            selected_report_class = class_map[selected_label]
+            students_query = (
+                students_query
+                .eq("class_name", selected_report_class.get("class_name") or "")
+                .eq("section", selected_report_class.get("section") or "")
+            )
+
+        students_data = (
+            students_query
+            .order("name")
+            .execute()
+            .data or []
+        )
+        attendance_data = (
+            sb.table("attendance")
+            .select("student_id,attendance_date,present")
+            .eq("school_id", school_id)
+            .gte("attendance_date", str(start_date))
+            .lte("attendance_date", str(end_date))
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error("Could not load attendance report.")
+        st.code(str(e))
+        return
+
+    allowed_pairs = {
+        (
+            str(x.get("class_name") or "").strip().lower(),
+            str(x.get("section") or "").strip().lower()
+        )
+        for x in class_data
+    }
+    if role == "Teacher":
+        students_data = [
+            s for s in students_data
+            if (
+                str(s.get("class_name") or "").strip().lower(),
+                str(s.get("section") or "").strip().lower()
+            ) in allowed_pairs
+        ]
+
+    by_student = {}
+    for a in attendance_data:
+        sid = str(a["student_id"])
+        total, present = by_student.get(sid, (0, 0))
+        by_student[sid] = (total + 1, present + (1 if a.get("present") else 0))
+
+    rows = []
+    for s in students_data:
+        total, present = by_student.get(str(s["id"]), (0, 0))
+        rows.append({
+            "Student Name": s.get("name") or "",
+            "Admission No.": s.get("admission_no") or "",
+            "Class": s.get("class_name") or "",
+            "Section": s.get("section") or "",
+            "Total Days": total,
+            "Present Days": present,
+            "Absent Days": total - present,
+            "Attendance %": round(present * 100 / total, 2) if total else 0
+        })
+
+    df = pd.DataFrame(rows)
+    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.download_button(
+        "⬇️ Download Attendance Summary CSV",
+        data=df.to_csv(index=False).encode("utf-8"),
+        file_name=f"Attendance_Summary_{start_date}_{end_date}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
+
+
+# =========================================================
+# CLASS TEACHER NOTICES
+# =========================================================
+
+def _notice_html(message):
+    safe = (
+        str(message or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\\n", "<br>")
+    )
+    return safe
+
+
+def show_dashboard_notices(school_id, title="📢 Notices", student_mode=False, student_id=None):
+    """Show notices for Parents/Students with a secure class-linked path."""
+    if not school_id:
+        return
+
+    notice_rows = []
+
+    try:
+        if student_mode:
+            # Prefer the explicit Student record ID. This avoids depending on
+            # auth.uid() inside the RPC and uses the same class mapping as
+            # the student's actual database record.
+            if student_id:
+                rpc_response = sb.rpc(
+                    "get_student_notices_by_student",
+                    {
+                        "p_school_id": school_id,
+                        "p_student_id": student_id
+                    }
+                ).execute()
+            else:
+                rpc_response = sb.rpc(
+                    "get_student_notices",
+                    {"p_school_id": school_id}
+                ).execute()
+
+            notice_rows = (
+                getattr(rpc_response, "data", None)
+                if rpc_response is not None
+                else None
+            ) or []
+        else:
+            response = (
+                sb.table("school_notices")
+                .select("id,notice_date,message,created_at")
+                .eq("school_id", school_id)
+                .order("notice_date", desc=True)
+                .order("created_at", desc=True)
+                .execute()
+            )
+            notice_rows = (
+                getattr(response, "data", None)
+                if response is not None
+                else None
+            ) or []
+    except Exception:
+        notice_rows = []
+
+    if not notice_rows:
+        return
+
+    unique_notices = []
+    seen_notice_keys = set()
+
+    for notice in notice_rows:
+        notice_key = (
+            str(notice.get("notice_date") or ""),
+            str(notice.get("message") or "").strip(),
+        )
+        if notice_key in seen_notice_keys:
+            continue
+        seen_notice_keys.add(notice_key)
+        unique_notices.append(notice)
+
+    st.divider()
+    st.subheader(title)
+
+    for notice in unique_notices:
+        notice_date = notice.get("notice_date") or ""
+
+        try:
+            display_date = datetime.datetime.strptime(
+                str(notice_date), "%Y-%m-%d"
+            ).strftime("%d-%m-%Y")
+        except Exception:
+            display_date = str(notice_date)
+
+        st.markdown(
+            f'''
+            <div class="school-notice-card">
+                <div class="school-notice-heading">
+                    <span class="school-notice-flash">NOTICE</span>
+                    <span class="school-notice-date">Dated {display_date}</span>
+                </div>
+                <div class="school-notice-message">{_notice_html(notice.get("message"))}</div>
+            </div>
+            ''',
+            unsafe_allow_html=True
+        )
+
+def class_teacher_notices(profile):
+    """Send notices and allow authorized staff to delete old notices."""
+    role = profile.get("role")
+    school_id = profile.get("school_id")
+    teacher_id = st.session_state.user.id
+
+    # SuperAdmin can choose the school first.
+    if role == "SuperAdmin":
+        try:
+            schools = (
+                sb.table("schools")
+                .select("id,name")
+                .eq("active", True)
+                .order("name")
+                .execute()
+                .data or []
+            )
+        except Exception:
+            schools = []
+
+        if not schools:
+            st.warning("No active school is available.")
+            return
+
+        school_options = {
+            str(x.get("name") or x.get("id")): x.get("id")
+            for x in schools
+        }
+        selected_school_label = st.selectbox(
+            "🏫 School",
+            list(school_options.keys()),
+            key="superadmin_notice_school"
+        )
+        school_id = school_options[selected_school_label]
+
+    if not school_id:
+        st.info("Your account is not assigned to a school.")
+        return
+
+    # Load active classes. Admin/Admin+Teacher/SuperAdmin can use
+    # any active class; Teacher can use only their Class Teacher class.
+    try:
+        classes_query = (
+            sb.table("classes")
+            .select("id,class_name,section,academic_year")
+            .eq("school_id", school_id)
+            .eq("active", True)
+        )
+
+        if role == "Teacher":
+            classes_query = classes_query.eq(
+                "class_teacher_id",
+                teacher_id
+            )
+
+        assigned_classes = (
+            classes_query
+            .order("class_name")
+            .order("section")
+            .execute()
+            .data or []
+        )
+    except Exception as e:
+        st.error("Could not load classes.")
+        st.code(str(e))
+        return
+
+    if not assigned_classes:
+        if role == "Teacher":
+            st.warning("No class has been assigned to you as Class Teacher yet.")
+        else:
+            st.warning("No active class is available in this school.")
+        return
+
+    show_save_message("class_teacher_notice")
+    notice_sent_message = st.session_state.pop("_notice_sent_message", None)
+    if notice_sent_message:
+        st.success("✅ " + notice_sent_message)
+
+    st.subheader("📢 Send Notice to Parents & Students")
+    st.caption(
+        "Admin and Admin+Teacher can select multiple classes or All Classes. "
+        "Teacher can send only to their own Class Teacher class."
+    )
+
+    class_options = {
+        (
+            f"{x.get('class_name') or '-'}"
+            f" — Section {x.get('section') or '-'}"
+            f" — {x.get('academic_year') or '-'}"
+        ): x
+        for x in assigned_classes
+    }
+
+    can_select_multiple = role in {"Admin", "Admin+Teacher", "SuperAdmin"}
+
+    if can_select_multiple:
+        all_classes_label = "🌐 All Classes"
+        selection_options = [all_classes_label] + list(class_options.keys())
+
+        selected_labels = st.multiselect(
+            "🏫 Class / Section",
+            selection_options,
+            default=[],
+            key="class_teacher_notice_classes",
+            placeholder="Select one or more classes, or All Classes"
+        )
+
+        if all_classes_label in selected_labels:
+            selected_classes = assigned_classes
+            st.info(
+                f"🌐 All Classes selected — notice will be sent to "
+                f"{len(selected_classes)} active classes."
+            )
+        else:
+            selected_classes = [
+                class_options[label]
+                for label in selected_labels
+                if label in class_options
+            ]
+
+        if selected_classes:
+            st.caption(f"Selected classes: {len(selected_classes)}")
+    else:
+        selected_label = st.selectbox(
+            "🏫 Class / Section",
+            list(class_options.keys()),
+            key="class_teacher_notice_class"
+        )
+        selected_classes = [class_options[selected_label]]
+
+    notice_date = st.date_input(
+        "📅 Notice Dated",
+        value=datetime.date.today(),
+        key="class_teacher_notice_date"
+    )
+
+    message = st.text_area(
+        "Common Message for Parents and Students",
+        height=160,
+        placeholder="Write the notice/message here...",
+        key="class_teacher_notice_message"
+    )
+
+    if st.button(
+        "📢 Send Notice",
+        type="primary",
+        use_container_width=True,
+        key="send_class_teacher_notice"
+    ):
+        clean_message = message.strip()
+
+        if not selected_classes:
+            st.warning("Please select at least one class.")
+            return
+
+        if not clean_message:
+            st.warning("Please write the notice message.")
+            return
+
+        try:
+            notice_rows = [
+                {
+                    "school_id": school_id,
+                    "class_id": selected_class["id"],
+                    "teacher_id": teacher_id,
+                    "notice_date": notice_date.isoformat(),
+                    "message": clean_message
+                }
+                for selected_class in selected_classes
+            ]
+
+            sb.table("school_notices").insert(
+                notice_rows
+            ).execute()
+
+            mark_saved("class_teacher_notice")
+            st.session_state["_notice_sent_message"] = (
+                f"Notice Sent Successfully to {len(notice_rows)} class"
+                f"{'es' if len(notice_rows) != 1 else ''}."
+            )
+            st.rerun()
+
+        except Exception as e:
+            st.error("Could not send the notice.")
+            st.code(str(e))
+
+    # -----------------------------------------------------
+    # DELETE OLD NOTICES
+    # -----------------------------------------------------
+    if role in {"Admin", "Admin+Teacher", "Teacher", "SuperAdmin"}:
+        st.divider()
+        st.subheader("🗑️ Delete Old Notices")
+        st.caption(
+            "Admin/Admin+Teacher can delete school notices. "
+            "Teacher can delete notices sent by themselves. "
+            "Deleting a notice removes it from all classes to which that same notice was sent."
+        )
+
+        try:
+            notice_query = (
+                sb.table("school_notices")
+                .select("id,school_id,teacher_id,notice_date,message,created_at")
+                .eq("school_id", school_id)
+                .order("notice_date", desc=True)
+                .order("created_at", desc=True)
+            )
+
+            if role == "Teacher":
+                notice_query = notice_query.eq(
+                    "teacher_id",
+                    teacher_id
+                )
+
+            notice_rows_for_delete = (
+                notice_query
+                .execute()
+                .data or []
+            )
+        except Exception as e:
+            notice_rows_for_delete = []
+            st.error("Could not load old notices.")
+            st.code(str(e))
+
+        if not notice_rows_for_delete:
+            st.info("No notices are available to delete.")
+        else:
+            # Group rows created for the same notice sent to multiple classes.
+            notice_groups = {}
+            for notice in notice_rows_for_delete:
+                group_key = (
+                    str(notice.get("notice_date") or ""),
+                    str(notice.get("message") or "").strip(),
+                    str(notice.get("teacher_id") or ""),
+                )
+                notice_groups.setdefault(group_key, []).append(notice)
+
+            for group_index, group_rows in enumerate(notice_groups.values()):
+                first_notice = group_rows[0]
+                raw_date = first_notice.get("notice_date") or ""
+                try:
+                    display_date = datetime.datetime.strptime(
+                        str(raw_date), "%Y-%m-%d"
+                    ).strftime("%d-%m-%Y")
+                except Exception:
+                    display_date = str(raw_date)
+
+                group_message = str(
+                    first_notice.get("message") or ""
+                ).strip()
+
+                sender_text = ""
+                if role in {"Admin", "Admin+Teacher", "SuperAdmin"}:
+                    sender_text = (
+                        f" | {len(group_rows)} class"
+                        f"{'es' if len(group_rows) != 1 else ''}"
+                    )
+
+                with st.container(border=True):
+                    st.markdown(
+                        f"**📢 NOTICE — Dated {display_date}{sender_text}**"
+                    )
+                    st.write(group_message)
+
+                    if st.button(
+                        "🗑️ Delete This Notice",
+                        key=f"delete_school_notice_{school_id}_{group_index}"
+                    ):
+                        try:
+                            notice_ids = [
+                                x.get("id")
+                                for x in group_rows
+                                if x.get("id")
+                            ]
+
+                            if not notice_ids:
+                                st.warning("Notice record not found.")
+                                continue
+
+                            (
+                                sb.table("school_notices")
+                                .delete()
+                                .in_("id", notice_ids)
+                                .execute()
+                            )
+
+                            st.session_state["_notice_deleted_message"] = (
+                                "Notice deleted successfully."
+                            )
+                            st.rerun()
+
+                        except Exception as e:
+                            st.error("Could not delete the notice.")
+                            st.code(str(e))
+def dashboard():
+
+    profile = st.session_state.profile
+    role = profile.get("role")
+
+    # -----------------------------------------------------
+    # TEACHER CLASS CONTEXT
+    # -----------------------------------------------------
+    # Keep the Class Teacher's assigned class name(s) visible
+    # at every Teacher working place because all Teacher modules
+    # are rendered from this dashboard.
+    if role == "Teacher":
+        try:
+            teacher_working_classes = (
+                sb.table("classes")
+                .select("class_name,section,academic_year")
+                .eq("school_id", profile.get("school_id"))
+                .eq("class_teacher_id", st.session_state.user.id)
+                .eq("active", True)
+                .order("class_name")
+                .order("section")
+                .execute()
+                .data or []
+            )
+        except Exception:
+            teacher_working_classes = []
+
+        if teacher_working_classes:
+            class_names = [
+                (
+                    f"{x.get('class_name') or '-'}"
+                    f" - Section {x.get('section') or '-'}"
+                )
+                for x in teacher_working_classes
+            ]
+            st.info(
+                "🏫 **My Class Teacher Class(es):** "
+                + "  |  ".join(class_names)
+            )
+        else:
+            st.warning(
+                "🏫 **My Class Teacher Class(es):** "
+                "No class assigned yet."
+            )
+
+    top1, top2 = st.columns([5, 1])
+    with top1:
+
+        st.caption(
+            f"Role: {role} | "
+            f"{profile.get('email', '')}"
+        )
+
+    with top2:
+
+        if st.button(
+            "Logout",
+            use_container_width=True
+        ):
+
+            logout()
+
+    # =====================================================
+    # SUPERADMIN
+    # =====================================================
+
+    if role == "SuperAdmin":
+
+        st.title("👑 SuperAdmin Dashboard")
+
+        try:
+
+            school_count = (
+                sb.table("schools")
+                .select("id", count="exact")
+                .execute()
+                .count
+                or 0
+            )
+
+            # Count only real school users. SuperAdmin is a system-level
+            # account and must not be included in the school-user dashboard count.
+            active_school_rows = (
+                sb.table("schools")
+                .select("id")
+                .execute()
+                .data or []
+            )
+            active_school_ids = [
+                str(x.get("id"))
+                for x in active_school_rows
+                if x.get("id")
+            ]
+
+            # Count users only when their school currently exists.
+            # Fetch the profile rows and filter in Python so the dashboard
+            # can never show orphaned users from a deleted school.
+            profile_rows = (
+                sb.table("profiles")
+                .select("id,role,school_id")
+                .neq("role", "SuperAdmin")
+                .execute()
+                .data or []
+            )
+
+            active_school_id_set = set(active_school_ids)
+
+            user_count = sum(
+                1
+                for row in profile_rows
+                if str(row.get("school_id") or "") in active_school_id_set
+            )
+
+            student_count = (
+                sb.table("students")
+                .select("id", count="exact")
+                .execute()
+                .count
+                or 0
+            )
+
+        except Exception:
+
+            school_count = 0
+            user_count = 0
+            student_count = 0
+
+        a, b, c = st.columns(3)
+
+        a.metric("🏫 Schools", school_count)
+        b.metric("👥 Users", user_count)
+        c.metric("🎓 Students", student_count)
+
+        menu = st.radio(
+            "Management",
+            [
+                "🏫 Schools",
+                "👥 Users",
+                "🎓 Students",
+                "📚 Classes & Subjects",
+                "📝 Exam / Assessment",
+                "📝 Marks",
+                "📅 Attendance",
+                "📢 Notices",
+                "🖨️ Print Templates",
+                "📄 Report Cards",
+                "📊 Reports",
+                "💎 Premium Features",
+                "💎 School Academic Status"
+            ],
+            horizontal=True
+        )
+
+        if menu == "🏫 Schools":
+            schools()
+
+        elif menu == "👥 Users":
+            users()
+
+        elif menu == "🎓 Students":
+            students()
+
+        elif menu == "📚 Classes & Subjects":
+            classes_subjects()
+
+        elif menu == "📝 Exam / Assessment":
+            exam_assessment_settings()
+
+        elif menu == "📝 Marks":
+            bulk_marks()
+
+        elif menu == "📅 Attendance":
+            attendance()
+
+        elif menu == "📢 Notices":
+            class_teacher_notices(profile)
+
+        elif menu == "🖨️ Print Templates":
+            print_templates()
+
+        elif menu == "📄 Report Cards":
+            report_cards()
+
+        elif menu == "📊 Reports":
+            reports()
+
+        elif menu == "💎 Premium Features":
+            premium_feature_management()
+
+        elif menu == "💎 School Academic Status":
+            # SuperAdmin can use every premium feature directly.
+            school_academic_status(profile.get("school_id"))
+
+        else:
+            st.info(
+                f"{menu} will be added next."
+            )
+
+    # =====================================================
+    # ADMIN
+    # =====================================================
+
+    elif role in ["Admin", "Admin+Teacher"]:
+
+        # Admin+Teacher can explicitly choose which interface to use.
+        # The selected mode controls the menu, dashboard heading and theme.
+        if role == "Admin+Teacher":
+            if "admin_teacher_mode" not in st.session_state:
+                st.session_state["admin_teacher_mode"] = "Admin"
+
+            st.subheader("🛠️👨‍🏫 Choose Working Mode")
+            mode_col1, mode_col2 = st.columns(2)
+
+            with mode_col1:
+                if st.button(
+                    "🛠️ Admin Mode",
+                    key="admin_teacher_admin_mode",
+                    use_container_width=True,
+                    type=(
+                        "primary"
+                        if st.session_state["admin_teacher_mode"] == "Admin"
+                        else "secondary"
+                    )
+                ):
+                    st.session_state["admin_teacher_mode"] = "Admin"
+                    st.rerun()
+
+            with mode_col2:
+                if st.button(
+                    "👨‍🏫 Teacher Mode",
+                    key="admin_teacher_teacher_mode",
+                    use_container_width=True,
+                    type=(
+                        "primary"
+                        if st.session_state["admin_teacher_mode"] == "Teacher"
+                        else "secondary"
+                    )
+                ):
+                    st.session_state["admin_teacher_mode"] = "Teacher"
+                    st.rerun()
+
+            active_mode = st.session_state["admin_teacher_mode"]
+
+        else:
+            active_mode = "Admin"
+
+        if active_mode == "Teacher":
+            st.title("👨‍🏫 Teacher Dashboard")
+
+            teacher_menu_items = [
+                "🎓 Students",
+                "📝 Marks",
+                "📅 Attendance",
+                "📢 Notices",
+                "📄 Report Cards",
+                "📊 Reports"
+            ]
+
+            menu = st.radio(
+                "Teacher Menu",
+                teacher_menu_items,
+                horizontal=True,
+                key="admin_teacher_teacher_menu"
+            )
+
+            if menu == "🎓 Students":
+                students()
+
+            elif menu == "📝 Marks":
+                bulk_marks()
+
+            elif menu == "📅 Attendance":
+                attendance()
+
+            elif menu == "📢 Notices":
+                class_teacher_notices(profile)
+
+            elif menu == "📄 Report Cards":
+                report_cards()
+
+            elif menu == "📊 Reports":
+                reports()
+
+        else:
+            st.title("🛠️ Admin Dashboard")
+
+            admin_menu_items = [
+                "👥 Users",
+                "🎓 Students",
+                "📚 Classes & Subjects",
+                "📝 Exam / Assessment",
+                "📝 Marks",
+                "📅 Attendance",
+                "📢 Notices",
+                "🖨️ Print Templates",
+                "📄 Report Cards",
+                "📊 Reports"
+            ]
+
+            # Premium Features is visible to Admin only when SuperAdmin
+            # has activated Premium access for this Admin.
+            if role in ["Admin", "Admin+Teacher"] and premium_feature_enabled(
+                profile.get("school_id"),
+                st.session_state.user.id,
+                "school_academic_status"
+            ):
+                admin_menu_items.append("💎 Premium Features")
+
+            menu = st.radio(
+                "Admin Menu",
+                admin_menu_items,
+                horizontal=True,
+                key="admin_teacher_admin_menu"
+            )
+
+            if menu == "👥 Users":
+                users()
+
+            elif menu == "🎓 Students":
+                students()
+
+            elif menu == "📚 Classes & Subjects":
+                classes_subjects()
+
+            elif menu == "📝 Exam / Assessment":
+                exam_assessment_settings()
+
+            elif menu == "📝 Marks":
+                bulk_marks()
+
+            elif menu == "📅 Attendance":
+                attendance()
+
+            elif menu == "📢 Notices":
+                class_teacher_notices(profile)
+
+            elif menu == "🖨️ Print Templates":
+                print_templates()
+
+            elif menu == "📄 Report Cards":
+                report_cards()
+
+            elif menu == "📊 Reports":
+                reports()
+
+            elif menu == "💎 Premium Features":
+                premium_feature_management()
+
+    # =====================================================
+    # TEACHER
+    # =====================================================
+
+    elif role == "Teacher":
+
+        st.title("👨‍🏫 Teacher Dashboard")
+
+        # Show the classes for which this teacher is the Class Teacher.
+        # Class Teachers can manage students and attendance only for
+        # these assigned classes. Subject-teaching assignments remain
+        # separate and continue to control Marks access.
+        try:
+            teacher_class_rows = (
+                sb.table("classes")
+                .select("id,class_name,section,academic_year,active")
+                .eq("school_id", profile.get("school_id"))
+                .eq("class_teacher_id", st.session_state.user.id)
+                .eq("active", True)
+                .order("class_name")
+                .order("section")
+                .execute()
+                .data or []
+            )
+        except Exception:
+            teacher_class_rows = []
+
+        if teacher_class_rows:
+            st.subheader("🏫 My Class Teacher Classes")
+            class_cols = st.columns(min(3, len(teacher_class_rows)))
+            for i, teacher_class in enumerate(teacher_class_rows):
+                with class_cols[i % len(class_cols)]:
+                    st.info(
+                        f"**{teacher_class.get('class_name') or '-'}**"
+                        f" — Section {teacher_class.get('section') or '-'}"
+                        f"\n\nAcademic Year: "
+                        f"{teacher_class.get('academic_year') or '-'}"
+                    )
+            st.caption(
+                "As Class Teacher, you can see and manage students and attendance "
+                "only in your assigned class(es)."
+            )
+        else:
+            st.warning(
+                "No class has been assigned to you as Class Teacher yet."
+            )
+
+        menu = st.radio(
+            "Teacher Menu",
+            [
+                "🎓 Students",
+                "📝 Marks",
+                "📅 Attendance",
+                "📢 Notices",
+                "📄 Report Cards",
+                "📊 Reports"
+            ],
+            horizontal=True
+        )
+
+        if menu == "🎓 Students":
+            students()
+
+        elif menu == "📝 Marks":
+            bulk_marks()
+
+        elif menu == "📅 Attendance":
+            attendance()
+
+        elif menu == "📢 Notices":
+            class_teacher_notices(profile)
+
+        elif menu == "📄 Report Cards":
+            report_cards()
+
+        elif menu == "📊 Reports":
+            reports()
+
+        else:
+            st.info(
+                f"{menu} will be added next."
+            )
+
+    # =====================================================
+    # STUDENT
+    # =====================================================
+
+    elif role == "Student":
+
+        st.title("🎓 Student Dashboard")
+
+        # Student and Parent dashboards intentionally expose the same
+        # parent-facing information. The only difference is Report Cards:
+        # a Student can see only the Report Card belonging to their own
+        # authenticated Student record. There is no student selector.
+
+        student = None
+
+        try:
+            student_response = (
+                sb.table("students")
+                .select(
+                    "id,school_id,user_id,name,admission_no,class_name,section,"
+                    "date_of_birth,gender,father_name,parent_name,parent_phone,"
+                    "photo_path,remarks,active"
+                )
+                .eq("user_id", st.session_state.user.id)
+                .eq("active", True)
+                .maybe_single()
+                .execute()
+            )
+            student = (
+                getattr(student_response, "data", None)
+                if student_response is not None
+                else None
+            )
+
+            # Backward-compatible linking for Student accounts.
+            # Prefer an existing user_id link. If missing, safely link by the
+            # authenticated email when students.email exists. This never uses
+            # name, class, roll number, or any other ambiguous field.
+            if not student:
+                try:
+                    auth_email = str(
+                        getattr(st.session_state.user, "email", "") or ""
+                    ).strip().lower()
+                    student_school_id = profile.get("school_id")
+
+                    if auth_email and student_school_id:
+                        email_response = (
+                            sb.table("students")
+                            .select(
+                                "id,school_id,user_id,name,admission_no,class_name,"
+                                "section,date_of_birth,gender,father_name,parent_name,"
+                                "parent_phone,photo_path,remarks,active,email"
+                            )
+                            .eq("school_id", student_school_id)
+                            .eq("active", True)
+                            .ilike("email", auth_email)
+                            .is_("user_id", "null")
+                            .limit(1)
+                            .execute()
+                        )
+                        email_rows = (
+                            getattr(email_response, "data", None)
+                            if email_response is not None
+                            else None
+                        ) or []
+
+                        if email_rows:
+                            candidate = email_rows[0]
+                            update_result = (
+                                sb.table("students")
+                                .update({"user_id": st.session_state.user.id})
+                                .eq("id", candidate["id"])
+                                .eq("school_id", student_school_id)
+                                .is_("user_id", "null")
+                                .execute()
+                            )
+
+                            updated_rows = (
+                                getattr(update_result, "data", None)
+                                if update_result is not None
+                                else None
+                            ) or []
+
+                            # Use the record only if the link was actually
+                            # established. This prevents showing another
+                            # student's report card.
+                            if updated_rows:
+                                student = candidate.copy()
+                                student["user_id"] = st.session_state.user.id
+                except Exception:
+                    pass
+
+            if student:
+                photo_path = student.get("photo_path")
+                if photo_path:
+                    try:
+                        photo_bytes = (
+                            sb.storage
+                            .from_("school-assets")
+                            .download(photo_path)
+                        )
+                        st.image(photo_bytes, width=140)
+                    except Exception:
+                        pass
+
+                st.subheader(student.get("name") or "Student")
+
+                a, b, c = st.columns(3)
+                a.metric("Class", student.get("class_name") or "-")
+                b.metric("Section", student.get("section") or "-")
+                c.metric("Admission No.", student.get("admission_no") or "-")
+
+                st.write(
+                    "**Father Name:** "
+                    f"{student.get('father_name') or student.get('parent_name') or '-'}"
+                )
+
+                if student.get("remarks"):
+                    st.write(f"**Remarks:** {student.get('remarks')}")
+            else:
+                st.info("Your student record is not linked yet.")
+
+        except Exception as e:
+            st.error("Could not load student information.")
+            st.code(str(e))
+
+        student_school_id = (
+            (student or {}).get("school_id")
+            or profile.get("school_id")
+        )
+
+        if student_school_id and student:
+            # Same parent-facing notice area. The database RPC still limits
+            # Student notices to the Student's permitted class/record scope.
+            show_dashboard_notices(
+                student_school_id,
+                "📢 Notices",
+                student_mode=True,
+                student_id=student.get("id")
+            )
+
+        # Same school-wide Subject-wise Premium area available to Parents.
+        if student_school_id and subject_wise_parent_student_premium_enabled(
+            student_school_id
+        ):
+            subject_wise_premium_view(
+                student_school_id,
+                [],
+                "Student"
+            )
+
+
+        # Same Report Card permission as Parents, but strictly own record.
+        # No Student can select, view or generate another Student's card.
+        if student_school_id and student:
+            student_report_card_view(
+                student_school_id,
+                student.get("id")
+            )
+
+    # =====================================================
+    # PARENT
+    # =====================================================
+
+    elif role == "Parent":
+
+        st.title("👨‍👩‍👧 Parent Dashboard")
+
+        school_id = profile.get("school_id")
+
+        show_dashboard_notices(
+            school_id,
+            "📢 Notices"
+        )
+
+        # -------------------------------------------------
+        # PARENT REPORT CARDS
+        # -------------------------------------------------
+        if school_id and parent_report_card_enabled(school_id):
+
+            st.subheader("📄 My Child Report Cards")
+
+            try:
+                linked_rows = (
+                    sb.table("parent_student_links")
+                    .select("student_id")
+                    .eq("parent_id", st.session_state.user.id)
+                    .execute()
+                    .data or []
+                )
+            except Exception:
+                linked_rows = []
+
+            linked_ids = [
+                str(x.get("student_id"))
+                for x in linked_rows
+                if x.get("student_id")
+            ]
+
+            if not linked_ids:
+                st.info("No child is linked to your Parent account yet.")
+            else:
+                try:
+                    child_rows = (
+                        sb.table("students")
+                        .select(
+                            "id,school_id,user_id,name,admission_no,"
+                            "class_name,section,date_of_birth,gender,"
+                            "father_name,parent_name,parent_phone,"
+                            "remarks,photo_path,active"
+                        )
+                        .eq("school_id", school_id)
+                        .eq("active", True)
+                        .in_("id", linked_ids)
+                        .order("name")
+                        .execute()
+                        .data or []
+                    )
+                except Exception:
+                    child_rows = []
+
+                if not child_rows:
+                    st.info("No active linked child is available.")
+                else:
+                    child_map = {
+                        str(x["id"]): x for x in child_rows
+                    }
+                    child_options = {
+                        (
+                            f"{x.get('name') or 'Student'} | "
+                            f"Class {x.get('class_name') or '-'} | "
+                            f"Section {x.get('section') or '-'} | "
+                            f"Admission {x.get('admission_no') or '-'}"
+                        ): x
+                        for x in child_rows
+                    }
+
+                    selected_child_label = st.selectbox(
+                        "🎓 Child",
+                        list(child_options.keys()),
+                        key="parent_report_card_child"
+                    )
+                    selected_child = child_options[selected_child_label]
+
+                    try:
+                        exam_options = get_exam_assessments(school_id)
+                    except Exception:
+                        exam_options = []
+
+                    exam_names = [
+                        str(x.get("name") or "").strip()
+                        for x in exam_options
+                        if x.get("name")
+                    ]
+
+                    if not exam_names:
+                        st.info("No Exam / Assessment is available yet.")
+                    else:
+                        exam_name = st.selectbox(
+                            "📝 Exam / Assessment",
+                            exam_names,
+                            key="parent_report_card_exam"
+                        )
+
+                        try:
+                            template_data = (
+                                sb.table("print_templates")
+                                .select(
+                                    "id,name,template_name,page_size,"
+                                    "orientation,storage_path,file_path,"
+                                    "file_type,config_json,active,created_at"
+                                )
+                                .eq("school_id", school_id)
+                                .eq("active", True)
+                                .order("created_at", desc=True)
+                                .execute()
+                                .data or []
+                            )
+                            report_templates = [
+                                x for x in template_data
+                                if get_template_config(x).get("template_type")
+                                == "Report Card"
+                            ]
+                        except Exception:
+                            report_templates = []
+
+                        if not report_templates:
+                            st.info("No active Report Card template is available.")
+                        else:
+                            selected_template = report_templates[0]
+                            template_path = (
+                                selected_template.get("file_path")
+                                or selected_template.get("storage_path")
+                            )
+
+                            if not template_path:
+                                st.info("The Report Card template is not configured yet.")
+                            else:
+                                try:
+                                    template_bytes = (
+                                        sb.storage
+                                        .from_("school-assets")
+                                        .download(template_path)
+                                    )
+                                except Exception:
+                                    template_bytes = None
+
+                                if not template_bytes:
+                                    st.info("The Report Card template could not be loaded.")
+                                else:
+                                    subject_data = (
+                                        sb.table("subjects")
+                                        .select(
+                                            "id,school_id,class_id,name,subject_name,"
+                                            "code,max_marks,passing_marks,active"
+                                        )
+                                        .eq("school_id", school_id)
+                                        .eq("active", True)
+                                        .order("subject_name")
+                                        .execute()
+                                        .data or []
+                                    )
+
+                                    marks_rows = (
+                                        sb.table("marks")
+                                        .select(
+                                            "id,student_id,subject_id,exam_name,"
+                                            "marks,max_marks,class_id"
+                                        )
+                                        .eq("school_id", school_id)
+                                        .eq("student_id", selected_child["id"])
+                                        .eq("exam_name", exam_name)
+                                        .execute()
+                                        .data or []
+                                    )
+
+                                    marks_by_subject = {
+                                        str(x.get("subject_id")): x
+                                        for x in marks_rows
+                                    }
+                                    marked_class_ids = {
+                                        str(x.get("class_id"))
+                                        for x in marks_rows
+                                        if x.get("class_id") is not None
+                                    }
+
+                                    child_marks = []
+                                    for subject in subject_data:
+                                        sid = str(subject.get("id"))
+                                        if marked_class_ids:
+                                            if str(subject.get("class_id")) not in marked_class_ids:
+                                                continue
+                                        elif sid not in marks_by_subject:
+                                            continue
+
+                                        row = marks_by_subject.get(sid)
+                                        combined = dict(row) if row else {
+                                            "id": None,
+                                            "student_id": selected_child["id"],
+                                            "subject_id": subject.get("id"),
+                                            "exam_name": exam_name,
+                                            "marks": None,
+                                            "max_marks": subject.get("max_marks"),
+                                            "class_id": subject.get("class_id")
+                                        }
+                                        combined["subject_name"] = (
+                                            subject.get("subject_name")
+                                            or subject.get("name")
+                                            or "Subject"
+                                        )
+                                        combined["passing_marks"] = (
+                                            subject.get("passing_marks")
+                                            if subject.get("passing_marks") is not None
+                                            else 33
+                                        )
+                                        if combined.get("max_marks") is None:
+                                            combined["max_marks"] = (
+                                                subject.get("max_marks")
+                                                if subject.get("max_marks") is not None
+                                                else 100
+                                            )
+                                        child_marks.append(combined)
+
+                                    if not child_marks:
+                                        st.info(
+                                            f"No marks found for {selected_child.get('name') or 'this child'} "
+                                            f"for {exam_name}."
+                                        )
+                                    else:
+                                        school_info = (
+                                            sb.table("schools")
+                                            .select("id,name,code,address")
+                                            .eq("id", school_id)
+                                            .maybe_single()
+                                            .execute()
+                                            .data
+                                        ) or {}
+
+                                        config = get_template_config(selected_template)
+                                        orientation = selected_template.get("orientation") or "Portrait"
+                                        file_type = (selected_template.get("file_type") or "").lower()
+                                        logo_size = school_logo_size_from_template(selected_template)
+
+                                        if st.button(
+                                            "📄 View / Download Report Card",
+                                            type="primary",
+                                            use_container_width=True,
+                                            key="parent_view_report_card"
+                                        ):
+                                            try:
+                                                pdf_bytes = make_report_card_pdf(
+                                                    template_bytes=template_bytes,
+                                                    template_type="Report Card",
+                                                    orientation=orientation,
+                                                    student=selected_child,
+                                                    school_info=school_info,
+                                                    subjects=subject_data,
+                                                    marks_rows=child_marks,
+                                                    exam_name=exam_name,
+                                                    file_type=file_type,
+                                                    total_attendance=attendance_summary(
+                                                        selected_child["id"], school_id
+                                                    )[0],
+                                                    present_days=attendance_summary(
+                                                        selected_child["id"], school_id
+                                                    )[1],
+                                                    school_logo_path=school_logo_from_template(
+                                                        selected_template
+                                                    ),
+                                                    school_logo_size=logo_size
+                                                )
+
+                                                safe_name = (
+                                                    str(selected_child.get("name") or "Student")
+                                                    .replace("/", "_")
+                                                    .replace(chr(92), "_")
+                                                    .replace(" ", "_")
+                                                )
+                                                safe_exam = (
+                                                    str(exam_name)
+                                                    .replace("/", "_")
+                                                    .replace(chr(92), "_")
+                                                    .replace(" ", "_")
+                                                )
+                                                st.success("✅ Report card generated successfully.")
+                                                st.download_button(
+                                                    "⬇️ Download Report Card PDF",
+                                                    data=pdf_bytes,
+                                                    file_name=f"{safe_name}_{safe_exam}_ReportCard.pdf",
+                                                    mime="application/pdf",
+                                                    type="primary",
+                                                    use_container_width=True,
+                                                    key="parent_download_report_card"
+                                                )
+                                            except Exception as e:
+                                                st.error("Could not generate the Report Card.")
+                                                st.code(str(e))
+
+        elif not school_id:
+            st.info("Your Parent account is not linked to a school yet.")
+
+        st.divider()
+
+        # -------------------------------------------------
+        # SCHOOL-WIDE SUBJECT-WISE PREMIUM
+        # -------------------------------------------------
+        if school_id and subject_wise_parent_student_premium_enabled(school_id):
+            subject_wise_premium_view(
+                school_id,
+                [],
+                "Parent"
+            )
+
+
+    else:
+
+        st.error(
+            f"Unknown role: {role}"
+        )
+
+
+# =========================================================
+# START
+# =========================================================
+
+if st.session_state.logged_in:
+
+    # Admin+Teacher theme follows the explicitly selected working mode.
+    apply_role_theme()
+    dashboard()
+
+else:
+
+    login()
