@@ -14070,9 +14070,14 @@ def school_academic_status(school_id):
             key="academic_status_top_n"
         )
 
-        # Subject-wise uses ALL classes in the selected academic session.
-        # The Class selector above does not restrict this tab.
-        school_session_class_ids = {str(x["id"]) for x in session_classes}
+        # Default is ALL classes. If the user selects a specific class
+        # above, Subject Wise switches to that class only.
+        all_session_class_ids = {str(x["id"]) for x in session_classes}
+        subject_wise_class_ids = (
+            all_session_class_ids
+            if not mix_classes and selected_class == "All Classes"
+            else selected_class_ids
+        )
 
         try:
             subjects_data = (
@@ -14083,7 +14088,7 @@ def school_academic_status(school_id):
             )
             students_data = (
                 sb.table("students")
-                .select("id,name,admission_no,class_name,section,active")
+                .select("id,name,admission_no,class_name,section,father_name,parent_name,active")
                 .eq("school_id", school_id).eq("active", True)
                 .execute().data or []
             )
@@ -14114,15 +14119,34 @@ def school_academic_status(school_id):
             ) in session_class_pairs
         ]
 
+        # When a specific class/section is selected, show only students
+        # belonging to that selected class/section.
+        if subject_wise_class_ids != all_session_class_ids:
+            selected_pairs = {
+                (
+                    str(cl.get("class_name") or "").strip().lower(),
+                    str(cl.get("section") or "").strip().lower()
+                )
+                for cl in session_classes
+                if str(cl.get("id")) in subject_wise_class_ids
+            }
+            students_data = [
+                s for s in students_data
+                if (
+                    str(s.get("class_name") or "").strip().lower(),
+                    str(s.get("section") or "").strip().lower()
+                ) in selected_pairs
+            ]
+
         subjects_data = [
             x for x in subjects_data
-            if str(x.get("class_id")) in school_session_class_ids
+            if str(x.get("class_id")) in subject_wise_class_ids
         ]
 
         subject_ids = {str(x["id"]) for x in subjects_data}
         marks_data = [
             x for x in marks_data
-            if str(x.get("class_id")) in school_session_class_ids
+            if str(x.get("class_id")) in subject_wise_class_ids
             and str(x.get("subject_id")) in subject_ids
         ]
 
@@ -14151,7 +14175,8 @@ def school_academic_status(school_id):
             })
             subject_id_to_group[str(subject["id"])] = group_key
 
-        # Combine same-named subjects across all classes and keep the best
+        # Combine same-named subjects across the currently selected class scope
+        # and keep the best
         # mark record if duplicate records exist for one student.
         best_rows = {}
 
@@ -14239,7 +14264,7 @@ def school_academic_status(school_id):
                         f"{format_mark(row['Marks'])}/"
                         f"{format_mark(row['Maximum'])}"
                     ),
-                    "Percentage": f"{format_mark(row['Percentage'])}%"
+                    "Percentage": f"{float(row['Percentage']):.2f}%"
                 })
 
             df = pd.DataFrame(display_rows)
