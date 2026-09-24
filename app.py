@@ -14201,6 +14201,12 @@ def school_academic_status(school_id):
             row = {
                 "Student Name": student.get("name") or "",
                 "Admission No.": student.get("admission_no") or "",
+                "Father Name": (
+                    student.get("father_name")
+                    or student.get("parent_name")
+                    or student.get("father")
+                    or ""
+                ),
                 "Class": student.get("class_name") or "",
                 "Section": student.get("section") or "",
                 "Marks": obtained,
@@ -14247,9 +14253,14 @@ def school_academic_status(school_id):
             top_rows = rows[:min(int(top_n), len(rows))]
 
             st.markdown(f"#### 📚 {info['name']}")
+            scope_text = (
+                "selected class/section"
+                if subject_wise_class_ids != all_session_class_ids
+                else f"all classes in {session}"
+            )
             st.caption(
-                f"Showing {len(top_rows)} of {len(rows)} students from all "
-                f"classes in {session}, highest percentage first."
+                f"Showing {len(top_rows)} of {len(rows)} students from "
+                f"{scope_text}, highest percentage first."
             )
 
             display_rows = []
@@ -14258,6 +14269,7 @@ def school_academic_status(school_id):
                     "Rank": rank,
                     "Student Name": row["Student Name"],
                     "Admission No.": row["Admission No."],
+                    "Father Name": row["Father Name"],
                     "Class": row["Class"],
                     "Section": row["Section"],
                     "Marks": (
