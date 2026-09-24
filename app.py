@@ -3131,6 +3131,17 @@ def students():
             if str(s.get("class_name") or "").strip()
         })
 
+        class_search = st.text_input(
+            "🔎 Search Class",
+            placeholder="Type class, section or academic year...",
+            key=f"{role.lower()}_class_subject_search"
+        ).strip().lower()
+
+        filtered_class_filter_options = [
+            option for option in class_filter_options
+            if option == "All Classes" or not class_search or class_search in option.lower()
+        ]
+
         class_filter = st.selectbox(
             "🏫 Select Class",
             ["All Classes"] + class_options,
@@ -3933,9 +3944,20 @@ def classes_subjects():
                 if not assignment_class_options:
                     st.info("Create active classes first.")
                 else:
+                    assignment_class_search = st.text_input(
+                        "🔎 Search Class",
+                        placeholder="Type class, section or academic year...",
+                        key=f"subject_assignment_class_search_{school_id}"
+                    ).strip().lower()
+
+                    filtered_assignment_class_options = {
+                        label: value for label, value in assignment_class_options.items()
+                        if not assignment_class_search or assignment_class_search in label.lower()
+                    }
+
                     selected_assignment_classes = st.multiselect(
                         "📚 Select Class(es)",
-                        list(assignment_class_options.keys()),
+                        list(filtered_assignment_class_options.keys()),
                         placeholder="Select one or more classes",
                         key=f"subject_assignment_classes_{school_id}"
                     )
@@ -3993,10 +4015,26 @@ def classes_subjects():
                         if (str(ids[0]), str(ids[1])) in current_assignment_set
                     ]
 
+                    assignment_subject_search = st.text_input(
+                        "🔎 Search Subject",
+                        placeholder="Type subject name or code...",
+                        key=f"subject_assignment_subject_search_{school_id}"
+                    ).strip().lower()
+
+                    filtered_subject_assignment_options = {
+                        label: value for label, value in subject_assignment_options.items()
+                        if not assignment_subject_search or assignment_subject_search in label.lower()
+                    }
+
+                    filtered_current_selected_labels = [
+                        label for label in current_selected_labels
+                        if label in filtered_subject_assignment_options
+                    ]
+
                     selected_assignment_subjects = st.multiselect(
                         "📖 Select Subject(s) for the Selected Class(es)",
-                        list(subject_assignment_options.keys()),
-                        default=current_selected_labels,
+                        list(filtered_subject_assignment_options.keys()),
+                        default=filtered_current_selected_labels,
                         placeholder="Select one or more Class + Subject combinations",
                         key=f"subject_assignment_subjects_{school_id}"
                     )
@@ -4400,6 +4438,12 @@ def classes_subjects():
 
             try:
 
+                subject_search = st.text_input(
+                    "🔎 Search Subject",
+                    placeholder="Type subject name or code...",
+                    key=f"subject_search_{class_id}"
+                ).strip().lower()
+
                 subject_data = (
                     sb.table("subjects")
                     .select(
@@ -4413,6 +4457,13 @@ def classes_subjects():
                     .execute()
                     .data or []
                 )
+
+            if subject_search:
+                subject_data = [
+                    subject for subject in subject_data
+                    if subject_search in str(subject.get("subject_name") or subject.get("name") or "").lower()
+                    or subject_search in str(subject.get("code") or "").lower()
+                ]
 
             except Exception as e:
 
