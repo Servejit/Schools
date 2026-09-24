@@ -14069,7 +14069,8 @@ def school_academic_status(school_id):
             )
         except Exception as e:
             st.error("Could not load subject-wise data.")
-            st.code(str(e))            return
+            st.code(str(e))
+            return
 
         students_data = [
             s for s in students_data
