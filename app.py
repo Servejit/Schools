@@ -6780,52 +6780,54 @@ def create_report_overlay(
     )
 
     # -----------------------------------------------------
-    # Standard A4 positions
+    # Protected printable area
     # -----------------------------------------------------
-
+    # Keep EVERY generated element at least 2 cm (56.7 pt) inside
+    # the selected template boundary on all four sides.
+    margin = 56.7
     portrait = orientation != "Landscape"
 
+    left = margin
+    right = width - margin
+    usable_width = max(120, right - left)
+
     if portrait:
+        photo_w = min(75, usable_width * 0.18)
+        photo_h = min(95, height * 0.14)
+        photo_x = right - photo_w
+        photo_y = max(margin, height - margin - 118)
 
-        left = 45
-        right = width - 45
+        info_y = height - margin - 20
 
-        photo_x = width - 125
-        photo_y = height - 175
-        photo_w = 75
-        photo_h = 95
+        table_x = left
+        table_width = usable_width
+        table_y = height - margin - 245
 
-        info_y = height - 75
+        remarks_y = margin + 72
 
-        table_x = 45
-        table_y = height - 250
-        table_width = width - 90
-
-        remarks_y = 120
-
-        teacher_x = 100
-        principal_x = width - 180
+        teacher_x = left + usable_width * 0.25
+        principal_x = left + usable_width * 0.75
 
     else:
+        photo_w = min(85, usable_width * 0.15)
+        photo_h = min(105, height * 0.20)
+        photo_x = right - photo_w
+        photo_y = max(margin, height - margin - 125)
 
-        left = 45
-        right = width - 45
+        info_y = height - margin - 15
 
-        photo_x = width - 145
-        photo_y = height - 145
-        photo_w = 85
-        photo_h = 105
+        table_x = left
+        table_width = usable_width
+        table_y = height - margin - 185
 
-        info_y = height - 65
+        remarks_y = margin + 45
 
-        table_x = 45
-        table_y = height - 190
-        table_width = width - 90
+        teacher_x = left + usable_width * 0.25
+        principal_x = left + usable_width * 0.75
 
-        remarks_y = 75
-
-        teacher_x = width * 0.25
-        principal_x = width * 0.70
+    # Never allow the table to start outside the protected area.
+    table_y = min(table_y, height - margin - 1)
+    table_y = max(table_y, margin + 250)
 
     # -----------------------------------------------------
     # School information
@@ -6841,15 +6843,31 @@ def create_report_overlay(
         or ""
     )
 
+    # Fit the school name inside the 2 cm protected area.
+    name_max_width = usable_width - 90
+    name_font = 19
+    try:
+        while (
+            name_font > 10
+            and pdfmetrics.stringWidth(
+                str(school_name),
+                "Helvetica-Bold",
+                name_font
+            ) > name_max_width
+        ):
+            name_font -= 0.5
+    except Exception:
+        pass
+
     pdf.setFont(
         "Helvetica-Bold",
-        19
+        name_font
     )
 
     pdf.drawCentredString(
         width / 2,
-        height - 32,
-        school_name
+        height - margin - 2,
+        str(school_name)
     )
 
     if school_address:
@@ -6861,7 +6879,7 @@ def create_report_overlay(
 
         pdf.drawCentredString(
             width / 2,
-            height - 49,
+            height - margin - 16,
             school_address
         )
 
@@ -6881,9 +6899,15 @@ def create_report_overlay(
 
                 # Use a larger logo while keeping it centered on
                 # the School Name row. The size can be adjusted in the UI.
+                # Never let the logo itself enter the 2 cm boundary.
                 logo_size = max(
-                    38,
+                    30,
                     min(60, int(school_logo_size or 50))
+                )
+                logo_size = min(
+                    logo_size,
+                    max(30, int(margin - 4)),
+                    max(30, int(height - 2 * margin - 4))
                 )
 
                 logo_image.thumbnail(
@@ -6903,7 +6927,7 @@ def create_report_overlay(
                 logo_box_x = left
                 logo_box_w = logo_size
                 logo_box_h = logo_size
-                logo_center_y = height - 32
+                logo_center_y = height - margin - 2
                 logo_box_y = (
                     logo_center_y
                     - (logo_box_h / 2)
@@ -6961,7 +6985,7 @@ def create_report_overlay(
     # Student details
     # -----------------------------------------------------
 
-    detail_y = info_y - 35
+    detail_y = info_y - 28
     details = [
 
         (
@@ -7002,7 +7026,7 @@ def create_report_overlay(
     )
 
     col1_x = left
-    col2_x = left + 255
+    col2_x = left + usable_width * 0.52
 
     for index, item in enumerate(details):
 
@@ -7415,15 +7439,16 @@ def create_report_overlay(
         10
     )
 
+    signature_y = margin
     pdf.drawCentredString(
         teacher_x,
-        45,
+        signature_y,
         "Teacher Signature"
     )
 
     pdf.drawCentredString(
         principal_x,
-        45,
+        signature_y,
         "Principal Signature"
     )
 
