@@ -11405,21 +11405,58 @@ def report_cards():
             "and are used when generating the report card."
         )
 
-        show_school_name_dashboard = st.checkbox(
-            "🏫 Show School Name on Report Card",
-            value=bool(report_config.get("show_school_name", True)),
-            key=f"dashboard_show_school_name_{selected_template['id']}"
+        show_school_name_dashboard = bool(
+            report_config.get("show_school_name", True)
         )
 
+        # Clear visual ON/OFF status for the selected school's template.
+        if show_school_name_dashboard:
+            st.markdown(
+                """
+                <div style="
+                    background:#198754;
+                    color:white;
+                    padding:12px 16px;
+                    border-radius:10px;
+                    text-align:center;
+                    font-weight:800;
+                    font-size:16px;
+                    margin:8px 0;
+                ">
+                    🟢 ON — SCHOOL NAME & ADDRESS WILL PRINT
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            toggle_text = "🔴 Turn OFF — Hide School Name & Address"
+        else:
+            st.markdown(
+                """
+                <div style="
+                    background:#DC3545;
+                    color:white;
+                    padding:12px 16px;
+                    border-radius:10px;
+                    text-align:center;
+                    font-weight:800;
+                    font-size:16px;
+                    margin:8px 0;
+                ">
+                    🔴 OFF — SCHOOL NAME & ADDRESS WILL NOT PRINT
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            toggle_text = "🟢 Turn ON — Show School Name & Address"
+
         if st.button(
-            "💾 Save Report Card Content Settings",
-            type="primary",
+            toggle_text,
             use_container_width=True,
-            key=f"dashboard_save_report_card_content_{selected_template['id']}"
+            key=f"dashboard_toggle_school_name_{selected_template['id']}"
         ):
             try:
                 save_config = get_template_config(selected_template)
-                save_config["show_school_name"] = bool(show_school_name_dashboard)
+                save_config["show_school_name"] = not show_school_name_dashboard
 
                 (
                     sb.table("print_templates")
@@ -11434,13 +11471,10 @@ def report_cards():
                     .execute()
                 )
 
-                st.success(
-                    "✅ Report Card content settings saved successfully."
-                )
                 st.rerun()
 
             except Exception as e:
-                st.error("Could not save Report Card content settings.")
+                st.error("Could not update Report Card content setting.")
                 st.code(str(e))
 
         selected_template = dict(selected_template)
