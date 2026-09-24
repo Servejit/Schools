@@ -14060,11 +14060,19 @@ def school_academic_status(school_id):
 
     with tab_subject:
         st.markdown("### Subject Wise Top Students")
+        st.caption(
+            "All classes and all students in the selected Academic Session. "
+            "Top students are ranked by percentage, highest first."
+        )
 
         top_n = st.selectbox(
             "🏆 Show Top", [10, 20, 30, 50, 100],
             key="academic_status_top_n"
         )
+
+        # Subject-wise uses ALL classes in the selected academic session.
+        # The Class selector above does not restrict this tab.
+        school_session_class_ids = {str(x["id"]) for x in session_classes}
 
         try:
             subjects_data = (
@@ -14090,84 +14098,156 @@ def school_academic_status(school_id):
             st.code(str(e))
             return
 
+        session_class_pairs = {
+            (
+                str(cl.get("class_name") or "").strip().lower(),
+                str(cl.get("section") or "").strip().lower()
+            )
+            for cl in session_classes
+        }
+
         students_data = [
             s for s in students_data
-            if any(
-                str(s.get("class_name") or "").strip().lower()
-                == str(cl.get("class_name") or "").strip().lower()
-                and str(s.get("section") or "").strip().lower()
-                == str(cl.get("section") or "").strip().lower()
-                for cl in session_classes
-                if str(cl["id"]) in selected_class_ids
-            )
+            if (
+                str(s.get("class_name") or "").strip().lower(),
+                str(s.get("section") or "").strip().lower()
+            ) in session_class_pairs
         ]
 
         subjects_data = [
             x for x in subjects_data
-            if str(x.get("class_id")) in selected_class_ids
+            if str(x.get("class_id")) in school_session_class_ids
         ]
+
         subject_ids = {str(x["id"]) for x in subjects_data}
         marks_data = [
             x for x in marks_data
-            if str(x.get("class_id")) in selected_class_ids
+            if str(x.get("class_id")) in school_session_class_ids
             and str(x.get("subject_id")) in subject_ids
         ]
 
         student_map = {str(x["id"]): x for x in students_data}
-
-        subject_palette = [
-            "#E3F2FD", "#E8F5E9", "#FFF3E0", "#F3E5F5", "#FFFDE7",
-            "#E0F7FA", "#FBE9E7", "#E8EAF6", "#F1F8E9", "#FCE4EC"
-        ]
+        subject_map = {str(x["id"]): x for x in subjects_data}
 
         subject_groups = {}
-        for subject in subjects_data:
-            sid = str(subject["id"])
-            rows = []
-            for m in marks_data:
-                if str(m.get("subject_id")) != sid:
-                    continue
-                student = student_map.get(str(m.get("student_id")))
-                if not student:
-                    continue
-                rows.append({
-                    "Student Name": student.get("name") or "",
-                    "Admission No.": student.get("admission_no") or "",
-                    "Class": student.get("class_name") or "",
-                    "Section": student.get("section") or "",
-                    "Marks": float(m.get("marks") or 0),
-                    "Maximum": float(
-                        m.get("max_marks") or subject.get("max_marks") or 100
-                    )
-                })
-            rows.sort(key=lambda x: x["Marks"], reverse=True)
-            subject_groups[
-                subject.get("subject_name") or subject.get("name") or "Subject"
-            ] = rows[:top_n]
+        subject_id_to_group = {}
 
-        if not any(subject_groups.values()):
+        for subject in subjects_data:
+            subject_name = str(
+                subject.get("subject_name")
+                or subject.get("name")
+                or "Subject"
+            ).strip() or "Subject"
+            group_key = " ".join(subject_name.lower().split())
+
+            subject_groups.setdefault(group_key, {
+                "name": subject_name,
+                "rows": []
+            })
+            subject_id_to_group[str(subject["id"])] = group_key
+
+        # Combine same-named subjects across all classes and keep the best
+        # mark record if duplicate records exist for one student.
+        best_rows = {}
+
+        for m in marks_data:
+            group_key = subject_id_to_group.get(str(m.get("subject_id")))
+            if not group_key:
+                continue
+
+            student = student_map.get(str(m.get("student_id")))
+            subject = subject_map.get(str(m.get("subject_id")))
+            if not student or not subject:
+                continue
+
+            maximum = float(
+                m.get("max_marks")
+                or subject.get("max_marks")
+                or 100
+            )
+            obtained = float(m.get("marks") or 0)
+            percentage = obtained * 100 / maximum if maximum else 0
+
+            row = {
+                "Student Name": student.get("name") or "",
+                "Admission No.": student.get("admission_no") or "",
+                "Class": student.get("class_name") or "",
+                "Section": student.get("section") or "",
+                "Marks": obtained,
+                "Maximum": maximum,
+                "Percentage": percentage
+            }
+
+            key = (group_key, str(m.get("student_id")))
+            previous = best_rows.get(key)
+            if previous is None or (
+                row["Percentage"], row["Marks"]
+            ) > (
+                previous["Percentage"], previous["Marks"]
+            ):
+                best_rows[key] = row
+
+        for (group_key, _student_id), row in best_rows.items():
+            subject_groups[group_key]["rows"].append(row)
+
+        if not best_rows:
             st.info(
-                "No subject marks are available for the selected Session/Class/Exam."
+                "No subject marks are available for the selected "
+                "Academic Session/Exam across all active classes."
             )
             return
 
         excel_sheets = []
 
-        for idx, (subject_name, rows) in enumerate(subject_groups.items()):
+        for idx, info in enumerate(subject_groups.values()):
+            rows = info["rows"]
             if not rows:
                 continue
 
-            st.markdown(f"#### 📚 {subject_name}")
-            df = pd.DataFrame(rows)
+            # Highest percentage is ALWAYS first. Top 20/30/50 are taken
+            # from this same complete school-wide ranking.
+            rows.sort(
+                key=lambda x: (
+                    float(x.get("Percentage") or 0),
+                    float(x.get("Marks") or 0)
+                ),
+                reverse=True
+            )
+
+            top_rows = rows[:min(int(top_n), len(rows))]
+
+            st.markdown(f"#### 📚 {info['name']}")
+            st.caption(
+                f"Showing {len(top_rows)} of {len(rows)} students from all "
+                f"classes in {session}, highest percentage first."
+            )
+
+            display_rows = []
+            for rank, row in enumerate(top_rows, start=1):
+                display_rows.append({
+                    "Rank": rank,
+                    "Student Name": row["Student Name"],
+                    "Admission No.": row["Admission No."],
+                    "Class": row["Class"],
+                    "Section": row["Section"],
+                    "Marks": (
+                        f"{format_mark(row['Marks'])}/"
+                        f"{format_mark(row['Maximum'])}"
+                    ),
+                    "Percentage": f"{format_mark(row['Percentage'])}%"
+                })
+
+            df = pd.DataFrame(display_rows)
             bg = subject_palette[idx % len(subject_palette)]
 
             st.dataframe(
                 df.style.map(lambda _: f"background-color: {bg}"),
-                hide_index=True, use_container_width=True
+                hide_index=True,
+                use_container_width=True
             )
 
             excel_sheets.append((
-                subject_name,
+                info["name"],
                 df,
                 {i: bg for i in range(len(df))}
             ))
