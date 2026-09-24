@@ -2944,17 +2944,29 @@ def students():
                     key=f"edit_admission_{student_id}"
                 )
 
+                # Class and Section determine the Class Teacher relationship.
+                # A normal Teacher/Class Teacher must never be able to move a
+                # student into another class/section (for example V-A into VII-C).
+                # Only Admin-level roles can change the student's class/section.
                 edit_class = st.text_input(
                     "Class",
                     value=student.get("class_name") or "",
-                    key=f"edit_class_{student_id}"
+                    key=f"edit_class_{student_id}",
+                    disabled=(role == "Teacher")
                 )
 
                 edit_section = st.text_input(
                     "Section",
                     value=student.get("section") or "",
-                    key=f"edit_section_{student_id}"
+                    key=f"edit_section_{student_id}",
+                    disabled=(role == "Teacher")
                 )
+
+                if role == "Teacher":
+                    st.caption(
+                        "🔒 Class and Section are locked for Class Teachers. "
+                        "Only Admin, Admin+Teacher or SuperAdmin can change a student's class/section."
+                    )
 
                 try:
 
@@ -3132,12 +3144,16 @@ def students():
                     use_container_width=True,
                 ):
 
-                    if role == "Teacher" and (
-                        str(student.get("class_name") or "").strip().lower(),
-                        str(student.get("section") or "").strip().lower()
-                    ) not in assigned_class_keys:
-                        st.error("You can only change students assigned to your class.")
-                        return
+                    if role == "Teacher":
+                        current_student_class_key = (
+                            str(student.get("class_name") or "").strip().lower(),
+                            str(student.get("section") or "").strip().lower()
+                        )
+                        if current_student_class_key not in assigned_class_keys:
+                            st.error(
+                                "You can only modify students in your currently assigned class."
+                            )
+                            return
 
                     try:
 
@@ -3169,11 +3185,21 @@ def students():
                             "admission_no":
                                 edit_admission.strip(),
 
+                            # Teachers are never allowed to change the class
+                            # or section that controls Class Teacher visibility.
                             "class_name":
-                                edit_class.strip(),
+                                (
+                                    str(student.get("class_name") or "").strip()
+                                    if role == "Teacher"
+                                    else edit_class.strip()
+                                ),
 
                             "section":
-                                edit_section.strip(),
+                                (
+                                    str(student.get("section") or "").strip()
+                                    if role == "Teacher"
+                                    else edit_section.strip()
+                                ),
 
                             "date_of_birth":
                                 str(edit_date_of_birth),
