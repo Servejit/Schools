@@ -1256,17 +1256,45 @@ def users():
                                     "class_teacher_id", user_id
                                 ).execute()
 
-                                # Remove the application profile. The Auth
-                                # account remains inaccessible because login
-                                # requires a matching active profile.
-                                sb.table("profiles").delete().eq(
-                                    "id", user_id
-                                ).execute()
+                                # If the deleted account is linked to a student
+                                # record, keep the student record but remove the
+                                # user link so the profile can be removed cleanly.
+                                try:
+                                    sb.table("students").update({
+                                        "user_id": None
+                                    }).eq(
+                                        "user_id", user_id
+                                    ).execute()
+                                except Exception:
+                                    pass
 
-                                # Keep the confirmation visible after the
-                                # rerun, instead of losing it immediately.
-                                mark_saved("user_delete")
-                                st.rerun()
+                                # Remove the application profile. We verify the
+                                # deletion instead of assuming that an RLS-blocked
+                                # DELETE succeeded.
+                                delete_result = (
+                                    sb.table("profiles")
+                                    .delete()
+                                    .eq("id", user_id)
+                                    .select("id")
+                                    .execute()
+                                )
+
+                                deleted_rows = delete_result.data or []
+                                if any(
+                                    str(row.get("id")) == str(user_id)
+                                    for row in deleted_rows
+                                ):
+                                    # Keep the confirmation visible after the
+                                    # rerun, instead of losing it immediately.
+                                    mark_saved("user_delete")
+                                    st.rerun()
+
+                                # A successful DELETE must remove the profile.
+                                # If no row was deleted, do not pretend it worked.
+                                st.error(
+                                    "User was not deleted from the user list. "
+                                    "Please check the profiles DELETE permission/RLS policy."
+                                )
                             except Exception as e:
                                 st.error("Could not delete user.")
                                 st.code(str(e))
