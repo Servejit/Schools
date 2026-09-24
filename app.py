@@ -6857,7 +6857,13 @@ def build_marks_backup_workbook(school_id):
 
     enriched = []
     for mark in marks:
-        student = student_map.get(str(mark.get("student_id")), {})
+        student_id_key = str(mark.get("student_id") or "")
+        # When a teacher export is restricted to Class Teacher classes,
+        # marks belonging to every other student must also be excluded.
+        if allowed_class_pairs is not None and student_id_key not in student_map:
+            continue
+
+        student = student_map.get(student_id_key, {})
         subject = subject_map.get(str(mark.get("subject_id")), {})
         exam = str(mark.get("exam_name") or "").strip()
         if not exam:
