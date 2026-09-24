@@ -1245,6 +1245,43 @@ def users():
                         st.error("Could not update user status.")
                         st.code(str(e))
 
+                # Only Admin can permanently remove users. SuperAdmin is
+                # already excluded from the list and is additionally protected.
+                if role == "Admin" and user.get("role") != "SuperAdmin":
+                    if st.button(
+                        "🗑️ Delete User",
+                        key=f"delete_user_{user_id}"
+                    ):
+                        if str(user_id) == str(st.session_state.profile.get("id")):
+                            st.error("You cannot delete your own Admin account.")
+                        else:
+                            try:
+                                # Remove dependent application records first.
+                                sb.table("parent_student_links").delete().eq(
+                                    "parent_id", user_id
+                                ).execute()
+                                sb.table("teacher_subject_assignments").delete().eq(
+                                    "teacher_id", user_id
+                                ).execute()
+                                sb.table("classes").update({
+                                    "class_teacher_id": None
+                                }).eq(
+                                    "class_teacher_id", user_id
+                                ).execute()
+
+                                # Remove the application profile. The Auth
+                                # account remains inaccessible because login
+                                # requires a matching active profile.
+                                sb.table("profiles").delete().eq(
+                                    "id", user_id
+                                ).execute()
+
+                                st.success("✅ User deleted successfully.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error("Could not delete user.")
+                                st.code(str(e))
+
             with st.expander("✏️ Modify User"):
 
                 edit_name = st.text_input(
