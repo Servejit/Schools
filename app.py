@@ -14129,6 +14129,11 @@ def school_academic_status(school_id):
         student_map = {str(x["id"]): x for x in students_data}
         subject_map = {str(x["id"]): x for x in subjects_data}
 
+        subject_palette = [
+            "#E3F2FD", "#E8F5E9", "#FFF3E0", "#F3E5F5", "#FFFDE7",
+            "#E0F7FA", "#FBE9E7", "#E8EAF6", "#F1F8E9", "#FCE4EC"
+        ]
+
         subject_groups = {}
         subject_id_to_group = {}
 
