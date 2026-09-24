@@ -1127,22 +1127,52 @@ def users():
         st.info("No users found for the selected filters.")
         return
 
-    # Show users only through a dropdown. Do not display the complete
-    # user list on the page at once.
+    # Show users only through a dropdown for every management role,
+    # including SuperAdmin. A search box helps find a user without
+    # displaying the complete list on the page.
+    user_search = st.text_input(
+        "🔎 Search User",
+        placeholder="Search by name, email or role",
+        key="users_search"
+    ).strip().lower()
+
+    searchable_users = filtered_users
+
+    if user_search:
+        searchable_users = [
+            u for u in filtered_users
+            if user_search in str(u.get("full_name") or "").lower()
+            or user_search in str(u.get("email") or "").lower()
+            or user_search in str(u.get("role") or "").lower()
+        ]
+
+    search_user_labels = {}
+    for u in searchable_users:
+        label = (
+            f"{u.get('full_name') or 'User'}"
+            f" — {u.get('email') or '-'}"
+            f" — {u.get('role') or '-'}"
+        )
+        search_user_labels[label] = u
+
+    if not search_user_labels:
+        st.info("No users found for the search/filter.")
+        return
+
     selected_user_label = st.selectbox(
         "👥 Select User",
-        list(user_labels.keys()),
+        list(search_user_labels.keys()),
         index=None,
         placeholder="Select a user from the dropdown",
         key="selected_user_dropdown"
     )
 
     if not selected_user_label:
-        st.info("Select a user from the dropdown above to modify or manage them.")
+        st.info("Select a user from the dropdown above to modify/manage them.")
         return
 
     selected_users = [
-        user_labels[selected_user_label]
+        search_user_labels[selected_user_label]
     ]
     # -----------------------------------------------------
     # MODIFY USERS
