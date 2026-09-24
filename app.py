@@ -13627,7 +13627,7 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
     with tab_topper:
         top_n = st.selectbox(
-            "Show Top",
+            "Show Top Students",
             [10, 20, 30, 50],
             index=0,
             key=f"subject_premium_top_n_{viewer_label}"
@@ -13645,7 +13645,16 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 )
                 continue
 
-            top_rows = rows[:top_n]
+            # Show up to the selected number. If a subject has fewer
+            # students than the selected limit, show ALL available students.
+            number_to_show = min(int(top_n), len(rows))
+            top_rows = rows[:number_to_show]
+
+            st.caption(
+                f"Showing {number_to_show} of {len(rows)} student(s) "
+                f"for this subject."
+            )
+
             display_rows = []
 
             for index, row in enumerate(top_rows, start=1):
