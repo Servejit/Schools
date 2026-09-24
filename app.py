@@ -3962,7 +3962,41 @@ def classes_subjects():
                         key=f"subject_assignment_classes_{school_id}"
                     )
 
+                    # Load ALL subject assignments for this school so every
+                    # Class + Subject shows the teacher who currently owns it.
+                    all_assignment_rows = []
+                    try:
+                        all_assignment_rows = (
+                            sb.table("teacher_subject_assignments")
+                            .select("teacher_id,class_id,subject_id")
+                            .eq("school_id", school_id)
+                            .execute()
+                            .data or []
+                        )
+                    except Exception:
+                        all_assignment_rows = []
+
+                    teacher_name_by_id = {
+                        str(t.get("id")): (
+                            t.get("full_name")
+                            or t.get("email")
+                            or "Teacher"
+                        )
+                        for t in teacher_data
+                    }
+
+                    assigned_teacher_by_pair = {}
+                    for row in all_assignment_rows:
+                        pair = (str(row.get("class_id")), str(row.get("subject_id")))
+                        tid = str(row.get("teacher_id"))
+                        if pair not in assigned_teacher_by_pair:
+                            assigned_teacher_by_pair[pair] = []
+                        name = teacher_name_by_id.get(tid, "Teacher")
+                        if name not in assigned_teacher_by_pair[pair]:
+                            assigned_teacher_by_pair[pair].append(name)
+
                     subject_assignment_options = {}
+                    blocked_subject_labels = []
                     for class_label in selected_assignment_classes:
                         cl = assignment_class_options[class_label]
                         try:
@@ -3985,11 +4019,35 @@ def classes_subjects():
                                 or subject.get("name")
                                 or "Subject"
                             )
-                            option_label = f"{class_label} → {subject_name_value}"
-                            subject_assignment_options[option_label] = (
-                                cl["id"],
-                                subject["id"]
-                            )
+                            pair = (str(cl["id"]), str(subject["id"]))
+                            assigned_names = assigned_teacher_by_pair.get(pair, [])
+                            other_names = [
+                                name for name in assigned_names
+                                if name != (
+                                    teacher_name_by_id.get(
+                                        str(assignment_teacher_id), ""
+                                    )
+                                )
+                            ]
+
+                            if other_names:
+                                option_label = (
+                                    f"{class_label} → {subject_name_value}"
+                                    f" — 👨‍🏫 Assigned: {', '.join(other_names)}"
+                                )
+                                blocked_subject_labels.append(option_label)
+                            else:
+                                option_label = (
+                                    f"{class_label} → {subject_name_value}"
+                                    + (
+                                        f" — 👨‍🏫 Assigned: {assigned_names[0]}"
+                                        if assigned_names else ""
+                                    )
+                                )
+                                subject_assignment_options[option_label] = (
+                                    cl["id"],
+                                    subject["id"]
+                                )
 
                     current_assignment_set = set()
                     try:
@@ -4038,6 +4096,14 @@ def classes_subjects():
                         placeholder="Select one or more Class + Subject combinations",
                         key=f"subject_assignment_subjects_{school_id}"
                     )
+
+                    if blocked_subject_labels:
+                        st.info(
+                            "🔒 The following Class + Subject combinations are already "
+                            "assigned to another teacher and cannot be assigned twice:"
+                        )
+                        for blocked_label in blocked_subject_labels:
+                            st.write(f"• {blocked_label}")
 
                     if selected_assignment_classes and not subject_assignment_options:
                         st.warning("No active subjects are available in the selected class(es).")
