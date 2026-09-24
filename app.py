@@ -14272,10 +14272,7 @@ def dashboard():
                 [],
                 "Student"
             )
-        elif student_school_id:
-            st.info(
-                "💎 Subject-wise Premium is not enabled for Students by Admin."
-            )
+
 
         # Same Report Card permission as Parents, but strictly own record.
         # No Student can select, view or generate another Student's card.
@@ -14597,10 +14594,7 @@ def dashboard():
                 [],
                 "Parent"
             )
-        elif school_id:
-            st.info(
-                "💎 Subject-wise Premium is not enabled for Parents by Admin."
-            )
+
 
     else:
 
