@@ -13307,25 +13307,17 @@ def subject_wise_parent_student_premium_enabled(school_id):
     return False
 
 def subject_wise_premium_view(school_id, student_ids, viewer_label):
-    """Full Subject-wise Premium view for permitted Parent/Student accounts.
+    """Full Subject-wise Premium view.
 
-    Parents and Students receive the school-wide Subject-wise Premium view:
-    - Subject toppers
-    - Students above 70%
-    - Students above 80%
-    - Students above 90%
-
-    The general <30/<40/<50 or full Marks Percentage Premium analysis
-    is never exposed here.
+    Parent/Student school-wide view keeps ALL active school subjects visible.
+    Subjects remain visible even when no marks have been entered for the
+    selected exam. This prevents recently added subjects from disappearing.
     """
     st.header("💎 Subject-wise Premium")
     st.caption(
         "Subject-wise Premium: Top students, >70%, >80% and >90%."
     )
 
-    # Parent/Student Premium is school-wide. It is not restricted to the
-    # particular student linked to a Parent account, because a Parent may
-    # need to see the school-wide topper/percentage lists.
     school_wide_view = viewer_label in {"Parent", "Student"}
 
     if not school_id:
@@ -13367,51 +13359,48 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
         st.info("No active student records were found.")
         return
 
-    if school_wide_view:
-        class_pairs = {
-            (
-                str(x.get("class_name") or "").strip().lower(),
-                str(x.get("section") or "").strip().lower()
-            )
-            for x in allowed_students
-        }
-    else:
-        class_pairs = {
-            (
-                str(x.get("class_name") or "").strip().lower(),
-                str(x.get("section") or "").strip().lower()
-            )
-            for x in allowed_students
-        }
-
+    # Load active classes so the selected academic session remains available.
     try:
         classes = (
             sb.table("classes")
             .select("id,class_name,section,academic_year,active")
             .eq("school_id", school_id)
             .eq("active", True)
+            .order("class_name")
+            .order("section")
             .execute()
             .data or []
         )
-        class_rows = [
-            x for x in classes
-            if (
-                str(x.get("class_name") or "").strip().lower(),
-                str(x.get("section") or "").strip().lower()
-            ) in class_pairs
-        ]
     except Exception as e:
         st.error("Could not load class information.")
         st.code(str(e))
         return
 
-    if not class_rows:
+    if not classes:
         st.info("No active class is available.")
         return
 
+    if school_wide_view:
+        session_class_source = classes
+    else:
+        allowed_pairs = {
+            (
+                str(x.get("class_name") or "").strip().lower(),
+                str(x.get("section") or "").strip().lower()
+            )
+            for x in allowed_students
+        }
+        session_class_source = [
+            x for x in classes
+            if (
+                str(x.get("class_name") or "").strip().lower(),
+                str(x.get("section") or "").strip().lower()
+            ) in allowed_pairs
+        ]
+
     sessions = sorted({
         str(x.get("academic_year") or "").strip()
-        for x in class_rows
+        for x in session_class_source
         if str(x.get("academic_year") or "").strip()
     })
     if not sessions:
@@ -13424,7 +13413,7 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
         key=f"subject_premium_session_{viewer_label}"
     )
     session_class_rows = [
-        x for x in class_rows
+        x for x in session_class_source
         if str(x.get("academic_year") or "").strip() == session
     ]
     class_ids = {str(x["id"]) for x in session_class_rows}
@@ -13445,11 +13434,14 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
     )
 
     try:
+        # IMPORTANT: load ALL active subjects for this school.
+        # Do not hide a subject merely because it has no marks yet.
         subjects = (
             sb.table("subjects")
             .select("id,class_id,subject_name,name,max_marks,active")
             .eq("school_id", school_id)
             .eq("active", True)
+            .order("subject_name")
             .execute()
             .data or []
         )
@@ -13480,11 +13472,9 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
         return
 
     if school_wide_view:
+        # Premium Parent/Student view is school-wide: ALL subjects are shown.
         visible_students = all_students
-        visible_subjects = [
-            x for x in subjects
-            if str(x.get("class_id")) in class_ids
-        ]
+        visible_subjects = subjects
         visible_class_ids = class_ids
     else:
         visible_students = [
@@ -13507,6 +13497,8 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
         visible_class_ids = class_ids
 
     subject_ids = {str(x["id"]) for x in visible_subjects}
+
+    # Marks are still restricted to the selected session/class scope.
     visible_marks = [
         x for x in marks
         if str(x.get("class_id")) in visible_class_ids
@@ -13515,9 +13507,18 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
     student_map = {str(x["id"]): x for x in visible_students}
 
+    # Keep every subject as a separate entry by SUBJECT ID. This prevents
+    # subjects with the same name in different classes from overwriting each
+    # other in the dictionary.
     subject_rows = {}
     for subject in visible_subjects:
         sid = str(subject["id"])
+        subject_name = (
+            subject.get("subject_name")
+            or subject.get("name")
+            or "Subject"
+        )
+
         rows = []
         for mark in visible_marks:
             if str(mark.get("subject_id")) != sid:
@@ -13550,33 +13551,32 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 "Percentage": round(percentage, 2)
             })
 
-        if rows:
-            subject_rows[
-                subject.get("subject_name")
-                or subject.get("name")
-                or "Subject"
-            ] = sorted(
-                rows,
-                key=lambda x: (
-                    float(x["Percentage"]),
-                    float(x["Marks"])
-                ),
-                reverse=True
-            )
+        rows.sort(
+            key=lambda x: (
+                float(x["Percentage"]),
+                float(x["Marks"])
+            ),
+            reverse=True
+        )
+
+        subject_rows[sid] = {
+            "name": subject_name,
+            "rows": rows
+        }
 
     if not subject_rows:
-        st.info("No Subject-wise marks are available for the selected exam.")
+        st.info("No active subjects are available for this school.")
         return
 
-    # Use the same subject-wise row colouring as the Admin view.
-    # Each subject gets its own light background colour.
+    subject_items = list(subject_rows.items())
+
     subject_palette = [
         "#E3F2FD", "#E8F5E9", "#FFF3E0", "#F3E5F5", "#FFFDE7",
         "#E0F7FA", "#FBE9E7", "#E8EAF6", "#F1F8E9", "#FCE4EC"
     ]
     subject_colors = {
-        subject_name: subject_palette[idx % len(subject_palette)]
-        for idx, subject_name in enumerate(subject_rows.keys())
+        sid: subject_palette[idx % len(subject_palette)]
+        for idx, (sid, _) in enumerate(subject_items)
     }
 
     tab_topper, tab_70, tab_80, tab_90 = st.tabs(
@@ -13595,17 +13595,23 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
     ]:
         with tab:
             shown = False
-            for subject_name, rows in subject_rows.items():
+            for sid, info in subject_items:
+                subject_name = info["name"]
+                rows = info["rows"]
                 filtered = [
                     row for row in rows
                     if float(row["Percentage"]) > threshold
                 ]
-                if not filtered:
-                    continue
-                shown = True
                 st.markdown(f"#### 📚 {subject_name}")
+                if not filtered:
+                    st.caption(
+                        "No students above this percentage for the selected exam."
+                    )
+                    continue
+
+                shown = True
                 filtered_df = pd.DataFrame(filtered)
-                bg = subject_colors.get(subject_name, "#E3F2FD")
+                bg = subject_colors[sid]
                 st.dataframe(
                     filtered_df.style.map(
                         lambda _: f"background-color: {bg}"
@@ -13613,8 +13619,11 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                     hide_index=True,
                     use_container_width=True
                 )
+
             if not shown:
-                st.info(f"No students are above {threshold}% in the selected subjects.")
+                st.info(
+                    f"No students are above {threshold}% in the selected subjects."
+                )
 
     with tab_topper:
         top_n = st.selectbox(
@@ -13624,8 +13633,16 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
             key=f"subject_premium_top_n_{viewer_label}"
         )
 
-        for subject_name, rows in subject_rows.items():
+        for sid, info in subject_items:
+            subject_name = info["name"]
+            rows = info["rows"]
+
+            st.markdown(f"#### 📚 {subject_name}")
+
             if not rows:
+                st.caption(
+                    "No marks are available for this subject in the selected exam."
+                )
                 continue
 
             top_rows = rows[:top_n]
@@ -13644,9 +13661,8 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                     "Percentage": f'{format_mark(row["Percentage"])}%'
                 })
 
-            st.markdown(f"#### 📚 {subject_name}")
             display_df = pd.DataFrame(display_rows)
-            bg = subject_colors.get(subject_name, "#E3F2FD")
+            bg = subject_colors[sid]
             st.dataframe(
                 display_df.style.map(
                     lambda _: f"background-color: {bg}"
