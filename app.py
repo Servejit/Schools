@@ -455,9 +455,6 @@ def delete_school_all_data(school_id):
         sb.table("parent_student_links").delete().eq(
             "parent_id", profile_id
         ).execute()
-        sb.table("parent_student_links").delete().eq(
-            "student_id", profile_id
-        ).execute()
 
         sb.table("teacher_subject_assignments").delete().eq(
             "teacher_id", profile_id
@@ -505,13 +502,40 @@ def delete_school_all_data(school_id):
         "school_id", school_id
     ).execute()
 
-    # Remove all application user profiles belonging to this school.
-    # This removes Admin/Teacher/Student/Parent records from the app.
-    if profile_ids:
-        for profile_id in profile_ids:
-            sb.table("profiles").delete().eq(
-                "id", profile_id
-            ).execute()
+    # Remove ALL application user profiles belonging to this school.
+    # Use school_id directly rather than relying only on the collected IDs.
+    # This also catches any profile that was created after the initial ID
+    # collection but before the delete operation.
+    profile_delete_result = (
+        sb.table("profiles")
+        .delete()
+        .eq("school_id", school_id)
+        .neq("role", "SuperAdmin")
+        .select("id")
+        .execute()
+    )
+
+    deleted_profile_ids = {
+        str(row.get("id"))
+        for row in (profile_delete_result.data or [])
+        if row.get("id")
+    }
+
+    # Verify that no non-SuperAdmin profile belonging to the deleted school
+    # remains visible in the application database.
+    remaining_profiles = (
+        sb.table("profiles")
+        .select("id")
+        .eq("school_id", school_id)
+        .neq("role", "SuperAdmin")
+        .execute()
+        .data or []
+    )
+    if remaining_profiles:
+        raise RuntimeError(
+            "Some users belonging to this school could not be deleted. "
+            "Check the profiles DELETE permission/RLS policy."
+        )
 
     # Finally remove the school itself.
     result = (
