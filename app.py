@@ -3804,12 +3804,48 @@ def classes_subjects():
     except Exception:
         subject_teacher_rows = []
 
+    # Build a reliable teacher-name map for every teacher who has a
+    # subject assignment in this school.  Do not depend only on the
+    # active teacher dropdown list, because an existing assignment may
+    # belong to a teacher whose current profile is inactive.
     teacher_name_by_id = {
         str(t.get("id")): (
             t.get("full_name") or t.get("email") or "Teacher"
         )
         for t in teacher_data
     }
+
+    assigned_teacher_ids = {
+        str(x.get("teacher_id"))
+        for x in subject_teacher_rows
+        if x.get("teacher_id")
+    }
+
+    missing_teacher_ids = [
+        teacher_id
+        for teacher_id in assigned_teacher_ids
+        if teacher_id not in teacher_name_by_id
+    ]
+
+    if missing_teacher_ids:
+        try:
+            extra_teacher_rows = (
+                sb.table("profiles")
+                .select("id,full_name,email")
+                .eq("school_id", school_id)
+                .in_("id", missing_teacher_ids)
+                .execute()
+                .data or []
+            )
+            for teacher in extra_teacher_rows:
+                teacher_name_by_id[str(teacher.get("id"))] = (
+                    teacher.get("full_name")
+                    or teacher.get("email")
+                    or "Teacher"
+                )
+        except Exception:
+            pass
+
     assigned_subject_teacher = {}
     for assignment in subject_teacher_rows:
         pair = (
@@ -3820,7 +3856,9 @@ def classes_subjects():
             str(assignment.get("teacher_id")),
             "Teacher"
         )
-        assigned_subject_teacher.setdefault(pair, []).append(teacher_name)
+        assigned_subject_teacher.setdefault(pair, [])
+        if teacher_name not in assigned_subject_teacher[pair]:
+            assigned_subject_teacher[pair].append(teacher_name)
 
     if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         with st.expander("👨‍🏫 Assign Class Teachers"):
