@@ -1247,7 +1247,7 @@ def users():
 
                 # Only Admin can permanently remove users. SuperAdmin is
                 # already excluded from the list and is additionally protected.
-                if role in ["Admin", "Admin+Teacher"] and user.get("role") != "SuperAdmin":
+                if role in ["SuperAdmin", "Admin", "Admin+Teacher"] and user.get("role") != "SuperAdmin":
                     if st.button(
                         "🗑️ Delete User",
                         key=f"delete_user_{user_id}"
