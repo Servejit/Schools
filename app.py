@@ -6379,8 +6379,7 @@ def attendance():
                         .execute()
                     )
 
-            st.success("Attendance saved successfully.")
-            st.rerun()
+            st.success("✅ Attendance saved successfully.")
 
         except Exception as e:
             st.error("Could not save attendance.")
