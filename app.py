@@ -13501,11 +13501,20 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
     subject_ids = {str(x["id"]) for x in visible_subjects}
 
-    visible_marks = [
-        x for x in marks
-        if str(x.get("class_id")) in visible_class_ids
-        and str(x.get("subject_id")) in subject_ids
-    ]
+    if school_wide_view:
+        # Parent/Student Premium is completely school-wide:
+        # do not filter marks by class. Subject IDs are used to identify
+        # the subject, while every active student's marks are eligible.
+        visible_marks = [
+            x for x in marks
+            if str(x.get("subject_id")) in subject_ids
+        ]
+    else:
+        visible_marks = [
+            x for x in marks
+            if str(x.get("class_id")) in visible_class_ids
+            and str(x.get("subject_id")) in subject_ids
+        ]
 
     student_map = {str(x["id"]): x for x in visible_students}
 
