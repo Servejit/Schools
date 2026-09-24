@@ -6148,6 +6148,123 @@ def print_templates():
                         "Could not prepare template download."
                     )
 
+            # -------------------------------------------------
+            # REPORT CARD SCHOOL LOGO
+            # Saved per template so the logo is restored directly
+            # from the Print Templates dashboard.
+            # -------------------------------------------------
+            if template_type_value == "Report Card":
+                st.markdown("#### 🏫 School Logo")
+
+                current_logo_path = school_logo_from_template(template)
+                if current_logo_path:
+                    current_logo_bytes = download_storage_file(current_logo_path)
+                    if current_logo_bytes:
+                        st.image(
+                            current_logo_bytes,
+                            width=110,
+                            caption="Current School Logo"
+                        )
+                    else:
+                        st.warning("Logo is saved but could not be loaded from Storage.")
+                else:
+                    st.info("No school logo saved for this Report Card template.")
+
+                logo_upload = st.file_uploader(
+                    "Upload / Replace School Logo",
+                    type=["png", "jpg", "jpeg"],
+                    key=f"template_school_logo_{template_id}"
+                )
+
+                logo_size = school_logo_size_from_template(template)
+                logo_size = st.slider(
+                    "Logo Size",
+                    min_value=30,
+                    max_value=80,
+                    value=logo_size,
+                    step=2,
+                    key=f"template_logo_size_{template_id}",
+                    help="Controls the logo size on generated Report Cards."
+                )
+
+                lc1, lc2 = st.columns(2)
+                with lc1:
+                    if logo_upload and st.button(
+                        "💾 Save Logo",
+                        use_container_width=True,
+                        key=f"save_template_logo_{template_id}"
+                    ):
+                        try:
+                            ext = logo_upload.name.rsplit(".", 1)[-1].lower()
+                            logo_path = f"{school_id}/school-logo/{uuid.uuid4().hex}.{ext}"
+                            sb.storage.from_("school-assets").upload(
+                                logo_path,
+                                logo_upload.getvalue(),
+                                file_options={
+                                    "content-type": logo_upload.type,
+                                    "upsert": "false"
+                                }
+                            )
+                            logo_config = get_template_config(template)
+                            logo_config["school_logo_path"] = logo_path
+                            logo_config["school_logo_size"] = int(logo_size)
+                            sb.table("print_templates").update({
+                                "config_json": json.dumps(logo_config),
+                                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                            }).eq("id", template_id).eq("school_id", school_id).execute()
+                            if current_logo_path and current_logo_path != logo_path:
+                                try:
+                                    sb.storage.from_("school-assets").remove([current_logo_path])
+                                except Exception:
+                                    pass
+                            st.success("✅ School logo saved successfully.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error("Could not save school logo.")
+                            st.code(str(e))
+
+                with lc2:
+                    if current_logo_path and st.button(
+                        "🗑️ Remove Logo",
+                        use_container_width=True,
+                        key=f"remove_template_logo_{template_id}"
+                    ):
+                        try:
+                            try:
+                                sb.storage.from_("school-assets").remove([current_logo_path])
+                            except Exception:
+                                pass
+                            logo_config = get_template_config(template)
+                            for logo_key in ["school_logo_path", "logo_path", "school_logo", "logo"]:
+                                logo_config.pop(logo_key, None)
+                            sb.table("print_templates").update({
+                                "config_json": json.dumps(logo_config),
+                                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                            }).eq("id", template_id).eq("school_id", school_id).execute()
+                            st.success("School logo removed successfully.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error("Could not remove school logo.")
+                            st.code(str(e))
+
+                if current_logo_path and st.button(
+                    "💾 Save Logo Size",
+                    use_container_width=True,
+                    key=f"save_template_logo_size_{template_id}"
+                ):
+                    try:
+                        logo_config = get_template_config(template)
+                        logo_config["school_logo_size"] = int(logo_size)
+                        sb.table("print_templates").update({
+                            "config_json": json.dumps(logo_config),
+                            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                        }).eq("id", template_id).eq("school_id", school_id).execute()
+                        st.success("✅ Logo size saved successfully.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Could not save logo size.")
+                        st.code(str(e))
+
             # Immediate status update
             new_active = st.checkbox(
                 "Template Active",
