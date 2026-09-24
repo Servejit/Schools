@@ -4261,15 +4261,28 @@ def classes_subjects():
                             cl = master_class_options[class_label]
                             existing = (
                                 sb.table("subjects")
-                                .select("id")
+                                .select("id,subject_name,code")
                                 .eq("school_id", school_id)
                                 .eq("class_id", cl["id"])
-                                .ilike("subject_name", subject_name)
                                 .execute()
                                 .data or []
                             )
 
-                            if existing:
+                            name_exists = any(
+                                str(x.get("subject_name") or x.get("name") or "").strip().lower()
+                                == subject_name.lower()
+                                for x in existing
+                            )
+                            code_exists = (
+                                bool(subject_code)
+                                and any(
+                                    str(x.get("code") or "").strip().lower()
+                                    == subject_code.lower()
+                                    for x in existing
+                                )
+                            )
+
+                            if name_exists or code_exists:
                                 skipped_classes.append(class_label)
                                 continue
 
