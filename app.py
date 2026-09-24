@@ -11182,45 +11182,9 @@ def student_report_card_view(school_id, student_id):
     if not school_id or not student_id:
         return
 
-    # If Report Cards are disabled for Parents/Students, show nothing.
-    # Do not expose the Admin permission state or any internal message.
-    # Use the same Admin-controlled permission as Parents. Support both
-    # existing RPC names because older school databases may still expose the
-    # plural function while newer ones use the singular function.
-    report_access = False
-    for rpc_name in ("parent_report_card_enabled", "parent_report_cards_enabled"):
-        try:
-            result = sb.rpc(
-                rpc_name,
-                {"p_school_id": school_id}
-            ).execute()
-            data = getattr(result, "data", None)
-            if isinstance(data, bool):
-                report_access = data
-            elif isinstance(data, list) and data:
-                first = data[0]
-                report_access = bool(
-                    first if isinstance(first, bool)
-                    else (
-                        first.get("enabled")
-                        or first.get("parent_report_card_enabled")
-                        or first.get("parent_report_cards_enabled")
-                        or first.get("result")
-                    ) if isinstance(first, dict) else first
-                )
-            elif isinstance(data, dict):
-                report_access = bool(
-                    data.get("enabled")
-                    or data.get("parent_report_card_enabled")
-                    or data.get("parent_report_cards_enabled")
-                    or data.get("result")
-                )
-            if report_access:
-                break
-        except Exception:
-            continue
-
-    if not report_access:
+    # Use exactly the same school-wide permission as the Admin toggle.
+    # This is intentionally not tied to the Student's user_id/admin_id.
+    if not parent_report_card_enabled(school_id):
         return
 
     st.subheader("📄 My Report Cards")
@@ -11474,30 +11438,62 @@ def student_report_card_view(school_id, student_id):
 
 
 def parent_report_card_enabled(school_id):
-    """Check whether Admin has enabled Report Card access for Parents."""
+    """Check the school-wide Admin Report Card permission for Parents/Students."""
     if not school_id:
         return False
+
+    # The Admin toggle stores one school feature row. Do not require the
+    # currently logged-in Parent/Student to be the Admin who created it.
     try:
-        result = (
-            sb.rpc(
-                "parent_report_card_enabled",
-                {"p_school_id": school_id}
-            )
+        rows = (
+            sb.table("premium_feature_access")
+            .select("active")
+            .eq("school_id", school_id)
+            .eq("feature_key", "parent_report_card")
+            .eq("active", True)
+            .limit(1)
             .execute()
+            .data or []
         )
-        data = result.data
-        if isinstance(data, bool):
-            return data
-        if isinstance(data, list) and data:
-            return bool(data[0])
-        if isinstance(data, dict):
-            return bool(
-                data.get("parent_report_card_enabled")
-                or data.get("enabled")
-                or data.get("result")
-            )
+        if rows:
+            return True
     except Exception:
-        return False
+        pass
+
+    # Backward-compatible fallback for databases that expose the RPC.
+    for rpc_name in ("parent_report_card_enabled", "parent_report_cards_enabled"):
+        try:
+            result = sb.rpc(
+                rpc_name,
+                {"p_school_id": school_id}
+            ).execute()
+            data = getattr(result, "data", None)
+            if isinstance(data, bool):
+                if data:
+                    return True
+            elif isinstance(data, list) and data:
+                first = data[0]
+                value = (
+                    first.get("enabled")
+                    or first.get("parent_report_card_enabled")
+                    or first.get("parent_report_cards_enabled")
+                    or first.get("result")
+                    if isinstance(first, dict)
+                    else first
+                )
+                if bool(value):
+                    return True
+            elif isinstance(data, dict):
+                if bool(
+                    data.get("enabled")
+                    or data.get("parent_report_card_enabled")
+                    or data.get("parent_report_cards_enabled")
+                    or data.get("result")
+                ):
+                    return True
+        except Exception:
+            continue
+
     return False
 
 
