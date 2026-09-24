@@ -9219,7 +9219,7 @@ def _report_excel_write_df(ws, df):
         ws.column_dimensions[col_letter].width = min(max(max_len + 2, 12), 35)
 
 
-def build_report_cards_excel(school_id):
+def build_report_cards_excel(school_id, allowed_class_pairs=None):
     """
     Create a self-contained Report Card Backup/Import workbook.
     Report_Card_Data is the authoritative import sheet.
@@ -9243,6 +9243,25 @@ def build_report_cards_excel(school_id):
         .execute()
         .data or []
     )
+
+    # Admin/SuperAdmin/Admin+Teacher: all school classes.
+    # Teacher: only the classes where the logged-in teacher is
+    # currently assigned as Class Teacher.
+    if allowed_class_pairs is not None:
+        normalized_pairs = {
+            (
+                str(pair[0] or "").strip().lower(),
+                str(pair[1] or "").strip().lower()
+            )
+            for pair in allowed_class_pairs
+        }
+        students = [
+            student for student in students
+            if (
+                str(student.get("class_name") or "").strip().lower(),
+                str(student.get("section") or "").strip().lower()
+            ) in normalized_pairs
+        ]
 
     subjects = (
         sb.table("subjects")
@@ -10042,13 +10061,55 @@ def report_cards():
     # -----------------------------------------------------
     st.subheader("📦 Report Card Excel — Export & Import")
     st.caption(
-        "Download a complete Report Card Excel and upload the same file later "
-        "to restore marks and attendance. The raw Report_Card_Data sheet is "
-        "used for safe re-import."
+        "Admin, Admin+Teacher and SuperAdmin can download Report Card Excel "
+        "for all classes. Class Teachers can download Excel only for their "
+        "assigned Class Teacher class(es)."
     )
 
     try:
-        report_excel_bytes = build_report_cards_excel(school_id)
+        report_excel_allowed_pairs = None
+
+        if role == "Teacher":
+            try:
+                teacher_export_classes = (
+                    sb.table("classes")
+                    .select("class_name,section")
+                    .eq("school_id", school_id)
+                    .eq("class_teacher_id", st.session_state.user.id)
+                    .eq("active", True)
+                    .execute()
+                    .data or []
+                )
+            except Exception as e:
+                st.error("Could not load your Class Teacher classes for Excel download.")
+                st.code(str(e))
+                return
+
+            report_excel_allowed_pairs = {
+                (
+                    str(x.get("class_name") or "").strip(),
+                    str(x.get("section") or "").strip()
+                )
+                for x in teacher_export_classes
+                if str(x.get("class_name") or "").strip()
+                and str(x.get("section") or "").strip()
+            }
+
+            if not report_excel_allowed_pairs:
+                st.warning(
+                    "You are not assigned as Class Teacher to any class. "
+                    "Report Card Excel download is not available."
+                )
+                return
+
+            st.info(
+                "👨‍🏫 Excel download includes only your assigned Class Teacher class(es)."
+            )
+
+        report_excel_bytes = build_report_cards_excel(
+            school_id,
+            allowed_class_pairs=report_excel_allowed_pairs
+        )
         report_school_name = (
             str(school_info.get("name") if "school_info" in locals() else "School")
             .replace("/", "_")
