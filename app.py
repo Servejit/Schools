@@ -13714,11 +13714,20 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
                 )
                 continue
 
-            # Top-N is calculated AFTER combining every class.
-            # Therefore a student who is in the Top 10 remains in the
-            # Top 10, and changing to Top 20/30/50 only adds more students.
-            number_to_show = min(int(top_n), len(rows))
-            top_rows = rows[:number_to_show]
+            # Rank the COMPLETE school-wide subject list by percentage
+            # first. Top 20/30/50 must always be the same ordered list as
+            # Top 10 plus additional lower-percentage students.
+            ranked_rows = sorted(
+                rows,
+                key=lambda x: (
+                    float(x.get("Percentage") or 0),
+                    float(x.get("Marks") or 0)
+                ),
+                reverse=True
+            )
+
+            number_to_show = min(int(top_n), len(ranked_rows))
+            top_rows = ranked_rows[:number_to_show]
 
             st.caption(
                 f"Showing {number_to_show} of {len(rows)} school-wide "
