@@ -1027,6 +1027,9 @@ def users():
         user_query = (
             sb.table("profiles")
             .select("id,email,full_name,role,active,school_id")
+            # SuperAdmin accounts are system-level accounts and must never
+            # appear in the User Management list.
+            .neq("role", "SuperAdmin")
         )
 
         # Admin must only load users belonging to their own school.
@@ -1175,6 +1178,11 @@ def users():
     # MODIFY USERS
     # -----------------------------------------------------
     for user in selected_users:
+
+        # Defensive protection: even if a stale UI/session somehow contains
+        # a SuperAdmin record, it can never be modified or deactivated here.
+        if user.get("role") == "SuperAdmin":
+            continue
 
         user_id = user["id"]
         active = user.get("active", True)
