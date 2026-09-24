@@ -1233,6 +1233,21 @@ def users():
     st.subheader("📋 Existing Users")
 
     try:
+        # Only show users whose school still exists. This prevents any
+        # orphaned profile from a previously deleted school from appearing
+        # in SuperAdmin's User Management dashboard.
+        existing_school_rows = (
+            sb.table("schools")
+            .select("id")
+            .execute()
+            .data or []
+        )
+        existing_school_ids = [
+            str(x.get("id"))
+            for x in existing_school_rows
+            if x.get("id")
+        ]
+
         user_query = (
             sb.table("profiles")
             .select("id,email,full_name,role,active,school_id")
@@ -1240,6 +1255,11 @@ def users():
             # appear in the User Management list.
             .neq("role", "SuperAdmin")
         )
+
+        if existing_school_ids:
+            user_query = user_query.in_("school_id", existing_school_ids)
+        else:
+            user_query = user_query.eq("school_id", "__NO_EXISTING_SCHOOL__")
 
         # Admin must only load users belonging to their own school.
         if st.session_state.profile.get("role") in ["Admin", "Admin+Teacher"]:
@@ -14452,13 +14472,32 @@ def dashboard():
                 or 0
             )
 
-            user_count = (
-                sb.table("profiles")
-                .select("id", count="exact")
+            # Count only real school users. SuperAdmin is a system-level
+            # account and must not be included in the school-user dashboard count.
+            active_school_rows = (
+                sb.table("schools")
+                .select("id")
                 .execute()
-                .count
-                or 0
+                .data or []
             )
+            active_school_ids = [
+                str(x.get("id"))
+                for x in active_school_rows
+                if x.get("id")
+            ]
+
+            if active_school_ids:
+                user_count = (
+                    sb.table("profiles")
+                    .select("id", count="exact")
+                    .neq("role", "SuperAdmin")
+                    .in_("school_id", active_school_ids)
+                    .execute()
+                    .count
+                    or 0
+                )
+            else:
+                user_count = 0
 
             student_count = (
                 sb.table("students")
