@@ -6649,12 +6649,72 @@ def school_logo_size_from_template(template):
     return max(20, min(30, size))
 
 
-def pdf_page_size(orientation):
+def pdf_page_size(orientation, page_size=None):
+
+    # Use the selected template's real page size whenever available.
+    # This keeps the overlay aligned with A4, certificate, or any other
+    # uploaded page instead of stretching a fixed A4 layout over it.
+    if page_size:
+        try:
+            w, h = page_size
+            if float(w) > 0 and float(h) > 0:
+                return float(w), float(h)
+        except Exception:
+            pass
 
     if orientation == "Landscape":
         return landscape(A4)
 
     return A4
+
+
+def get_template_page_size(template_bytes, file_type, fallback_orientation="Portrait"):
+    """Detect the selected template's actual page size and orientation."""
+
+    try:
+        if (file_type or "").lower() == "pdf":
+            doc = fitz.open(stream=template_bytes, filetype="pdf")
+            if len(doc) == 0:
+                doc.close()
+                return A4, fallback_orientation
+            rect = doc[0].rect
+            page_size = (float(rect.width), float(rect.height))
+            doc.close()
+
+        else:
+            image = Image.open(io.BytesIO(template_bytes))
+            px_w, px_h = image.size
+
+            # Keep image-template output around standard A4 size while
+            # preserving the uploaded template's exact aspect ratio.
+            max_dim = max(float(px_w), float(px_h))
+            scale = 842.0 / max_dim if max_dim else 1.0
+            page_size = (float(px_w) * scale, float(px_h) * scale)
+
+        width, height = page_size
+        detected_orientation = (
+            "Landscape" if width > height else "Portrait"
+        )
+
+        # Uploaded A4 templates are normalized to the standard Report
+        # Card page size. Other templates keep their detected proportions.
+        a4_portrait = A4
+        a4_landscape = landscape(A4)
+        ratio = width / height if height else 0
+        a4_p = a4_portrait[0] / a4_portrait[1]
+        a4_l = a4_landscape[0] / a4_landscape[1]
+
+        if abs(ratio - a4_p) / a4_p <= 0.02:
+            page_size = a4_portrait
+            detected_orientation = "Portrait"
+        elif abs(ratio - a4_l) / a4_l <= 0.02:
+            page_size = a4_landscape
+            detected_orientation = "Landscape"
+
+        return page_size, detected_orientation
+
+    except Exception:
+        return pdf_page_size(fallback_orientation), fallback_orientation
 
 
 def draw_wrapped_text(
@@ -6703,11 +6763,13 @@ def create_report_overlay(
     total_attendance=0,
     present_days=0,
     school_logo_path=None,
-    school_logo_size=52
+    school_logo_size=52,
+    page_size=None
 ):
 
     width, height = pdf_page_size(
-        orientation
+        orientation,
+        page_size=page_size
     )
 
     buffer = io.BytesIO()
@@ -7388,6 +7450,17 @@ def make_report_card_pdf(
     school_logo_size=52
 ):
 
+    # Always inspect the selected template before drawing the report.
+    # The overlay therefore uses the same page dimensions/orientation as
+    # the actual certificate/report template.
+    template_page_size, detected_orientation = get_template_page_size(
+        template_bytes,
+        file_type,
+        orientation
+    )
+
+    orientation = detected_orientation
+
     overlay_bytes = create_report_overlay(
         student=student,
         school_info=school_info,
@@ -7397,7 +7470,8 @@ def make_report_card_pdf(
         total_attendance=total_attendance,
         present_days=present_days,
         school_logo_path=school_logo_path,
-        school_logo_size=school_logo_size
+        school_logo_size=school_logo_size,
+        page_size=template_page_size
     )
     overlay_doc = fitz.open(
         stream=overlay_bytes,
@@ -7447,9 +7521,7 @@ def make_report_card_pdf(
         io.BytesIO(template_bytes)
     ).convert("RGB")
 
-    width, height = pdf_page_size(
-        orientation
-    )
+    width, height = template_page_size
 
     base_buffer = io.BytesIO()
 
