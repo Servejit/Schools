@@ -9595,16 +9595,29 @@ def create_report_overlay(
         table_top - (remarks_y + 95)
     )
 
+    # Fit the complete marks table, totals, attendance, remarks and
+    # signatures inside the single A4 page.  The row height and fonts
+    # reduce automatically when a report has many subjects.
     row_height = min(
         20,
         max(
-            13,
+            9,
             available_height / (subject_count + 1)
         )
     )
 
-    header_font = 8 if row_height < 16 else 8.5
-    body_font = 7.5 if row_height < 16 else 8.5
+    if row_height < 11:
+        header_font = 6.5
+        body_font = 6.2
+    elif row_height < 13:
+        header_font = 7
+        body_font = 6.8
+    elif row_height < 16:
+        header_font = 8
+        body_font = 7.5
+    else:
+        header_font = 8.5
+        body_font = 8.5
 
     pdf.setFont(
         "Helvetica-Bold",
