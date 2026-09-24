@@ -4178,6 +4178,132 @@ def classes_subjects():
     st.divider()
 
     # -----------------------------------------------------
+    # SUBJECT MASTER / MULTI-CLASS ALLOTMENT
+    # -----------------------------------------------------
+    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+        with st.expander("📖 Subject Creation & Multi-Class Allotment", expanded=True):
+            st.caption(
+                "Create a subject once, then allot the same subject to multiple classes "
+                "from the dropdown. A subject cannot be duplicated within the same class."
+            )
+
+            master_subject_name = st.text_input(
+                "📖 Subject Name",
+                placeholder="Example: Mathematics",
+                key=f"master_subject_name_{school_id}"
+            )
+            mc1, mc2 = st.columns(2)
+            with mc1:
+                master_subject_code = st.text_input(
+                    "Subject Code",
+                    placeholder="Example: MATH",
+                    key=f"master_subject_code_{school_id}"
+                )
+            with mc2:
+                master_max_marks = st.number_input(
+                    "Maximum Marks",
+                    min_value=1.0,
+                    value=100.0,
+                    key=f"master_subject_max_{school_id}"
+                )
+
+            master_passing_marks = st.number_input(
+                "Passing Marks",
+                min_value=0.0,
+                value=33.0,
+                key=f"master_subject_pass_{school_id}"
+            )
+
+            master_class_search = st.text_input(
+                "🔎 Search Classes",
+                placeholder="Type class, section or academic year...",
+                key=f"master_subject_class_search_{school_id}"
+            ).strip().lower()
+
+            master_class_options = {}
+            for cl in class_data:
+                label = (
+                    f"{cl.get('class_name') or '-'} | "
+                    f"Section: {cl.get('section') or '-'} | "
+                    f"{cl.get('academic_year') or '-'}"
+                )
+                if not master_class_search or master_class_search in label.lower():
+                    master_class_options[label] = cl
+
+            selected_master_classes = st.multiselect(
+                "🏫 Allot Subject to Class(es)",
+                list(master_class_options.keys()),
+                placeholder="Select one or more classes",
+                key=f"master_subject_classes_{school_id}"
+            )
+
+            if st.button(
+                "➕ Create / Allot Subject",
+                type="primary",
+                use_container_width=True,
+                key=f"create_allot_subject_{school_id}"
+            ):
+                subject_name = master_subject_name.strip()
+                subject_code = master_subject_code.strip()
+
+                if not subject_name:
+                    st.warning("Subject name is required.")
+                elif master_passing_marks > master_max_marks:
+                    st.error("Passing marks cannot exceed maximum marks.")
+                elif not selected_master_classes:
+                    st.warning("Select at least one class.")
+                else:
+                    try:
+                        added_classes = []
+                        skipped_classes = []
+
+                        for class_label in selected_master_classes:
+                            cl = master_class_options[class_label]
+                            existing = (
+                                sb.table("subjects")
+                                .select("id")
+                                .eq("school_id", school_id)
+                                .eq("class_id", cl["id"])
+                                .ilike("subject_name", subject_name)
+                                .execute()
+                                .data or []
+                            )
+
+                            if existing:
+                                skipped_classes.append(class_label)
+                                continue
+
+                            sb.table("subjects").insert({
+                                "school_id": school_id,
+                                "class_id": cl["id"],
+                                "name": subject_name,
+                                "subject_name": subject_name,
+                                "code": subject_code,
+                                "max_marks": master_max_marks,
+                                "passing_marks": master_passing_marks,
+                                "active": True
+                            }).execute()
+                            added_classes.append(class_label)
+
+                        if added_classes:
+                            st.success(
+                                f"✅ Subject '{subject_name}' allotted to "
+                                f"{len(added_classes)} class(es)."
+                            )
+                        if skipped_classes:
+                            st.info(
+                                "ℹ️ Already existed in: "
+                                + ", ".join(skipped_classes)
+                            )
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error("Could not create/allot subject.")
+                        st.code(str(e))
+
+    st.divider()
+
+    # -----------------------------------------------------
     # ADMIN / SUPERADMIN CLASS SELECTION
     # -----------------------------------------------------
     # Do not display every class card at once. First select the
