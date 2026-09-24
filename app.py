@@ -4183,36 +4183,118 @@ def classes_subjects():
     if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         with st.expander("📖 Subject Creation & Multi-Class Allotment", expanded=True):
             st.caption(
-                "Create a subject once, then allot the same subject to multiple classes "
-                "from the dropdown. A subject cannot be duplicated within the same class."
+                "Create a subject once, then allot it to one or more classes. "
+                "Already allotted classes are shown and are not duplicated."
             )
 
-            master_subject_name = st.text_input(
-                "📖 Subject Name",
-                placeholder="Example: Mathematics",
-                key=f"master_subject_name_{school_id}"
-            )
-            mc1, mc2 = st.columns(2)
-            with mc1:
-                master_subject_code = st.text_input(
-                    "Subject Code",
-                    placeholder="Example: MATH",
-                    key=f"master_subject_code_{school_id}"
+            # Load one clean subject list for the school.  A subject is identified
+            # by name + code + marks settings, while each class gets its own row.
+            try:
+                all_school_subjects = (
+                    sb.table("subjects")
+                    .select(
+                        "id,school_id,class_id,name,subject_name,code,"
+                        "max_marks,passing_marks,active"
+                    )
+                    .eq("school_id", school_id)
+                    .eq("active", True)
+                    .order("subject_name")
+                    .execute()
+                    .data or []
                 )
-            with mc2:
-                master_max_marks = st.number_input(
-                    "Maximum Marks",
-                    min_value=1.0,
-                    value=100.0,
-                    key=f"master_subject_max_{school_id}"
+            except Exception:
+                all_school_subjects = []
+
+            unique_subjects = {}
+            for sub in all_school_subjects:
+                sname = str(
+                    sub.get("subject_name") or sub.get("name") or ""
+                ).strip()
+                scode = str(sub.get("code") or "").strip()
+                if not sname:
+                    continue
+
+                subject_key = (
+                    sname.lower(),
+                    scode.lower(),
+                    str(sub.get("max_marks") or ""),
+                    str(sub.get("passing_marks") or "")
+                )
+                if subject_key not in unique_subjects:
+                    unique_subjects[subject_key] = sub
+
+            existing_subject_options = {
+                (
+                    f"{str(s.get('subject_name') or s.get('name') or '').strip()} "
+                    f"| Code: {str(s.get('code') or '').strip() or '-'} "
+                    f"| Max: {s.get('max_marks') or '-'} "
+                    f"| Pass: {s.get('passing_marks') or '-'}"
+                ): s
+                for s in unique_subjects.values()
+            }
+
+            subject_choice_labels = [
+                "➕ Create New Subject"
+            ] + list(existing_subject_options.keys())
+
+            selected_subject_choice = st.selectbox(
+                "📖 Subject",
+                subject_choice_labels,
+                key=f"subject_allot_choice_{school_id}"
+            )
+
+            selected_master_subject = None
+            if selected_subject_choice != "➕ Create New Subject":
+                selected_master_subject = existing_subject_options[
+                    selected_subject_choice
+                ]
+                master_subject_name = str(
+                    selected_master_subject.get("subject_name")
+                    or selected_master_subject.get("name")
+                    or ""
+                ).strip()
+                master_subject_code = str(
+                    selected_master_subject.get("code") or ""
+                ).strip()
+                master_max_marks = float(
+                    selected_master_subject.get("max_marks") or 100
+                )
+                master_passing_marks = float(
+                    selected_master_subject.get("passing_marks") or 0
                 )
 
-            master_passing_marks = st.number_input(
-                "Passing Marks",
-                min_value=0.0,
-                value=33.0,
-                key=f"master_subject_pass_{school_id}"
-            )
+                st.info(
+                    f"Existing subject selected: **{master_subject_name}**. "
+                    "Choose additional classes below."
+                )
+            else:
+                master_subject_name = st.text_input(
+                    "📖 New Subject Name",
+                    placeholder="Example: Mathematics",
+                    key=f"master_subject_name_{school_id}"
+                ).strip()
+
+                mc1, mc2 = st.columns(2)
+                with mc1:
+                    master_subject_code = st.text_input(
+                        "Subject Code",
+                        placeholder="Example: MATH",
+                        key=f"master_subject_code_{school_id}"
+                    ).strip()
+                with mc2:
+                    master_max_marks = st.number_input(
+                        "Maximum Marks",
+                        min_value=1.0,
+                        value=100.0,
+                        key=f"master_subject_max_{school_id}"
+                    )
+
+                master_passing_marks = st.number_input(
+                    "Passing Marks",
+                    min_value=0.0,
+                    value=33.0,
+                    key=f"master_subject_pass_{school_id}"
+                )
 
             master_class_search = st.text_input(
                 "🔎 Search Classes",
@@ -4220,19 +4302,51 @@ def classes_subjects():
                 key=f"master_subject_class_search_{school_id}"
             ).strip().lower()
 
+            # Show every class exactly once and clearly mark classes where
+            # the selected subject is already allotted.
             master_class_options = {}
+            already_allotted_labels = set()
+
             for cl in class_data:
                 label = (
                     f"{cl.get('class_name') or '-'} | "
                     f"Section: {cl.get('section') or '-'} | "
                     f"{cl.get('academic_year') or '-'}"
                 )
-                if not master_class_search or master_class_search in label.lower():
-                    master_class_options[label] = cl
+                if master_class_search and master_class_search not in label.lower():
+                    continue
+
+                master_class_options[label] = cl
+
+                if selected_master_subject:
+                    already_here = any(
+                        str(x.get("class_id")) == str(cl.get("id"))
+                        and str(
+                            x.get("subject_name") or x.get("name") or ""
+                        ).strip().lower()
+                        == master_subject_name.lower()
+                        and str(x.get("code") or "").strip().lower()
+                        == master_subject_code.lower()
+                        for x in all_school_subjects
+                    )
+                    if already_here:
+                        already_allotted_labels.add(label)
+
+            available_class_options = {
+                label: cl
+                for label, cl in master_class_options.items()
+                if label not in already_allotted_labels
+            }
+
+            if already_allotted_labels:
+                st.caption(
+                    "✅ Already allotted: "
+                    + ", ".join(sorted(already_allotted_labels))
+                )
 
             selected_master_classes = st.multiselect(
-                "🏫 Allot Subject to Class(es)",
-                list(master_class_options.keys()),
+                "🏫 Allot Subject to Additional Class(es)",
+                list(available_class_options.keys()),
                 placeholder="Select one or more classes",
                 key=f"master_subject_classes_{school_id}"
             )
@@ -4243,10 +4357,7 @@ def classes_subjects():
                 use_container_width=True,
                 key=f"create_allot_subject_{school_id}"
             ):
-                subject_name = master_subject_name.strip()
-                subject_code = master_subject_code.strip()
-
-                if not subject_name:
+                if not master_subject_name:
                     st.warning("Subject name is required.")
                 elif master_passing_marks > master_max_marks:
                     st.error("Passing marks cannot exceed maximum marks.")
@@ -4258,10 +4369,13 @@ def classes_subjects():
                         skipped_classes = []
 
                         for class_label in selected_master_classes:
-                            cl = master_class_options[class_label]
+                            cl = available_class_options.get(class_label)
+                            if not cl:
+                                continue
+
                             existing = (
                                 sb.table("subjects")
-                                .select("id,subject_name,code")
+                                .select("id,subject_name,name,code")
                                 .eq("school_id", school_id)
                                 .eq("class_id", cl["id"])
                                 .execute()
@@ -4269,15 +4383,17 @@ def classes_subjects():
                             )
 
                             name_exists = any(
-                                str(x.get("subject_name") or x.get("name") or "").strip().lower()
-                                == subject_name.lower()
+                                str(
+                                    x.get("subject_name") or x.get("name") or ""
+                                ).strip().lower()
+                                == master_subject_name.lower()
                                 for x in existing
                             )
                             code_exists = (
-                                bool(subject_code)
+                                bool(master_subject_code)
                                 and any(
                                     str(x.get("code") or "").strip().lower()
-                                    == subject_code.lower()
+                                    == master_subject_code.lower()
                                     for x in existing
                                 )
                             )
@@ -4289,9 +4405,9 @@ def classes_subjects():
                             sb.table("subjects").insert({
                                 "school_id": school_id,
                                 "class_id": cl["id"],
-                                "name": subject_name,
-                                "subject_name": subject_name,
-                                "code": subject_code,
+                                "name": master_subject_name,
+                                "subject_name": master_subject_name,
+                                "code": master_subject_code,
                                 "max_marks": master_max_marks,
                                 "passing_marks": master_passing_marks,
                                 "active": True
@@ -4300,13 +4416,13 @@ def classes_subjects():
 
                         if added_classes:
                             st.success(
-                                f"✅ Subject '{subject_name}' allotted to "
+                                f"✅ Subject '{master_subject_name}' allotted to "
                                 f"{len(added_classes)} class(es)."
                             )
                         if skipped_classes:
                             st.info(
-                                "ℹ️ Already existed in: "
-                                + ", ".join(skipped_classes)
+                                "ℹ️ Skipped because the subject name/code already "
+                                "exists in: " + ", ".join(skipped_classes)
                             )
                         st.rerun()
 
