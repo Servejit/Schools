@@ -4448,6 +4448,32 @@ def classes_subjects():
 
                 s1, s2, s3 = st.columns([4, 2, 1])
 
+                # Shared Subject Teacher assignments are stored in
+                # teacher_subject_assignments, so this view and the standalone
+                # Teacher Subject Assignments screen always show the same data.
+                assigned_subject_teachers = []
+                try:
+                    assigned_rows = (
+                        sb.table("teacher_subject_assignments")
+                        .select("teacher_id")
+                        .eq("school_id", school_id)
+                        .eq("class_id", class_id)
+                        .eq("subject_id", subject_id)
+                        .execute()
+                        .data or []
+                    )
+                    assigned_teacher_ids = {
+                        str(x.get("teacher_id"))
+                        for x in assigned_rows
+                        if x.get("teacher_id")
+                    }
+                    assigned_subject_teachers = [
+                        t for t in teacher_data
+                        if str(t.get("id")) in assigned_teacher_ids
+                    ]
+                except Exception:
+                    assigned_subject_teachers = []
+
                 with s1:
 
                     st.write(
@@ -4459,6 +4485,17 @@ def classes_subjects():
                         f"| Maximum: {max_marks} "
                         f"| Passing: {passing_marks}"
                     )
+
+                    if assigned_subject_teachers:
+                        teacher_names = [
+                            str(t.get("full_name") or t.get("email") or "Teacher")
+                            for t in assigned_subject_teachers
+                        ]
+                        st.caption(
+                            "👨‍🏫 Subject Teacher: " + ", ".join(teacher_names)
+                        )
+                    else:
+                        st.caption("👨‍🏫 Subject Teacher: Not Assigned")
 
                 with s2:
 
@@ -4529,6 +4566,54 @@ def classes_subjects():
                             key=f"subject_active_{subject_id}"
                         )
 
+                        # Assign one or more Subject Teachers for this exact
+                        # Class + Subject. This uses the same shared table as
+                        # the standalone Teacher Subject Assignments screen.
+                        subject_teacher_labels = {}
+                        for t in teacher_data:
+                            teacher_label = (
+                                f"{t.get('full_name') or 'Teacher'}"
+                                f" — {t.get('email') or ''}"
+                            )
+                            subject_teacher_labels[teacher_label] = t["id"]
+
+                        current_subject_teacher_ids = set()
+                        try:
+                            current_rows = (
+                                sb.table("teacher_subject_assignments")
+                                .select("teacher_id")
+                                .eq("school_id", school_id)
+                                .eq("class_id", class_id)
+                                .eq("subject_id", subject_id)
+                                .execute()
+                                .data or []
+                            )
+                            current_subject_teacher_ids = {
+                                str(x.get("teacher_id"))
+                                for x in current_rows
+                                if x.get("teacher_id")
+                            }
+                        except Exception:
+                            pass
+
+                        current_subject_teacher_labels = [
+                            label
+                            for label, teacher_id in subject_teacher_labels.items()
+                            if str(teacher_id) in current_subject_teacher_ids
+                        ]
+
+                        selected_subject_teacher_labels = st.multiselect(
+                            "👨‍🏫 Subject Teacher(s)",
+                            list(subject_teacher_labels.keys()),
+                            default=current_subject_teacher_labels,
+                            placeholder="Select one or more teachers",
+                            key=f"edit_subject_teachers_{subject_id}"
+                        )
+                        st.caption(
+                            "This is shared with Teacher Subject Assignments. "
+                            "Changes here are reflected there automatically."
+                        )
+
                         b1, b2 = st.columns(2)
 
                         with b1:
@@ -4580,9 +4665,38 @@ def classes_subjects():
                                             .execute()
                                         )
 
+                                        # Update only this Class + Subject's
+                                        # teacher assignments. Other classes,
+                                        # subjects and teachers remain untouched.
+                                        (
+                                            sb.table("teacher_subject_assignments")
+                                            .delete()
+                                            .eq("school_id", school_id)
+                                            .eq("class_id", class_id)
+                                            .eq("subject_id", subject_id)
+                                            .execute()
+                                        )
+
+                                        new_subject_teacher_rows = [
+                                            {
+                                                "school_id": school_id,
+                                                "teacher_id": subject_teacher_labels[label],
+                                                "class_id": class_id,
+                                                "subject_id": subject_id
+                                            }
+                                            for label in selected_subject_teacher_labels
+                                        ]
+
+                                        if new_subject_teacher_rows:
+                                            (
+                                                sb.table("teacher_subject_assignments")
+                                                .insert(new_subject_teacher_rows)
+                                                .execute()
+                                            )
+
                                         mark_saved(save_key)
                                         st.success(
-                                            "Subject updated."
+                                            "Subject and Subject Teacher assignments updated successfully."
                                         )
 
                                         st.session_state[
@@ -4610,6 +4724,15 @@ def classes_subjects():
                                 try:
 
                                     (
+                                        sb.table("teacher_subject_assignments")
+                                        .delete()
+                                        .eq("school_id", school_id)
+                                        .eq("class_id", class_id)
+                                        .eq("subject_id", subject_id)
+                                        .execute()
+                                    )
+
+                                    (
                                         sb.table("subjects")
                                         .delete()
                                         .eq(
@@ -4620,7 +4743,7 @@ def classes_subjects():
                                     )
 
                                     st.success(
-                                        "Subject deleted."
+                                        "Subject and its teacher assignments deleted."
                                     )
 
                                     st.rerun()
