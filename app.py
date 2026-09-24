@@ -2218,24 +2218,86 @@ def exam_assessment_settings():
     for exam in exams:
         exam_id = exam["id"]
         active = exam.get("active", True)
+
         with st.container(border=True):
-            c1, c2 = st.columns([4, 1])
-            with c1:
-                st.write(f"**{exam.get('name', '')}**")
-                st.caption("ACTIVE" if active else "INACTIVE")
-            with c2:
+            st.write(f"**{exam.get('name', '')}**")
+            st.caption("ACTIVE" if active else "INACTIVE")
+
+            edit_col, status_col, delete_col = st.columns([3, 2, 1])
+
+            with edit_col:
+                edit_exam_name = st.text_input(
+                    "Exam / Assessment Name",
+                    value=str(exam.get("name") or ""),
+                    key=f"edit_exam_name_{exam_id}"
+                ).strip()
+
+                if st.button(
+                    "💾 Modify",
+                    key=f"modify_exam_{exam_id}",
+                    use_container_width=True
+                ):
+                    if not edit_exam_name:
+                        st.warning("Exam / Assessment name cannot be empty.")
+                    elif any(
+                        x["id"] != exam_id
+                        and str(x.get("name") or "").strip().lower() == edit_exam_name.lower()
+                        for x in exams
+                    ):
+                        st.warning("This Exam / Assessment already exists.")
+                    else:
+                        try:
+                            (
+                                sb.table("exam_assessments")
+                                .update({"name": edit_exam_name})
+                                .eq("id", exam_id)
+                                .eq("school_id", school_id)
+                                .execute()
+                            )
+                            st.success("Exam / Assessment modified successfully.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error("Could not modify Exam / Assessment.")
+                            st.code(str(e))
+
+            with status_col:
                 if st.button(
                     "Deactivate" if active else "Activate",
-                    key=f"exam_status_{exam_id}"
+                    key=f"exam_status_{exam_id}",
+                    use_container_width=True
                 ):
                     try:
-                        sb.table("exam_assessments").update(
-                            {"active": not active}
-                        ).eq("id", exam_id).execute()
+                        (
+                            sb.table("exam_assessments")
+                            .update({"active": not active})
+                            .eq("id", exam_id)
+                            .eq("school_id", school_id)
+                            .execute()
+                        )
                         st.success("Saved successfully.")
                         st.rerun()
                     except Exception as e:
                         st.error("Could not update Exam / Assessment.")
+                        st.code(str(e))
+
+            with delete_col:
+                if st.button(
+                    "🗑️ Delete",
+                    key=f"delete_exam_{exam_id}",
+                    use_container_width=True
+                ):
+                    try:
+                        (
+                            sb.table("exam_assessments")
+                            .delete()
+                            .eq("id", exam_id)
+                            .eq("school_id", school_id)
+                            .execute()
+                        )
+                        st.success("Exam / Assessment deleted successfully.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Could not delete Exam / Assessment.")
                         st.code(str(e))
 
 
