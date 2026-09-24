@@ -1474,9 +1474,16 @@ def users():
                         st.error("Could not update user status.")
                         st.code(str(e))
 
-                # Only Admin can permanently remove users. SuperAdmin is
-                # already excluded from the list and is additionally protected.
-                if role in ["Admin", "Admin+Teacher"] and user.get("role") != "SuperAdmin":
+                # SuperAdmin can permanently remove users from any school.
+                # Admin/Admin+Teacher can remove non-SuperAdmin users within
+                # their permitted school scope.
+                if (
+                    role == "SuperAdmin"
+                    or (
+                        role in ["Admin", "Admin+Teacher"]
+                        and user.get("role") != "SuperAdmin"
+                    )
+                ):
                     if st.button(
                         "🗑️ Delete User",
                         key=f"delete_user_{user_id}"
