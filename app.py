@@ -419,7 +419,6 @@ def schools():
     st.header("🏫 School Management")
 
     try:
-
         school_data = (
             sb.table("schools")
             .select("*")
@@ -427,13 +426,14 @@ def schools():
             .execute()
             .data or []
         )
-
     except Exception as e:
-
         st.error("Could not load schools.")
         st.code(str(e))
         return
 
+    # -----------------------------------------------------
+    # ADD SCHOOL
+    # -----------------------------------------------------
     with st.expander("➕ Add New School"):
 
         name = st.text_input(
@@ -463,7 +463,6 @@ def schools():
                 return
 
             try:
-
                 existing = (
                     sb.table("schools")
                     .select("id")
@@ -487,69 +486,152 @@ def schools():
                     .execute()
                 )
 
-                st.success("School added successfully.")
+                st.success("✅ School added successfully.")
                 st.rerun()
 
             except Exception as e:
-
                 st.error("Could not add school.")
                 st.code(str(e))
 
     st.divider()
 
+    # -----------------------------------------------------
+    # SCHOOL LIST / ACTIVATE / DEACTIVATE / DELETE
+    # -----------------------------------------------------
     for school in school_data:
 
         school_id = school["id"]
         active = school.get("active", True)
+        delete_confirm_key = f"confirm_delete_school_{school_id}"
 
         with st.container(border=True):
 
-            c1, c2, c3 = st.columns([3, 2, 1])
+            c1, c2, c3, c4 = st.columns([3, 1.5, 1.3, 1.3])
 
             with c1:
-
                 st.markdown(
                     f"### 🏫 {school.get('name', '')}"
                 )
-
                 st.caption(
                     f"Code: {school.get('code', '')}"
                 )
-
                 st.caption(
                     school.get("address") or "No address"
                 )
 
             with c2:
-
                 if active:
                     st.success("ACTIVE")
                 else:
                     st.error("INACTIVE")
 
             with c3:
-
                 if st.button(
                     "Deactivate" if active else "Activate",
-                    key=f"school_status_{school_id}"
+                    key=f"school_status_{school_id}",
+                    use_container_width=True
                 ):
-
                     try:
-
                         (
                             sb.table("schools")
                             .update({
+                                # IMPORTANT: changing active status does
+                                # NOT delete or modify any school data.
                                 "active": not active
                             })
                             .eq("id", school_id)
                             .execute()
                         )
 
+                        if active:
+                            st.success(
+                                "✅ School deactivated successfully. "
+                                "All school data has been preserved."
+                            )
+                        else:
+                            st.success(
+                                "✅ School activated successfully. "
+                                "All previous school data is available."
+                            )
+
                         st.rerun()
 
                     except Exception as e:
-                        st.error(str(e))
+                        st.error("Could not change school status.")
+                        st.code(str(e))
 
+            with c4:
+                if st.button(
+                    "🗑️ Delete",
+                    key=f"school_delete_{school_id}",
+                    use_container_width=True
+                ):
+                    st.session_state[delete_confirm_key] = True
+                    st.rerun()
+
+            # -------------------------------------------------
+            # DELETE CONFIRMATION
+            # -------------------------------------------------
+            if st.session_state.get(delete_confirm_key, False):
+
+                st.warning(
+                    f"⚠️ You are about to permanently delete "
+                    f"**{school.get('name', '')}**. "
+                    "This is different from deactivation. "
+                    "Deactivation preserves school data; deletion is permanent."
+                )
+
+                d1, d2 = st.columns(2)
+
+                with d1:
+                    if st.button(
+                        "⚠️ Yes, Permanently Delete",
+                        type="primary",
+                        use_container_width=True,
+                        key=f"school_confirm_delete_{school_id}"
+                    ):
+                        try:
+                            (
+                                sb.table("schools")
+                                .delete()
+                                .eq("id", school_id)
+                                .execute()
+                            )
+
+                            st.session_state.pop(
+                                delete_confirm_key,
+                                None
+                            )
+
+                            st.success(
+                                "🗑️ School deleted successfully."
+                            )
+                            st.rerun()
+
+                        except Exception as e:
+                            st.error(
+                                "Could not delete the school. "
+                                "If the database has related records protected "
+                                "by foreign keys, those relationships must be "
+                                "handled before the school can be permanently deleted."
+                            )
+                            st.code(str(e))
+
+                with d2:
+                    if st.button(
+                        "Cancel",
+                        use_container_width=True,
+                        key=f"school_cancel_delete_{school_id}"
+                    ):
+                        st.session_state.pop(
+                            delete_confirm_key,
+                            None
+                        )
+                        st.rerun()
+
+            # -------------------------------------------------
+            # EDIT SCHOOL
+            # -------------------------------------------------
             with st.expander("✏️ Edit"):
 
                 edit_name = st.text_input(
@@ -572,13 +654,13 @@ def schools():
 
                 save_key = f"school_save_{school_id}"
                 show_save_message(save_key)
+
                 if st.button(
                     "Save",
                     key=save_key,
                 ):
 
                     try:
-
                         duplicate = (
                             sb.table("schools")
                             .select("id")
@@ -606,11 +688,12 @@ def schools():
                         )
 
                         mark_saved(save_key)
-                        st.success("School updated.")
+                        st.success("✅ School updated successfully.")
                         st.rerun()
 
                     except Exception as e:
-                        st.error(str(e))
+                        st.error("Could not update school.")
+                        st.code(str(e))
 
 
 # =========================================================
