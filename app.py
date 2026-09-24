@@ -14486,18 +14486,24 @@ def dashboard():
                 if x.get("id")
             ]
 
-            if active_school_ids:
-                user_count = (
-                    sb.table("profiles")
-                    .select("id", count="exact")
-                    .neq("role", "SuperAdmin")
-                    .in_("school_id", active_school_ids)
-                    .execute()
-                    .count
-                    or 0
-                )
-            else:
-                user_count = 0
+            # Count users only when their school currently exists.
+            # Fetch the profile rows and filter in Python so the dashboard
+            # can never show orphaned users from a deleted school.
+            profile_rows = (
+                sb.table("profiles")
+                .select("id,role,school_id")
+                .neq("role", "SuperAdmin")
+                .execute()
+                .data or []
+            )
+
+            active_school_id_set = set(active_school_ids)
+
+            user_count = sum(
+                1
+                for row in profile_rows
+                if str(row.get("school_id") or "") in active_school_id_set
+            )
 
             student_count = (
                 sb.table("students")
