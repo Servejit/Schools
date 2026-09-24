@@ -6582,6 +6582,27 @@ def get_template_config(template):
     return {}
 
 
+def template_show_school_name(template_or_config):
+    """Return a real boolean for the Report Card school-name setting.
+
+    Handles old/new config values safely, including strings such as
+    "false", "off", "no" and "0".  This prevents bool("false") from
+    incorrectly turning the setting back ON.
+    """
+    config = (
+        template_or_config
+        if isinstance(template_or_config, dict)
+        and any(k in template_or_config for k in ["show_school_name", "config_json"])
+        else {}
+    )
+    if "config_json" in config:
+        config = get_template_config(config)
+    value = config.get("show_school_name", True)
+    if isinstance(value, str):
+        return value.strip().lower() not in {"false", "off", "no", "0", "disabled", "hide", "hidden"}
+    return value is not False
+
+
 def grade_from_percentage(percentage):
     try:
         p = float(percentage)
@@ -12638,7 +12659,7 @@ def parent_report_cards_view(school_id, parent_user_id):
                 present_days=present_days,
                 school_logo_path=logo_path,
                 school_logo_size=logo_size,
-                show_school_name=bool(get_template_config(selected_template).get("show_school_name", True))
+                show_school_name=template_show_school_name(selected_template)
             )
 
             st.success("✅ Report card generated successfully.")
