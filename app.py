@@ -10054,9 +10054,13 @@ def report_cards():
 
     st.header("📄 Report Card Generator")
 
-    role = st.session_state.profile.get("role")
+    # Use the currently selected working mode. This is critical for
+    # Admin+Teacher: Admin Mode has school-wide access, while Teacher Mode
+    # must obey the same Class Teacher restrictions as a normal Teacher.
+    raw_role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
 
-    if role not in [
+    if raw_role not in [
         "SuperAdmin",
         "Admin",
         "Admin+Teacher",
