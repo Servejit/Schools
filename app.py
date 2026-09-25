@@ -16390,16 +16390,14 @@ def dashboard():
                                 }),
                             }]
                             template_bytes = None
-                        if report_templates:
+
                         selected_template = report_templates[0]
                         template_path = (
                             selected_template.get("file_path")
                             or selected_template.get("storage_path")
                         )
 
-                        if not template_path:
-                            st.info("The Report Card template is not configured yet.")
-                        else:
+                        if template_path:
                             try:
                                 template_bytes = (
                                     sb.storage
@@ -16407,82 +16405,83 @@ def dashboard():
                                     .download(template_path)
                                 )
                             except Exception:
+                                # If an uploaded template cannot be loaded,
+                                # fall back to the clean white A4 report page.
                                 template_bytes = None
+                        else:
+                            template_bytes = None
 
-                            if not template_bytes:
-                                st.info("The Report Card template could not be loaded.")
-                            else:
-                                subject_data = (
-                                    sb.table("subjects")
-                                    .select(
-                                        "id,school_id,class_id,name,subject_name,"
-                                        "code,max_marks,passing_marks,active"
-                                    )
-                                    .eq("school_id", school_id)
-                                    .eq("active", True)
-                                    .order("subject_name")
-                                    .execute()
-                                    .data or []
+                            subject_data = (
+                                sb.table("subjects")
+                                .select(
+                                    "id,school_id,class_id,name,subject_name,"
+                                    "code,max_marks,passing_marks,active"
                                 )
+                                .eq("school_id", school_id)
+                                .eq("active", True)
+                                .order("subject_name")
+                                .execute()
+                                .data or []
+                            )
 
-                                marks_rows = (
-                                    sb.table("marks")
-                                    .select(
-                                        "id,student_id,subject_id,exam_name,"
-                                        "marks,max_marks,class_id"
-                                    )
-                                    .eq("school_id", school_id)
-                                    .eq("student_id", selected_child["id"])
-                                    .eq("exam_name", exam_name)
-                                    .execute()
-                                    .data or []
+                            marks_rows = (
+                                sb.table("marks")
+                                .select(
+                                    "id,student_id,subject_id,exam_name,"
+                                    "marks,max_marks,class_id"
                                 )
+                                .eq("school_id", school_id)
+                                .eq("student_id", selected_child["id"])
+                                .eq("exam_name", exam_name)
+                                .execute()
+                                .data or []
+                            )
 
-                                marks_by_subject = {
-                                    str(x.get("subject_id")): x
-                                    for x in marks_rows
-                                }
-                                marked_class_ids = {
-                                    str(x.get("class_id"))
-                                    for x in marks_rows
-                                    if x.get("class_id") is not None
-                                }
+                            marks_by_subject = {
+                                str(x.get("subject_id")): x
+                                for x in marks_rows
+                            }
+                            marked_class_ids = {
+                                str(x.get("class_id"))
+                                for x in marks_rows
+                                if x.get("class_id") is not None
+                            }
 
-                                child_marks = []
-                                for subject in subject_data:
-                                    sid = str(subject.get("id"))
-                                    if marked_class_ids:
-                                        if str(subject.get("class_id")) not in marked_class_ids:
-                                            continue
-                                    elif sid not in marks_by_subject:
+                            child_marks = []
+                            for subject in subject_data:
+                                sid = str(subject.get("id"))
+                                if marked_class_ids:
+                                    if str(subject.get("class_id")) not in marked_class_ids:
                                         continue
+                                elif sid not in marks_by_subject:
+                                    continue
 
-                                    row = marks_by_subject.get(sid)
-                                    combined = dict(row) if row else {
-                                        "id": None,
-                                        "student_id": selected_child["id"],
-                                        "subject_id": subject.get("id"),
-                                        "exam_name": exam_name,
-                                        "marks": None,
-                                        "max_marks": subject.get("max_marks"),
-                                        "class_id": subject.get("class_id")
-                                    }
-                                    combined["subject_name"] = (
-                                        subject.get("subject_name")
-                                        or subject.get("name")
-                                        or "Subject"
+                                row = marks_by_subject.get(sid)
+                                combined = dict(row) if row else {
+                                    "id": None,
+                                    "student_id": selected_child["id"],
+                                    "subject_id": subject.get("id"),
+                                    "exam_name": exam_name,
+                                    "marks": None,
+                                    "max_marks": subject.get("max_marks"),
+                                    "class_id": subject.get("class_id")
+                                }
+                                combined["subject_name"] = (
+                                    subject.get("subject_name")
+                                    or subject.get("name")
+                                    or "Subject"
+                                )
+                                combined["passing_marks"] = (
+                                    subject.get("passing_marks")                                            if subject.get("passing_marks") is not None
+                                    else 33
+                                )
+                                if combined.get("max_marks") is None:
+                                    combined["max_marks"] = (
+                                        subject.get("max_marks")
+                                        if subject.get("max_marks") is not None
+                                        else 100
                                     )
-                                    combined["passing_marks"] = (
-                                        subject.get("passing_marks")                                            if subject.get("passing_marks") is not None
-                                        else 33
-                                    )
-                                    if combined.get("max_marks") is None:
-                                        combined["max_marks"] = (
-                                            subject.get("max_marks")
-                                            if subject.get("max_marks") is not None
-                                            else 100
-                                        )
-                                    child_marks.append(combined)
+                                child_marks.append(combined)
 
                                 if not child_marks:
                                     st.info(
