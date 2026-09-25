@@ -9562,10 +9562,10 @@ def create_report_overlay(
         photo_w = 75
         photo_h = 95
 
-        info_y = height - 105
+        info_y = height - 155
 
         table_x = 45
-        table_y = height - 280
+        table_y = height - 330
         table_width = width - 90
 
         # Move lower report content upward by about 2 spaces.
@@ -9584,10 +9584,10 @@ def create_report_overlay(
         photo_w = 85
         photo_h = 105
 
-        info_y = height - 95
+        info_y = height - 145
 
         table_x = 45
-        table_y = height - 220
+        table_y = height - 270
         table_width = width - 90
 
         # Move lower report content upward by about 2 spaces.
