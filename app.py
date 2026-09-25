@@ -9561,8 +9561,8 @@ def create_report_overlay(
     if portrait:
 
         # Keep the marks table away from both page borders.
-        left = 75
-        right = width - 75
+        left = 90
+        right = width - 90
 
         photo_x = width - 125
         photo_y = height - 205
@@ -9584,8 +9584,8 @@ def create_report_overlay(
     else:
 
         # Keep the marks table away from both page borders.
-        left = 60
-        right = width - 60
+        left = 90
+        right = width - 90
 
         photo_x = width - 145
         photo_y = height - 175
@@ -10213,12 +10213,13 @@ def create_report_overlay(
     # Remarks
     # -----------------------------------------------------
 
-    # Align Remarks and Teacher Signature to the first marks-table column.
+    # Keep Remarks fully inside the same Subject column as Teacher Signature.
     remarks_x = table_x
-    remarks_width = max(140, table_width * 0.28)
+    remarks_width = subject_col
+    teacher_signature_x = table_x + subject_col / 2
 
     pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(remarks_x, remarks_y + 35, "Remarks:")
+    pdf.drawCentredString(teacher_signature_x, remarks_y + 35, "Remarks:")
 
     pdf.setFont("Helvetica", 9)
     draw_wrapped_text(
@@ -10241,8 +10242,7 @@ def create_report_overlay(
         10
     )
 
-    # Teacher Signature centered within the same left-side table column.
-    teacher_signature_x = table_x + subject_col / 2
+    # Teacher Signature centered in the same Subject-column alignment as Remarks.
 
     pdf.drawCentredString(
         teacher_signature_x,
@@ -10250,8 +10250,8 @@ def create_report_overlay(
         "Teacher Signature"
     )
 
-    # Principal Signature centered within the right-side table column.
-    principal_signature_x = table_x + table_width * 0.84
+    # Principal Signature centered in the Grade column of the marks table.
+    principal_signature_x = table_x + table_width * 0.92
 
     pdf.drawCentredString(
         principal_signature_x,
