@@ -5,6 +5,7 @@ import pandas as pd
 import uuid
 import json
 import io
+import base64
 import zipfile
 import fitz
 from openpyxl import Workbook
@@ -6995,6 +6996,12 @@ def download_storage_file(path):
         return None
 
     path = str(path).strip()
+
+    if path.startswith("data:") and "," in path:
+        try:
+            return base64.b64decode(path.split(",", 1)[1])
+        except Exception:
+            return None
 
     if path.startswith("http://") or path.startswith("https://"):
         try:
