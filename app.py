@@ -10133,7 +10133,7 @@ def create_report_overlay(
                 # The saved slider value can make it smaller or larger.
                 logo_size = max(
                     30,
-                    min(80, int(school_logo_size or 52))
+                    min(80, int(school_logo_size or 52) + 2)
                 )
 
                 logo_image.thumbnail(
@@ -10160,7 +10160,7 @@ def create_report_overlay(
                 logo_box_h = logo_size
 
                 # Move the logo 2 spaces down.
-                logo_top_y = height - 42
+                logo_top_y = height - 36
                 logo_box_y = logo_top_y - logo_box_h
 
                 pdf.setStrokeColorRGB(
