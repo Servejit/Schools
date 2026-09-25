@@ -7725,13 +7725,20 @@ def make_report_card_pdf(
         page_size=template_page_size,
         show_school_name=show_school_name
     )
+    # A Report Card template is optional. When no template is uploaded,
+    # create_report_overlay() is already a clean white A4 page, so return it
+    # directly. It can be printed on any normal A4 paper in the printer.
+    if not template_bytes:
+        return overlay_bytes
+
     overlay_doc = fitz.open(
         stream=overlay_bytes,
         filetype="pdf"
     )
 
     # -----------------------------------------------------
-    # PDF template    # -----------------------------------------------------
+    # PDF template
+    # -----------------------------------------------------
 
     if file_type.lower() == "pdf":
 
@@ -11577,19 +11584,28 @@ def report_cards():
             report_templates.append(template)
 
     if not report_templates:
-
-        st.warning(
-            "No ACTIVE Report Card template found."
-        )
-
-        st.info(
-            "Go to 🖨️ Print Templates, upload a "
-            "Report Card template and keep it ACTIVE."
-        )
-
-        return
+        # Built-in white A4 Report Card. Uploading a template remains optional.
+        report_templates = [{
+            "id": "__default_report_card__",
+            "name": "Default White A4 Report Card",
+            "template_name": "Default White A4 Report Card",
+            "page_size": "A4",
+            "orientation": "Portrait",
+            "storage_path": None,
+            "file_path": None,
+            "file_type": "pdf",
+            "config_json": json.dumps({
+                "template_type": "Report Card",
+                "show_school_name": True
+            }),
+            "active": True
+        }]
 
     template_map = {}
+    template_uploaded = any(
+        str(x.get("id")) != "__default_report_card__"
+        for x in report_templates
+    )
 
     for template in report_templates:
 
@@ -11622,15 +11638,17 @@ def report_cards():
         selected_template_label = next(iter(template_map.keys()))
         selected_template = template_map[selected_template_label]
 
-    current_logo_path = school_logo_from_template(
-        selected_template
+    current_logo_path = (
+        school_logo_from_template(selected_template)
+        if template_uploaded else None
     )
 
-    logo_size = school_logo_size_from_template(
-        selected_template
+    logo_size = (
+        school_logo_size_from_template(selected_template)
+        if template_uploaded else 52
     )
 
-    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+    if template_uploaded and role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         with st.expander(
             "🏫 School Logo (Left Side)",
             expanded=False
@@ -11857,33 +11875,24 @@ def report_cards():
     )
 
     if not template_path:
-
-        st.error(
-            "Selected template has no storage path."
-        )
-
-        return
-
-    # -----------------------------------------------------
-    # DOWNLOAD TEMPLATE
-    # -----------------------------------------------------
-
-    try:
-
-        template_bytes = (
-            sb.storage
-            .from_("school-assets")
-            .download(template_path)
-        )
-
-    except Exception as e:
-
-        st.error(
-            "Could not download the selected template."
-        )
-
-        st.code(str(e))
-        return
+        # Default white A4 page when no template was uploaded.
+        template_bytes = None
+    else:
+        # -----------------------------------------------------
+        # DOWNLOAD TEMPLATE
+        # -----------------------------------------------------
+        try:
+            template_bytes = (
+                sb.storage
+                .from_("school-assets")
+                .download(template_path)
+            )
+        except Exception as e:
+            st.error(
+                "Could not download the selected template."
+            )
+            st.code(str(e))
+            return
 
     if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         st.success(
@@ -12643,19 +12652,26 @@ def parent_report_cards_view(school_id, parent_user_id):
         return
 
     if not report_templates:
-        st.warning("No active Report Card template is available.")
-        return
+        report_templates = [{
+            "id": "__default_report_card__",
+            "template_name": "Default White A4 Report Card",
+            "orientation": "Portrait",
+            "file_type": "pdf",
+            "config_json": json.dumps({
+                "template_type": "Report Card",
+                "show_school_name": True
+            }),
+        }]
 
     template = report_templates[0]
     template_path = template.get("storage_path") or template.get("file_path")
     if not template_path:
-        st.warning("The active Report Card template has no storage path.")
-        return
-
-    try:
-        template_bytes = sb.storage.from_("school-assets").download(
-            template_path
-        )
+        template_bytes = None
+    else:
+        try:
+            template_bytes = sb.storage.from_("school-assets").download(
+                template_path
+            )
     except Exception as e:
         st.error("Could not load the Report Card template.")
         st.code(str(e))
@@ -12882,8 +12898,16 @@ def student_report_card_view(school_id, student_id):
         report_templates = []
 
     if not report_templates:
-        st.info("No active Report Card template is available.")
-        return
+        report_templates = [{
+            "id": "__default_report_card__",
+            "template_name": "Default White A4 Report Card",
+            "orientation": "Portrait",
+            "file_type": "pdf",
+            "config_json": json.dumps({
+                "template_type": "Report Card",
+                "show_school_name": True
+            }),
+        }]
 
     selected_template = report_templates[0]
     template_path = (
@@ -12891,19 +12915,18 @@ def student_report_card_view(school_id, student_id):
         or selected_template.get("storage_path")
     )
     if not template_path:
-        st.info("The Report Card template is not configured yet.")
-        return
-
-    try:
-        template_bytes = (
-            sb.storage.from_("school-assets").download(template_path)
-        )
-    except Exception:
         template_bytes = None
+    else:
+        try:
+            template_bytes = (
+                sb.storage.from_("school-assets").download(template_path)
+            )
+        except Exception:
+            template_bytes = None
 
-    if not template_bytes:
-        st.info("The Report Card template could not be loaded.")
-        return
+        if not template_bytes:
+            st.info("The Report Card template could not be loaded.")
+            return
 
     try:
         school_info = (
@@ -16356,164 +16379,174 @@ def dashboard():
                             report_templates = []
 
                         if not report_templates:
-                            st.info("No active Report Card template is available.")
+                            report_templates = [{
+                                "id": "__default_report_card__",
+                                "template_name": "Default White A4 Report Card",
+                                "orientation": "Portrait",
+                                "file_type": "pdf",
+                                "config_json": json.dumps({
+                                    "template_type": "Report Card",
+                                    "show_school_name": True
+                                }),
+                            }]
+                            template_bytes = None
+                        if report_templates:
+                        selected_template = report_templates[0]
+                        template_path = (
+                            selected_template.get("file_path")
+                            or selected_template.get("storage_path")
+                        )
+
+                        if not template_path:
+                            st.info("The Report Card template is not configured yet.")
                         else:
-                            selected_template = report_templates[0]
-                            template_path = (
-                                selected_template.get("file_path")
-                                or selected_template.get("storage_path")
-                            )
+                            try:
+                                template_bytes = (
+                                    sb.storage
+                                    .from_("school-assets")
+                                    .download(template_path)
+                                )
+                            except Exception:
+                                template_bytes = None
 
-                            if not template_path:
-                                st.info("The Report Card template is not configured yet.")
+                            if not template_bytes:
+                                st.info("The Report Card template could not be loaded.")
                             else:
-                                try:
-                                    template_bytes = (
-                                        sb.storage
-                                        .from_("school-assets")
-                                        .download(template_path)
+                                subject_data = (
+                                    sb.table("subjects")
+                                    .select(
+                                        "id,school_id,class_id,name,subject_name,"
+                                        "code,max_marks,passing_marks,active"
                                     )
-                                except Exception:
-                                    template_bytes = None
+                                    .eq("school_id", school_id)
+                                    .eq("active", True)
+                                    .order("subject_name")
+                                    .execute()
+                                    .data or []
+                                )
 
-                                if not template_bytes:
-                                    st.info("The Report Card template could not be loaded.")
-                                else:
-                                    subject_data = (
-                                        sb.table("subjects")
-                                        .select(
-                                            "id,school_id,class_id,name,subject_name,"
-                                            "code,max_marks,passing_marks,active"
-                                        )
-                                        .eq("school_id", school_id)
-                                        .eq("active", True)
-                                        .order("subject_name")
-                                        .execute()
-                                        .data or []
+                                marks_rows = (
+                                    sb.table("marks")
+                                    .select(
+                                        "id,student_id,subject_id,exam_name,"
+                                        "marks,max_marks,class_id"
                                     )
+                                    .eq("school_id", school_id)
+                                    .eq("student_id", selected_child["id"])
+                                    .eq("exam_name", exam_name)
+                                    .execute()
+                                    .data or []
+                                )
 
-                                    marks_rows = (
-                                        sb.table("marks")
-                                        .select(
-                                            "id,student_id,subject_id,exam_name,"
-                                            "marks,max_marks,class_id"
-                                        )
-                                        .eq("school_id", school_id)
-                                        .eq("student_id", selected_child["id"])
-                                        .eq("exam_name", exam_name)
-                                        .execute()
-                                        .data or []
-                                    )
+                                marks_by_subject = {
+                                    str(x.get("subject_id")): x
+                                    for x in marks_rows
+                                }
+                                marked_class_ids = {
+                                    str(x.get("class_id"))
+                                    for x in marks_rows
+                                    if x.get("class_id") is not None
+                                }
 
-                                    marks_by_subject = {
-                                        str(x.get("subject_id")): x
-                                        for x in marks_rows
-                                    }
-                                    marked_class_ids = {
-                                        str(x.get("class_id"))
-                                        for x in marks_rows
-                                        if x.get("class_id") is not None
-                                    }
-
-                                    child_marks = []
-                                    for subject in subject_data:
-                                        sid = str(subject.get("id"))
-                                        if marked_class_ids:
-                                            if str(subject.get("class_id")) not in marked_class_ids:
-                                                continue
-                                        elif sid not in marks_by_subject:
+                                child_marks = []
+                                for subject in subject_data:
+                                    sid = str(subject.get("id"))
+                                    if marked_class_ids:
+                                        if str(subject.get("class_id")) not in marked_class_ids:
                                             continue
+                                    elif sid not in marks_by_subject:
+                                        continue
 
-                                        row = marks_by_subject.get(sid)
-                                        combined = dict(row) if row else {
-                                            "id": None,
-                                            "student_id": selected_child["id"],
-                                            "subject_id": subject.get("id"),
-                                            "exam_name": exam_name,
-                                            "marks": None,
-                                            "max_marks": subject.get("max_marks"),
-                                            "class_id": subject.get("class_id")
-                                        }
-                                        combined["subject_name"] = (
-                                            subject.get("subject_name")
-                                            or subject.get("name")
-                                            or "Subject"
+                                    row = marks_by_subject.get(sid)
+                                    combined = dict(row) if row else {
+                                        "id": None,
+                                        "student_id": selected_child["id"],
+                                        "subject_id": subject.get("id"),
+                                        "exam_name": exam_name,
+                                        "marks": None,
+                                        "max_marks": subject.get("max_marks"),
+                                        "class_id": subject.get("class_id")
+                                    }
+                                    combined["subject_name"] = (
+                                        subject.get("subject_name")
+                                        or subject.get("name")
+                                        or "Subject"
+                                    )
+                                    combined["passing_marks"] = (
+                                        subject.get("passing_marks")                                            if subject.get("passing_marks") is not None
+                                        else 33
+                                    )
+                                    if combined.get("max_marks") is None:
+                                        combined["max_marks"] = (
+                                            subject.get("max_marks")
+                                            if subject.get("max_marks") is not None
+                                            else 100
                                         )
-                                        combined["passing_marks"] = (
-                                            subject.get("passing_marks")                                            if subject.get("passing_marks") is not None
-                                            else 33
-                                        )
-                                        if combined.get("max_marks") is None:
-                                            combined["max_marks"] = (
-                                                subject.get("max_marks")
-                                                if subject.get("max_marks") is not None
-                                                else 100
+                                    child_marks.append(combined)
+
+                                if not child_marks:
+                                    st.info(
+                                        f"No marks found for {selected_child.get('name') or 'this child'} "
+                                        f"for {exam_name}."
+                                    )
+                                else:
+                                    school_info = (
+                                        sb.table("schools")
+                                        .select("id,name,code,address,website,contact_number")
+                                        .eq("id", school_id)
+                                        .maybe_single()
+                                        .execute()
+                                        .data
+                                    ) or {}
+
+                                    config = get_template_config(selected_template)
+                                    orientation = selected_template.get("orientation") or "Portrait"
+                                    file_type = (selected_template.get("file_type") or "").lower()
+                                    logo_size = school_logo_size_from_template(selected_template)
+
+                                    if st.button(
+                                        "📄 View / Download Report Card",
+                                        type="primary",
+                                        use_container_width=True,
+                                        key="parent_view_report_card"
+                                    ):
+                                        try:
+                                            pdf_bytes = make_report_card_pdf(
+                                                template_bytes=template_bytes,
+                                                template_type="Report Card",
+                                                orientation=orientation,
+                                                student=selected_child,
+                                                school_info=school_info,
+                                                subjects=subject_data,
+                                                marks_rows=child_marks,
+                                                exam_name=exam_name,
+                                                file_type=file_type,
+                                                total_attendance=attendance_summary(
+                                                    selected_child["id"], school_id
+                                                )[0],
+                                                present_days=attendance_summary(
+                                                    selected_child["id"], school_id
+                                                )[1],
+                                                school_logo_path=school_logo_from_template(
+                                                    selected_template
+                                                ),
+                                                school_logo_size=logo_size,
+                                                show_school_name=bool(get_template_config(selected_template).get("show_school_name", True))
                                             )
-                                        child_marks.append(combined)
 
-                                    if not child_marks:
-                                        st.info(
-                                            f"No marks found for {selected_child.get('name') or 'this child'} "
-                                            f"for {exam_name}."
-                                        )
-                                    else:
-                                        school_info = (
-                                            sb.table("schools")
-                                            .select("id,name,code,address,website,contact_number")
-                                            .eq("id", school_id)
-                                            .maybe_single()
-                                            .execute()
-                                            .data
-                                        ) or {}
-
-                                        config = get_template_config(selected_template)
-                                        orientation = selected_template.get("orientation") or "Portrait"
-                                        file_type = (selected_template.get("file_type") or "").lower()
-                                        logo_size = school_logo_size_from_template(selected_template)
-
-                                        if st.button(
-                                            "📄 View / Download Report Card",
-                                            type="primary",
-                                            use_container_width=True,
-                                            key="parent_view_report_card"
-                                        ):
-                                            try:
-                                                pdf_bytes = make_report_card_pdf(
-                                                    template_bytes=template_bytes,
-                                                    template_type="Report Card",
-                                                    orientation=orientation,
-                                                    student=selected_child,
-                                                    school_info=school_info,
-                                                    subjects=subject_data,
-                                                    marks_rows=child_marks,
-                                                    exam_name=exam_name,
-                                                    file_type=file_type,
-                                                    total_attendance=attendance_summary(
-                                                        selected_child["id"], school_id
-                                                    )[0],
-                                                    present_days=attendance_summary(
-                                                        selected_child["id"], school_id
-                                                    )[1],
-                                                    school_logo_path=school_logo_from_template(
-                                                        selected_template
-                                                    ),
-                                                    school_logo_size=logo_size,
-                                                    show_school_name=bool(get_template_config(selected_template).get("show_school_name", True))
-                                                )
-
-                                                safe_name = (
-                                                    str(selected_child.get("name") or "Student")
-                                                    .replace("/", "_")
-                                                    .replace(chr(92), "_")
-                                                    .replace(" ", "_")
-                                                )
-                                                safe_exam = (
-                                                    str(exam_name)
-                                                    .replace("/", "_")
-                                                    .replace(chr(92), "_")
-                                                    .replace(" ", "_")
-                                                )
-                                                st.success("✅ Report card generated successfully.")
+                                            safe_name = (
+                                                str(selected_child.get("name") or "Student")
+                                                .replace("/", "_")
+                                                .replace(chr(92), "_")
+                                                .replace(" ", "_")
+                                            )
+                                            safe_exam = (
+                                                str(exam_name)
+                                                .replace("/", "_")
+                                                .replace(chr(92), "_")
+                                                .replace(" ", "_")
+                                            )
+                                            st.success("✅ Report card generated successfully.")
                                                 st.download_button(
                                                     "⬇️ Download Report Card PDF",
                                                     data=pdf_bytes,
