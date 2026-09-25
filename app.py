@@ -9760,7 +9760,7 @@ def create_report_overlay(
     )
 
     # Keep REPORT CARD just a few spaces above the first student-detail line.
-    report_card_y = info_y - 20
+    report_card_y = info_y - 18
 
     pdf.drawCentredString(
         width / 2,
@@ -10269,11 +10269,11 @@ def create_report_overlay(
         10
     )
 
-    # Teacher Signature centered exactly within the Subject column of the table.
+    # Teacher Signature aligned with the starting border of the marks table.
 
-    teacher_signature_x = table_x + (table_width * 0.28) / 2
+    teacher_signature_x = table_x
 
-    pdf.drawCentredString(
+    pdf.drawString(
         teacher_signature_x,
         105,
         "Teacher Signature"
