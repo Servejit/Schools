@@ -9760,7 +9760,7 @@ def create_report_overlay(
     )
 
     # Keep REPORT CARD just a few spaces above the first student-detail line.
-    report_card_y = height - 113
+    report_card_y = height - 123
 
     pdf.drawCentredString(
         width / 2,
