@@ -16376,7 +16376,10 @@ def dashboard():
                         del st.session_state[key]
                     except Exception:
                         pass
-            st.session_state[current_menu_key] = current_menu_value
+            # The current menu value belongs to a Streamlit widget
+            # that has already been instantiated in this run. Do not write
+            # back to its session-state key here, otherwise Streamlit raises
+            # StreamlitWidgetAlreadyInstantiatedError.
         st.session_state["_last_dashboard_menu"] = (current_menu_key, current_menu_value)
 
     profile = st.session_state.profile
