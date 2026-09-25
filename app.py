@@ -16553,15 +16553,15 @@ def dashboard():
                                         .replace(" ", "_")
                                     )
                                     st.success("✅ Report card generated successfully.")
-                                        st.download_button(
-                                            "⬇️ Download Report Card PDF",
-                                            data=pdf_bytes,
-                                            file_name=f"{safe_name}_{safe_exam}_ReportCard.pdf",
-                                            mime="application/pdf",
-                                            type="primary",
-                                            use_container_width=True,
-                                            key="parent_download_report_card"
-                                        )
+                                    st.download_button(
+                                        "⬇️ Download Report Card PDF",
+                                        data=pdf_bytes,
+                                        file_name=f"{safe_name}_{safe_exam}_ReportCard.pdf",
+                                        mime="application/pdf",
+                                        type="primary",
+                                        use_container_width=True,
+                                        key="parent_download_report_card"
+                                    )
                                     except Exception as e:
                                         st.error("Could not generate the Report Card.")
                                         st.code(str(e))
