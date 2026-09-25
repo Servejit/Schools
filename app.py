@@ -7084,6 +7084,7 @@ def school_logo_from_template(template):
     school_id = (
         template.get("school_id")
         or config.get("school_id")
+        or (st.session_state.get("profile") or {}).get("school_id")
     )
     if school_id:
         try:
@@ -11893,7 +11894,10 @@ def report_cards():
             "template_type"
         )
 
-        if template_type == "Report Card":
+        if (
+            template_type == "Report Card"
+            and not config.get("is_default_report_card")
+        ):
             report_templates.append(template)
 
     if not report_templates:
@@ -13209,7 +13213,10 @@ def student_report_card_view(school_id, student_id):
         )
         report_templates = [
             x for x in template_data
-            if get_template_config(x).get("template_type") == "Report Card"
+            if (
+                get_template_config(x).get("template_type") == "Report Card"
+                and not get_template_config(x).get("is_default_report_card")
+            )
         ]
     except Exception:
         report_templates = []
@@ -16691,8 +16698,13 @@ def dashboard():
                             )
                             report_templates = [
                                 x for x in template_data
-                                if get_template_config(x).get("template_type")
-                                == "Report Card"
+                                if (
+                                    get_template_config(x).get("template_type")
+                                    == "Report Card"
+                                    and not get_template_config(x).get(
+                                        "is_default_report_card"
+                                    )
+                                )
                             ]
                         except Exception:
                             report_templates = []
