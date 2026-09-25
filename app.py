@@ -11222,12 +11222,22 @@ def report_cards():
 
     current_logo_path = (
         school_logo_from_template(selected_template)
-        if template_uploaded else None
+        if template_uploaded
+        else (
+            default_config.get("school_logo_path")
+            or default_config.get("logo_path")
+            or default_config.get("school_logo")
+            or default_config.get("logo")
+        )
     )
 
     logo_size = (
         school_logo_size_from_template(selected_template)
-        if template_uploaded else 52
+        if template_uploaded
+        else max(
+            30,
+            min(80, int(default_config.get("school_logo_size", 52) or 52))
+        )
     )
 
     if template_uploaded and role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
