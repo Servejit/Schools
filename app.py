@@ -10151,14 +10151,16 @@ def create_report_overlay(
                 # Place the logo OUTSIDE the left edge of the
                 # marks table so it never overlaps the centered School Name.
                 # Keep a small gap between the logo and the table.
-                # Keep the logo outside the table, but bring it close
-                # to the centered School Name without overlapping it.
-                logo_box_x = max(8, left - logo_size - 4)
+                # Keep the logo clearly outside the table and very close
+                # to its left edge. This makes the position visibly
+                # different while keeping a small non-overlapping gap.
+                logo_box_x = max(8, left - logo_size - 2)
                 logo_box_w = logo_size
                 logo_box_h = logo_size
 
-                # The logo must not extend above the top of the
-                # School Name header area.
+                # Align the TOP of the logo with the top of the
+                # School Name header area. The logo must never rise
+                # above the School Name.
                 logo_top_y = height - 28
                 logo_box_y = logo_top_y - logo_box_h
 
