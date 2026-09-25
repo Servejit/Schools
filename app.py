@@ -9473,6 +9473,855 @@ def build_marks_backup_workbook(school_id):
 
 
 
+def get_template_page_size(template_bytes, file_type, fallback_orientation="Portrait"):
+    """Detect the selected template's actual page size and orientation."""
+
+    try:
+        if (file_type or "").lower() == "pdf":
+            doc = fitz.open(stream=template_bytes, filetype="pdf")
+            if len(doc) == 0:
+                doc.close()
+                return A4, fallback_orientation
+            rect = doc[0].rect
+            page_size = (float(rect.width), float(rect.height))
+            doc.close()
+
+        else:
+            image = Image.open(io.BytesIO(template_bytes))
+            px_w, px_h = image.size
+
+            # Keep image-template output around standard A4 size while
+            # preserving the uploaded template's exact aspect ratio.
+            max_dim = max(float(px_w), float(px_h))
+            scale = 842.0 / max_dim if max_dim else 1.0
+            page_size = (float(px_w) * scale, float(px_h) * scale)
+
+        width, height = page_size
+        detected_orientation = (
+            "Landscape" if width > height else "Portrait"
+        )
+
+        # Uploaded A4 templates are normalized to the standard Report
+        # Card page size. Other templates keep their detected proportions.
+        a4_portrait = A4
+        a4_landscape = landscape(A4)
+        ratio = width / height if height else 0
+        a4_p = a4_portrait[0] / a4_portrait[1]
+        a4_l = a4_landscape[0] / a4_landscape[1]
+
+        if abs(ratio - a4_p) / a4_p <= 0.02:
+            page_size = a4_portrait
+            detected_orientation = "Portrait"
+        elif abs(ratio - a4_l) / a4_l <= 0.02:
+            page_size = a4_landscape
+            detected_orientation = "Landscape"
+
+        return page_size, detected_orientation
+
+    except Exception:
+        return pdf_page_size(fallback_orientation), fallback_orientation
+
+
+def restore_marks_from_backup(uploaded_file, school_id):
+    """Restore marks from a previously generated workbook."""
+    workbook = pd.read_excel(
+        uploaded_file,
+        sheet_name=None,
+        engine="openpyxl"
+    )
+
+    info = workbook.get("Backup_Info")
+    if info is None or info.empty:
+        raise ValueError("This is not a valid School Marks Backup file.")
+
+    info_map = {}
+    for _, row in info.iterrows():
+        if len(row) >= 2:
+            key = str(row.iloc[0]).strip()
+            info_map[key] = row.iloc[1]
+
+    backup_school_id = str(info_map.get("School ID") or "").strip()
+    if backup_school_id and backup_school_id != str(school_id):
+        raise ValueError(
+            "This backup belongs to another school. "
+            "Restore was stopped for safety."
+        )
+
+    students = (
+        sb.table("students")
+        .select("id,school_id")
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+    subjects = (
+        sb.table("subjects")
+        .select("id,school_id,max_marks")
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+    existing = (
+        sb.table("marks")
+        .select(
+            "id,student_id,subject_id,exam_name,marks,max_marks,class_id"
+        )
+        .eq("school_id", school_id)
+        .execute()
+        .data or []
+    )
+
+    valid_students = {str(x["id"]) for x in students}
+    valid_subjects = {str(x["id"]): x for x in subjects}
+    existing_map = {
+        (
+            str(x.get("student_id")),
+            str(x.get("subject_id")),
+            str(x.get("exam_name") or "").strip()
+        ): x
+        for x in existing
+    }
+
+    updates = []
+    inserts = []
+    skipped = []
+    restored = 0
+
+    for sheet_name, df in workbook.items():
+        if sheet_name in {"Backup_Info", "Students", "Subjects"}:
+            continue
+        if df is None or df.empty:
+            continue
+
+        normalized = {
+            str(c).strip().lower(): c
+            for c in df.columns
+        }
+        required = ["student id", "subject id", "marks"]
+        if any(x not in normalized for x in required):
+            skipped.append(
+                f"{sheet_name}: missing required columns."
+            )
+            continue
+
+        for _, row in df.iterrows():
+            student_id = str(row.get(normalized["student id"]) or "").strip()
+            subject_id = str(row.get(normalized["subject id"]) or "").strip()
+            raw_marks = row.get(normalized["marks"])
+
+            exam_col = normalized.get("exam name")
+            class_col = normalized.get("class id")
+            max_col = normalized.get("maximum marks")
+
+            exam_name = (
+                str(row.get(exam_col) or sheet_name).strip()
+                if exam_col else sheet_name
+            )
+
+            if not student_id or not subject_id:
+                continue
+            if student_id not in valid_students:
+                skipped.append(
+                    f"{sheet_name}: unknown Student ID {student_id}."
+                )
+                continue
+            if subject_id not in valid_subjects:
+                skipped.append(
+                    f"{sheet_name}: unknown Subject ID {subject_id}."
+                )
+                continue
+            if raw_marks is None or pd.isna(raw_marks) or str(raw_marks).strip() == "":
+                continue
+
+            try:
+                mark_value = round(float(raw_marks), 2)
+            except Exception:
+                skipped.append(
+                    f"{sheet_name}: invalid marks for {student_id}/{subject_id}."
+                )
+                continue
+
+            subject_info = valid_subjects[subject_id]
+            max_marks = subject_info.get("max_marks")
+            if max_col:
+                try:
+                    if not pd.isna(row.get(max_col)):
+                        max_marks = float(row.get(max_col))
+                except Exception:
+                    pass
+
+            if max_marks is not None and mark_value > float(max_marks):
+                skipped.append(
+                    f"{sheet_name}: {mark_value:.2f} exceeds maximum "
+                    f"{format_mark(float(max_marks))} for {student_id}/{subject_id}."
+                )
+                continue
+            if mark_value < 0:
+                skipped.append(
+                    f"{sheet_name}: negative marks for {student_id}/{subject_id}."
+                )
+                continue
+
+            class_id = None
+            if class_col:
+                value = row.get(class_col)
+                if value is not None and not pd.isna(value):
+                    class_id = str(value).strip() or None
+
+            key = (student_id, subject_id, exam_name)
+            old = existing_map.get(key)
+
+            if old:
+                updates.append({
+                    "id": old["id"],
+                    "marks": mark_value,
+                    "max_marks": max_marks,
+                    "class_id": class_id or old.get("class_id")
+                })
+            else:
+                inserts.append({
+                    "school_id": school_id,
+                    "student_id": student_id,
+                    "subject_id": subject_id,
+                    "exam_name": exam_name,
+                    "marks": mark_value,
+                    "max_marks": max_marks,
+                    "class_id": class_id
+                })
+            restored += 1
+
+    for item in inserts:
+        sb.table("marks").insert(item).execute()
+
+    for item in updates:
+        sb.table("marks").update({
+            "marks": item["marks"],
+            "max_marks": item["max_marks"],
+            "class_id": item["class_id"]
+        }).eq("id", item["id"]).execute()
+
+    return restored, len(inserts), len(updates), skipped
+
+
+def get_school_academic_year(school_id):
+    try:
+        rows = (
+            sb.table("classes")
+            .select("academic_year")
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .order("academic_year", desc=True)
+            .limit(1)
+            .execute()
+            .data or []
+        )
+        if rows and rows[0].get("academic_year"):
+            return str(rows[0]["academic_year"])
+    except Exception:
+        pass
+    return ""
+
+
+def get_exam_result_weights(school_id, academic_year):
+    try:
+        rows = (
+            sb.table("exam_result_weights")
+            .select("exam_id,weight_percent")
+            .eq("school_id", school_id)
+            .eq("academic_year", academic_year)
+            .execute()
+            .data or []
+        )
+        return {
+            str(x.get("exam_id")): float(x.get("weight_percent") or 0)
+            for x in rows
+        }
+    except Exception:
+        return {}
+
+
+def get_google_services():
+    """Return Google Sheets and Drive clients when configured in Streamlit secrets."""
+    if service_account is None or google_build is None:
+        raise RuntimeError(
+            "Google API packages are not installed. Add the Google packages to requirements.txt."
+        )
+
+    raw = st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if not raw:
+        raise RuntimeError(
+            "GOOGLE_SERVICE_ACCOUNT_JSON is not configured in Streamlit Secrets."
+        )
+
+    if isinstance(raw, str):
+        info = json.loads(raw)
+    else:
+        info = dict(raw)
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive.file",
+    ]
+    creds = service_account.Credentials.from_service_account_info(
+        info,
+        scopes=scopes
+    )
+
+    return (
+        google_build("sheets", "v4", credentials=creds),
+        google_build("drive", "v3", credentials=creds)
+    )
+
+
+def _google_drive_download_bytes(drive_service, file_id, mime_type=None):
+    """Download an XLSX or export a Google Sheet as XLSX."""
+    buffer = io.BytesIO()
+    if mime_type:
+        request = drive_service.files().export_media(
+            fileId=file_id,
+            mimeType=mime_type
+        )
+    else:
+        request = drive_service.files().get_media(fileId=file_id)
+
+    downloader = MediaIoBaseDownload(buffer, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def _google_school_name(school_id):
+    row = (
+        sb.table("schools")
+        .select("id,name,code")
+        .eq("id", school_id)
+        .maybe_single()
+        .execute()
+        .data
+    ) or {}
+    return str(row.get("name") or "School").strip()
+
+
+def _share_drive_file(drive_service, file_id, email, role="reader"):
+    try:
+        drive_service.permissions().create(
+            fileId=file_id,
+            body={
+                "type": "user",
+                "role": role,
+                "emailAddress": email
+            },
+            sendNotificationEmail=False
+        ).execute()
+    except Exception:
+        # Existing permission / non-Google account should not stop backup.
+        pass
+
+
+def _google_target_emails(school_id):
+    """Return only users who are allowed to access this school's files."""
+    role = st.session_state.profile.get("role")
+    current_email = str(
+        st.session_state.profile.get("email") or ""
+    ).strip()
+
+    profiles = (
+        sb.table("profiles")
+        .select("email,role,school_id,active")
+        .execute()
+        .data or []
+    )
+
+    emails = set()
+    for profile in profiles:
+        if not bool(profile.get("active", True)):
+            continue
+        email = str(profile.get("email") or "").strip()
+        p_role = profile.get("role")
+        same_school = str(profile.get("school_id")) == str(school_id)
+
+        if not email:
+            continue
+
+        if p_role == "SuperAdmin":
+            emails.add(email)
+        elif same_school and p_role in ["Admin", "Admin+Teacher"]:
+            emails.add(email)
+
+    # Always include the current user when they are an allowed school role.
+    if current_email and role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+        if role == "SuperAdmin" or str(
+            st.session_state.profile.get("school_id")
+        ) == str(school_id):
+            emails.add(current_email)
+
+    return emails
+
+
+def backup_report_cards_excel_to_google(school_id, filename, excel_bytes):
+    """Upload the exact Report Card Excel bytes to Google Drive and share view-only.
+    Older backups are never deleted or replaced.
+    """
+    _, drive_service = get_google_services()
+
+    school_name = _google_school_name(school_id)
+    safe_name = (
+        school_name.replace("'", "")
+        .replace("/", "_")
+        .replace("\\", "_")
+    )
+
+    media = MediaIoBaseUpload(
+        io.BytesIO(excel_bytes),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        resumable=False
+    )
+
+    drive_file = (
+        drive_service.files()
+        .create(
+            body={
+                "name": filename,
+                "description": (
+                    f"Report Card Excel backup for school {school_id}. "
+                    "Permanent backup; created by the school management app."
+                ),
+                "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            },
+            media_body=media,
+            fields="id,name,webViewLink,createdTime"
+        )
+        .execute()
+    )
+
+    # Report Card backups are VIEW-ONLY for SuperAdmins and the
+    # active Admin/Admin+Teacher users of the same school.
+    for email in sorted(_google_target_emails(school_id)):
+        _share_drive_file(
+            drive_service,
+            drive_file.get("id"),
+            email,
+            "reader"
+        )
+
+    return drive_file
+
+
+def sync_school_marks_to_google(school_id):
+    """Create/update a school Google Sheet and dated XLSX backup in Drive."""
+    sheets_service, drive_service = get_google_services()
+
+    school_name = _google_school_name(school_id)
+    safe_name = (
+        school_name.replace("'", "")
+        .replace("/", "_")
+        .replace("\\", "_")
+    )
+
+    spreadsheet_title = f"{safe_name} - Marks Backup"
+    query_name = spreadsheet_title.replace("\\", "\\\\").replace("'", "\\'")
+
+    found = (
+        drive_service.files()
+        .list(
+            q=(
+                f"name = '{query_name}' and "
+                "mimeType = 'application/vnd.google-apps.spreadsheet' and "
+                "trashed = false"
+            ),
+            spaces="drive",
+            fields="files(id,name,webViewLink)",
+            pageSize=10
+        )
+        .execute()
+        .get("files", [])
+    )
+
+    if found:
+        spreadsheet_id = found[0]["id"]
+    else:
+        created = (
+            sheets_service.spreadsheets()
+            .create(
+                body={"properties": {"title": spreadsheet_title}},
+                fields="spreadsheetId,spreadsheetUrl"
+            )
+            .execute()
+        )
+        spreadsheet_id = created["spreadsheetId"]
+
+    backup_bytes = build_marks_backup_workbook(school_id)
+    workbook = pd.read_excel(
+        io.BytesIO(backup_bytes),
+        sheet_name=None,
+        engine="openpyxl"
+    )
+
+    metadata = (
+        sheets_service.spreadsheets()
+        .get(spreadsheetId=spreadsheet_id)
+        .execute()
+    )
+    existing_sheets = {
+        x.get("properties", {}).get("title")
+        for x in metadata.get("sheets", [])
+    }
+
+    requests_body = []
+    for sheet_name in workbook.keys():
+        if sheet_name not in existing_sheets:
+            requests_body.append({
+                "addSheet": {
+                    "properties": {"title": sheet_name[:100]}
+                }
+            })
+
+    if requests_body:
+        sheets_service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": requests_body}
+        ).execute()
+
+    for sheet_name, dataframe in workbook.items():
+        values = [list(dataframe.columns)]
+        for row in dataframe.itertuples(index=False, name=None):
+            clean = []
+            for value in row:
+                if pd.isna(value):
+                    clean.append("")
+                elif isinstance(value, (pd.Timestamp, datetime.datetime, datetime.date)):
+                    clean.append(str(value))
+                else:
+                    clean.append(value)
+            values.append(clean)
+
+        if sheet_name == "Backup_Info":
+            values = [
+                [str(x) if not pd.isna(x) else "" for x in row]
+                for row in dataframe.astype(object).values.tolist()
+            ]
+
+        safe_sheet = sheet_name.replace("'", "''")
+        (
+            sheets_service.spreadsheets()
+            .values()
+            .clear(
+                spreadsheetId=spreadsheet_id,
+                range=f"'{safe_sheet}'"
+            )
+            .execute()
+        )
+        (
+            sheets_service.spreadsheets()
+            .values()
+            .update(
+                spreadsheetId=spreadsheet_id,
+                range=f"'{safe_sheet}'!A1",
+                valueInputOption="RAW",
+                body={"values": values}
+            )
+            .execute()
+        )
+
+    log_name = "Backup_Log"
+    if log_name not in existing_sheets:
+        sheets_service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={
+                "requests": [{
+                    "addSheet": {
+                        "properties": {
+                            "title": log_name
+                        }
+                    }
+                }]
+            }
+        ).execute()
+
+    log_values = [
+        datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        str(st.session_state.profile.get("email") or ""),
+        "Marks backup sync",
+        str(school_id),
+        str(len(workbook)),
+    ]
+    (
+        sheets_service.spreadsheets()
+        .values()
+        .append(
+            spreadsheetId=spreadsheet_id,
+            range="'Backup_Log'!A1",
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": [log_values]}
+        )
+        .execute()
+    )
+
+    backup_stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    xlsx_name = f"{safe_name}_Marks_Backup_{backup_stamp}.xlsx"
+
+    media = MediaIoBaseUpload(
+        io.BytesIO(backup_bytes),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        resumable=False
+    )
+    drive_file = (
+        drive_service.files()
+        .create(
+            body={"name": xlsx_name},
+            media_body=media,
+            fields="id,name,webViewLink"        )
+        .execute()
+    )
+
+    # School Admin/Admin+Teacher = VIEW ONLY.
+    # SuperAdmin = VIEW ONLY across all schools.
+    target_emails = _google_target_emails(school_id)
+    for email in sorted(target_emails):
+        _share_drive_file(drive_service, spreadsheet_id, email, "reader")
+        _share_drive_file(drive_service, drive_file.get("id"), email, "reader")
+
+    return {
+        "spreadsheet_id": spreadsheet_id,
+        "spreadsheet_url": f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit",
+        "xlsx_file_id": drive_file.get("id"),
+        "xlsx_name": xlsx_name
+    }
+
+
+def list_google_school_backups():
+    """List Google Sheets and XLSX backups visible to the current role."""
+    _, drive_service = get_google_services()
+    role = st.session_state.profile.get("role")
+    current_school_id = st.session_state.profile.get("school_id")
+
+    if role == "SuperAdmin":
+        school_rows = (
+            sb.table("schools")
+            .select("id,name,code")
+            .order("name")
+            .execute()
+            .data or []
+        )
+    elif role in ["Admin", "Admin+Teacher"]:
+        school_rows = (
+            sb.table("schools")
+            .select("id,name,code")
+            .eq("id", current_school_id)
+            .execute()
+            .data or []
+        )
+    else:
+        return []
+
+    results = []
+    for school in school_rows:
+        school_id = str(school.get("id"))
+        school_name = str(school.get("name") or "School").strip()
+        safe_name = (
+            school_name.replace("'", "")
+            .replace("/", "_")
+            .replace("\\", "_")
+        )
+        spreadsheet_title = f"{safe_name} - Marks Backup"
+        q_name = spreadsheet_title.replace("\\", "\\\\").replace("'", "\\'")
+
+        spreadsheets = (
+            drive_service.files()
+            .list(
+                q=(
+                    f"name = '{q_name}' and "
+                    "mimeType = 'application/vnd.google-apps.spreadsheet' and "
+                    "trashed = false"
+                ),
+                spaces="drive",
+                fields="files(id,name,webViewLink,modifiedTime)",
+                orderBy="modifiedTime desc",
+                pageSize=10
+            )
+            .execute()
+            .get("files", [])
+        )
+
+        xlsx_files = (
+            drive_service.files()
+            .list(
+                q=(
+                    f"name contains '{safe_name}_Marks_Backup_' and "
+                    "mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' and "
+                    "trashed = false"
+                ),
+                spaces="drive",
+                fields="files(id,name,webViewLink,modifiedTime)",
+                orderBy="modifiedTime desc",
+                pageSize=50
+            )
+            .execute()
+            .get("files", [])
+        )
+
+        report_card_xlsx_files = (
+            drive_service.files()
+            .list(
+                q=(
+                    f"name contains '{safe_name}_Report_Cards_Backup_' and "
+                    "mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' and "
+                    "trashed = false"
+                ),
+                spaces="drive",
+                fields="files(id,name,webViewLink,modifiedTime)",
+                orderBy="modifiedTime desc",
+                pageSize=50
+            )
+            .execute()
+            .get("files", [])
+        )
+
+        results.append({
+            "school_id": school_id,
+            "school_name": school_name,
+            "school_code": school.get("code") or "",
+            "sheet": spreadsheets[0] if spreadsheets else None,
+            "xlsx": xlsx_files,
+            "report_card_xlsx": report_card_xlsx_files
+        })
+
+    return results
+
+
+def google_marks_backup_section(school_id):
+    role = st.session_state.profile.get("role")
+    if role not in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+        return
+
+    st.markdown("### ☁️ Google Sheets / Google Drive Backup")
+    if role == "SuperAdmin":
+        st.caption(
+            "SuperAdmin can view and download Google Excel backups for every school."
+        )
+    else:
+        st.caption(
+            "You can view and download only your own school's Google Excel backups. "
+            "Google files are view-only from the school account."
+        )
+
+    if not st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
+        st.info(
+            "Add GOOGLE_SERVICE_ACCOUNT_JSON to Streamlit Secrets to enable Google Drive."
+        )
+        return
+
+    # Sync only the currently selected school. The created Google files are
+    # immediately shared as VIEW-ONLY with the correct school users and all SuperAdmins.
+    if st.button(
+        "☁️ Sync This School to Google Sheets + Drive",
+        use_container_width=True,
+        key=f"sync_google_marks_{school_id}"
+    ):
+        try:
+            result = sync_school_marks_to_google(school_id)
+            st.success("✅ Google Excel backup updated and shared.")
+            st.markdown(
+                f"[👁️ View Google Sheet]({result['spreadsheet_url']})"
+            )
+        except Exception as e:
+            st.error("Google backup could not be completed.")
+            st.code(str(e))
+
+    try:
+        backup_groups = list_google_school_backups()
+    except Exception as e:
+        st.error("Google Drive files could not be loaded.")
+        st.code(str(e))
+        return
+
+    if not backup_groups:
+        st.info("No Google Excel backup is available yet.")
+        return
+
+    for group in backup_groups:
+        st.markdown(f"#### 🏫 {group['school_name']}")
+        sheet = group.get("sheet")
+        if sheet:
+            sheet_id = sheet.get("id")
+            st.markdown(
+                f"[👁️ View Google Excel]({sheet.get('webViewLink') or ('https://docs.google.com/spreadsheets/d/' + sheet_id + '/edit')})"
+            )
+            try:
+                sheet_bytes = _google_drive_download_bytes(
+                    get_google_services()[1],
+                    sheet_id,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                st.download_button(
+                    "⬇️ Download Current Google Excel",
+                    data=sheet_bytes,
+                    file_name=f"{group['school_name']}_Marks_Backup.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"download_google_sheet_{group['school_id']}"
+                )
+            except Exception as e:
+                st.warning(f"Current Google Excel download unavailable: {e}")
+
+        for file_info in group.get("report_card_xlsx", [])[:20]:
+            file_id = file_info.get("id")
+            st.markdown(
+                f"[📄 View Report Card Backup: {file_info.get('name')}]({file_info.get('webViewLink') or ('https://drive.google.com/file/d/' + file_id + '/view')})"
+            )
+            try:
+                report_bytes = _google_drive_download_bytes(
+                    get_google_services()[1],
+                    file_id
+                )
+                st.download_button(
+                    "⬇️ Download Report Card Backup",
+                    data=report_bytes,
+                    file_name=file_info.get("name") or "Report_Cards_Backup.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"download_google_report_card_xlsx_{file_id}"
+                )
+            except Exception as e:
+                st.warning(f"Report Card backup download unavailable: {e}")
+
+        for file_info in group.get("xlsx", [])[:10]:
+            file_id = file_info.get("id")
+            st.markdown(
+                f"[📁 View Drive XLSX: {file_info.get('name')}]({file_info.get('webViewLink') or ('https://drive.google.com/file/d/' + file_id + '/view')})"
+            )
+            try:
+                xlsx_bytes = _google_drive_download_bytes(
+                    get_google_services()[1],
+                    file_id
+                )
+                st.download_button(
+                    "⬇️ Download dated XLSX",
+                    data=xlsx_bytes,
+                    file_name=file_info.get("name") or "Marks_Backup.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"download_google_xlsx_{file_id}"
+                )
+            except Exception as e:
+                st.warning(f"Download unavailable: {e}")
+
+
+# =========================================================
+# REPORT CARD GENERATOR
+# =========================================================
+
+
+
+# =========================================================
+# REPORT CARD HELPERS
+# =========================================================
+
+# =========================================================
+# REPORT CARD HELPERS
+# =========================================================
+
+
 def marks_backup_and_result_tools(school_id):
     role = st.session_state.profile.get("role")
 
