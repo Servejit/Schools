@@ -7755,25 +7755,42 @@ def create_report_overlay(
                 )
                 img_buffer.seek(0)
 
+                # Draw the photo without adding any white padding.
+                # Keep its natural aspect ratio and center it in the small box.
+                display_w = photo_w
+                display_h = photo_h
+                try:
+                    aspect = image.width / image.height
+                    box_aspect = photo_w / photo_h
+                    if aspect > box_aspect:
+                        display_h = photo_w / aspect
+                    else:
+                        display_w = photo_h * aspect
+                except Exception:
+                    pass
+
+                display_x = photo_x + (photo_w - display_w) / 2
+                display_y = photo_y + (photo_h - display_h) / 2
+
                 pdf.drawImage(
                     ImageReader(img_buffer),
-                    photo_x,
-                    photo_y,
-                    width=photo_w,
-                    height=photo_h,
+                    display_x,
+                    display_y,
+                    width=display_w,
+                    height=display_h,
                     preserveAspectRatio=True,
                     anchor="c",
                     mask="auto"
                 )
 
-                pdf.setStrokeColorRGB(
-                    0.45, 0.45, 0.45
-                )
+                # Only a black border around the actual visible photo.
+                pdf.setStrokeColorRGB(0, 0, 0)
+                pdf.setLineWidth(1)
                 pdf.rect(
-                    photo_x,
-                    photo_y,
-                    photo_w,
-                    photo_h,
+                    display_x,
+                    display_y,
+                    display_w,
+                    display_h,
                     stroke=1,
                     fill=0
                 )
