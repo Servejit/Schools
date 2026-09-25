@@ -9819,7 +9819,8 @@ def create_report_overlay(
     # Align the right-side student-detail column with the marks table.
     # Start the right-side details exactly at the left edge of
     # the Grade column in the marks table.
-    col2_x = table_x + table_width * 0.84
+    # Align the right-side details with the Result column.
+    col2_x = table_x + subject_col + max_col + marks_col
 
     for index, item in enumerate(details):
 
@@ -16518,5 +16519,3 @@ if st.session_state.logged_in:
     # Admin+Teacher theme follows the explicitly selected working mode.
     apply_role_theme()
     dashboard()
-else:
-    login()
