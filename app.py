@@ -7639,7 +7639,7 @@ def create_report_overlay(
 
     # Keep the passport-size photo higher, aligned with the REPORT CARD section.
     # Its LEFT edge matches the Student Name/table LEFT edge.
-    photo_y = report_card_y + 18 - photo_h
+    photo_y = report_card_y + 22 - photo_h
 
     details = [
 
