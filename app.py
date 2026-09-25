@@ -13832,7 +13832,13 @@ def school_academic_status(school_id):
 
             bg = "#FCE4EC" if direction == "Below selected percentage" else "#E8F5E9"
             st.dataframe(
-                df.style.map(lambda _: f"background-color: {bg}"),
+                df.style
+                .format({
+                    "Total Marks": "{:.2f}",
+                    "Maximum Marks": "{:.2f}",
+                    "Percentage": "{:.2f}%"
+                })
+                .map(lambda _: f"background-color: {bg}"),
                 hide_index=True, use_container_width=True
             )
 
