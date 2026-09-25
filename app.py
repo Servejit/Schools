@@ -9647,7 +9647,7 @@ def create_report_overlay(
         pdf.setFont("Helvetica-Bold", name_font)
         pdf.drawCentredString(
             width / 2,
-            height - 48,
+            height - 50,
             str(school_name)
         )
 
@@ -9655,7 +9655,7 @@ def create_report_overlay(
             pdf.setFont("Helvetica", 16)
             pdf.drawCentredString(
                 width / 2,
-                height - 66,
+                height - 68,
                 str(school_address)
             )
 
@@ -9665,8 +9665,8 @@ def create_report_overlay(
         if website_text or contact_text:
             pdf.setFont("Helvetica", 16)
             if website_text and contact_text:
-                pdf.drawString(width / 2 - 175, height - 87, f"Website: {website_text}")
-                pdf.drawString(width / 2 + 35, height - 87, f"Contact: {contact_text}")
+                pdf.drawString(width / 2 - 175, height - 89, f"Website: {website_text}")
+                pdf.drawString(width / 2 + 35, height - 89, f"Contact: {contact_text}")
             elif website_text:
                 pdf.drawCentredString(width / 2, height - 87, f"Website: {website_text}")
             else:
