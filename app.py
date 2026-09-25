@@ -2408,7 +2408,7 @@ def get_selected_school(key_prefix):
 
     profile = st.session_state.profile
 
-    role = profile.get("role")
+    role = get_active_theme_role()
     school_id = profile.get("school_id")
 
     if role == "SuperAdmin":
@@ -14946,7 +14946,7 @@ def show_dashboard_notices(school_id, title="📢 Notices", student_mode=False, 
 
 def class_teacher_notices(profile):
     """Send notices and allow authorized staff to delete old notices."""
-    role = profile.get("role")
+    role = get_active_theme_role()
     school_id = profile.get("school_id")
     teacher_id = st.session_state.user.id
 
