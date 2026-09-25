@@ -10331,13 +10331,20 @@ def make_report_card_pdf(
         school_logo_size=school_logo_size,
         show_school_name=show_school_name
     )
+    # A Report Card template is optional. When no template is uploaded,
+    # create_report_overlay() is already a clean white A4 page, so return it
+    # directly. It can be printed on any normal A4 paper in the printer.
+    if not template_bytes:
+        return overlay_bytes
+
     overlay_doc = fitz.open(
         stream=overlay_bytes,
         filetype="pdf"
     )
 
     # -----------------------------------------------------
-    # PDF template    # -----------------------------------------------------
+    # PDF template
+    # -----------------------------------------------------
 
     if file_type.lower() == "pdf":
 
