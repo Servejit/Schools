@@ -10914,7 +10914,7 @@ def report_cards():
         "SuperAdmin",
         "Admin",
         "Admin+Teacher"
-    ]:
+    ] and (raw_role != "Admin+Teacher" or role == "Admin"):
         st.subheader("⚙️ Report Card Content Settings")
         st.caption(
             "No Report Card print template is uploaded. These settings "
