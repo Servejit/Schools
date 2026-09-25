@@ -16483,81 +16483,81 @@ def dashboard():
                                 )
                             child_marks.append(combined)
 
-                            if not child_marks:
-                                st.info(
-                                    f"No marks found for {selected_child.get('name') or 'this child'} "
-                                    f"for {exam_name}."
-                                )
-                            else:
-                                school_info = (
-                                    sb.table("schools")
-                                    .select("id,name,code,address,website,contact_number")
-                                    .eq("id", school_id)
-                                    .maybe_single()
-                                    .execute()
-                                    .data
-                                ) or {}
+                        if not child_marks:
+                            st.info(
+                                f"No marks found for {selected_child.get('name') or 'this child'} "
+                                f"for {exam_name}."
+                            )
+                        else:
+                            school_info = (
+                                sb.table("schools")
+                                .select("id,name,code,address,website,contact_number")
+                                .eq("id", school_id)
+                                .maybe_single()
+                                .execute()
+                                .data
+                            ) or {}
 
-                                config = get_template_config(selected_template)
-                                orientation = selected_template.get("orientation") or "Portrait"
-                                file_type = (selected_template.get("file_type") or "").lower()
-                                logo_size = school_logo_size_from_template(selected_template)
+                            config = get_template_config(selected_template)
+                            orientation = selected_template.get("orientation") or "Portrait"
+                            file_type = (selected_template.get("file_type") or "").lower()
+                            logo_size = school_logo_size_from_template(selected_template)
 
-                                if st.button(
-                                    "📄 View / Download Report Card",
-                                    type="primary",
-                                    use_container_width=True,
-                                    key="parent_view_report_card"
-                                ):
-                                    try:
-                                        pdf_bytes = make_report_card_pdf(
-                                            template_bytes=template_bytes,
-                                            template_type="Report Card",
-                                            orientation=orientation,
-                                            student=selected_child,
-                                            school_info=school_info,
-                                            subjects=subject_data,
-                                            marks_rows=child_marks,
-                                            exam_name=exam_name,
-                                            file_type=file_type,
-                                            total_attendance=attendance_summary(
-                                                selected_child["id"], school_id
-                                            )[0],
-                                            present_days=attendance_summary(
-                                                selected_child["id"], school_id
-                                            )[1],
-                                            school_logo_path=school_logo_from_template(
-                                                selected_template
-                                            ),
-                                            school_logo_size=logo_size,
-                                            show_school_name=bool(get_template_config(selected_template).get("show_school_name", True))
-                                        )
+                            if st.button(
+                                "📄 View / Download Report Card",
+                                type="primary",
+                                use_container_width=True,
+                                key="parent_view_report_card"
+                            ):
+                                try:
+                                    pdf_bytes = make_report_card_pdf(
+                                        template_bytes=template_bytes,
+                                        template_type="Report Card",
+                                        orientation=orientation,
+                                        student=selected_child,
+                                        school_info=school_info,
+                                        subjects=subject_data,
+                                        marks_rows=child_marks,
+                                        exam_name=exam_name,
+                                        file_type=file_type,
+                                        total_attendance=attendance_summary(
+                                            selected_child["id"], school_id
+                                        )[0],
+                                        present_days=attendance_summary(
+                                            selected_child["id"], school_id
+                                        )[1],
+                                        school_logo_path=school_logo_from_template(
+                                            selected_template
+                                        ),
+                                        school_logo_size=logo_size,
+                                        show_school_name=bool(get_template_config(selected_template).get("show_school_name", True))
+                                    )
 
-                                        safe_name = (
-                                            str(selected_child.get("name") or "Student")
-                                            .replace("/", "_")
-                                            .replace(chr(92), "_")
-                                            .replace(" ", "_")
+                                    safe_name = (
+                                        str(selected_child.get("name") or "Student")
+                                        .replace("/", "_")
+                                        .replace(chr(92), "_")
+                                        .replace(" ", "_")
+                                    )
+                                    safe_exam = (
+                                        str(exam_name)
+                                        .replace("/", "_")
+                                        .replace(chr(92), "_")
+                                        .replace(" ", "_")
+                                    )
+                                    st.success("✅ Report card generated successfully.")
+                                        st.download_button(
+                                            "⬇️ Download Report Card PDF",
+                                            data=pdf_bytes,
+                                            file_name=f"{safe_name}_{safe_exam}_ReportCard.pdf",
+                                            mime="application/pdf",
+                                            type="primary",
+                                            use_container_width=True,
+                                            key="parent_download_report_card"
                                         )
-                                        safe_exam = (
-                                            str(exam_name)
-                                            .replace("/", "_")
-                                            .replace(chr(92), "_")
-                                            .replace(" ", "_")
-                                        )
-                                        st.success("✅ Report card generated successfully.")
-                                            st.download_button(
-                                                "⬇️ Download Report Card PDF",
-                                                data=pdf_bytes,
-                                                file_name=f"{safe_name}_{safe_exam}_ReportCard.pdf",
-                                                mime="application/pdf",
-                                                type="primary",
-                                                use_container_width=True,
-                                                key="parent_download_report_card"
-                                            )
-                                        except Exception as e:
-                                            st.error("Could not generate the Report Card.")
-                                            st.code(str(e))
+                                    except Exception as e:
+                                        st.error("Could not generate the Report Card.")
+                                        st.code(str(e))
 
         elif not school_id:
             st.info("Your Parent account is not linked to a school yet.")
