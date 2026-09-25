@@ -9629,7 +9629,7 @@ def create_report_overlay(
     # OFF = all four hidden.
     if show_school_name:
         # Letterhead-style school header.
-        name_font = 26
+        name_font = 28
         name_max_width = table_width
         try:
             while (
