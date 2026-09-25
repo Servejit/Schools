@@ -9671,7 +9671,7 @@ def create_report_overlay(
         contact_text = str(school_contact).strip()
 
         if website_text or contact_text:
-            pdf.setFont("Helvetica", 16)
+            pdf.setFont("Helvetica", 14)
             if website_text and contact_text:
                 pdf.drawString(width / 2 - 175, height - 93, f"Website: {website_text}")
                 pdf.drawString(width / 2 + 35, height - 93, f"Contact: {contact_text}")
@@ -10269,7 +10269,9 @@ def create_report_overlay(
         10
     )
 
-    # Teacher Signature centered in the same Subject-column alignment as Remarks.
+    # Teacher Signature centered exactly within the Subject column of the table.
+
+    teacher_signature_x = table_x + (table_width * 0.28) / 2
 
     pdf.drawCentredString(
         teacher_signature_x,
