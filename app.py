@@ -6182,7 +6182,12 @@ def print_templates():
                             "upsert": "false"
                         }
                     )
+                    uploaded_logo_bytes = default_logo_upload.getvalue()
                     config["school_logo_path"] = logo_path
+                    config["school_logo_data"] = (
+                        "data:" + default_logo_upload.type + ";base64," +
+                        base64.b64encode(uploaded_logo_bytes).decode("ascii")
+                    )
                     config["school_logo_size"] = int(
                         default_logo_size
                     )
@@ -7078,6 +7083,7 @@ def school_logo_from_template(template):
     config = get_template_config(template)
 
     for key in [
+        "school_logo_data",
         "school_logo_path",
         "logo_path",
         "school_logo",
