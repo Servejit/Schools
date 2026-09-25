@@ -9817,7 +9817,9 @@ def create_report_overlay(
 
     col1_x = left
     # Align the right-side student-detail column with the marks table.
-    col2_x = left + table_width * 0.58
+    # Start the right-side details exactly at the left edge of
+    # the Grade column in the marks table.
+    col2_x = table_x + table_width * 0.84
 
     for index, item in enumerate(details):
 
