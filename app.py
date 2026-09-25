@@ -4439,14 +4439,13 @@ def classes_subjects():
                             added_classes.append(class_label)
 
                         if added_classes:
-                            st.success(
-                                f"✅ Subject '{subject_name}' allotted to "
-                                f"{len(added_classes)} class(es)."
+                            st.session_state[f"subject_allot_success_{school_id}"] = (
+                                f"✅ Subject '{subject_name}' allotted successfully "
+                                f"to {len(added_classes)} class(es)."
                             )
                         if skipped_classes:
-                            st.info(
-                                "ℹ️ Already existed in: "
-                                + ", ".join(skipped_classes)
+                            st.session_state[f"subject_allot_info_{school_id}"] = (
+                                "ℹ️ Already existed in: " + ", ".join(skipped_classes)
                             )
                         st.rerun()
 
@@ -4455,6 +4454,17 @@ def classes_subjects():
                         st.code(str(e))
 
     st.divider()
+
+    subject_allot_success_message = st.session_state.pop(
+        f"subject_allot_success_{school_id}", None
+    )
+    subject_allot_info_message = st.session_state.pop(
+        f"subject_allot_info_{school_id}", None
+    )
+    if subject_allot_success_message:
+        st.success(subject_allot_success_message)
+    if subject_allot_info_message:
+        st.info(subject_allot_info_message)
 
     # -----------------------------------------------------
     # ADMIN / SUPERADMIN CLASS SELECTION
