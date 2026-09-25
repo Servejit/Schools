@@ -4097,13 +4097,59 @@ def classes_subjects():
                 if not assignment_class_options:
                     st.info("Create active classes first.")
                 else:
+                    assignment_class_search = st.text_input(
+                        "🔎 Search Class",
+                        placeholder="Type class, section or academic year...",
+                        key=f"subject_assignment_class_search_{school_id}"
+                    ).strip().lower()
+
+                    filtered_assignment_class_options = {
+                        label: value for label, value in assignment_class_options.items()
+                        if not assignment_class_search or assignment_class_search in label.lower()
+                    }
+
                     selected_assignment_classes = st.multiselect(
                         "📚 Select Class(es)",
-                        list(assignment_class_options.keys()),                        placeholder="Select one or more classes",
+                        list(filtered_assignment_class_options.keys()),
+                        placeholder="Select one or more classes",
                         key=f"subject_assignment_classes_{school_id}"
                     )
 
+                    # Load ALL subject assignments for this school so every
+                    # Class + Subject shows the teacher who currently owns it.
+                    all_assignment_rows = []
+                    try:
+                        all_assignment_rows = (
+                            sb.table("teacher_subject_assignments")
+                            .select("teacher_id,class_id,subject_id")
+                            .eq("school_id", school_id)
+                            .execute()
+                            .data or []
+                        )
+                    except Exception:
+                        all_assignment_rows = []
+
+                    teacher_name_by_id = {
+                        str(t.get("id")): (
+                            t.get("full_name")
+                            or t.get("email")
+                            or "Teacher"
+                        )
+                        for t in teacher_data
+                    }
+
+                    assigned_teacher_by_pair = {}
+                    for row in all_assignment_rows:
+                        pair = (str(row.get("class_id")), str(row.get("subject_id")))
+                        tid = str(row.get("teacher_id"))
+                        if pair not in assigned_teacher_by_pair:
+                            assigned_teacher_by_pair[pair] = []
+                        name = teacher_name_by_id.get(tid, "Teacher")
+                        if name not in assigned_teacher_by_pair[pair]:
+                            assigned_teacher_by_pair[pair].append(name)
+
                     subject_assignment_options = {}
+                    blocked_subject_labels = []
                     for class_label in selected_assignment_classes:
                         cl = assignment_class_options[class_label]
                         try:
@@ -4126,11 +4172,35 @@ def classes_subjects():
                                 or subject.get("name")
                                 or "Subject"
                             )
-                            option_label = f"{class_label} → {subject_name_value}"
-                            subject_assignment_options[option_label] = (
-                                cl["id"],
-                                subject["id"]
-                            )
+                            pair = (str(cl["id"]), str(subject["id"]))
+                            assigned_names = assigned_teacher_by_pair.get(pair, [])
+                            other_names = [
+                                name for name in assigned_names
+                                if name != (
+                                    teacher_name_by_id.get(
+                                        str(assignment_teacher_id), ""
+                                    )
+                                )
+                            ]
+
+                            if other_names:
+                                option_label = (
+                                    f"{class_label} → {subject_name_value}"
+                                    f" — 👨‍🏫 Assigned: {', '.join(other_names)}"
+                                )
+                                blocked_subject_labels.append(option_label)
+                            else:
+                                option_label = (
+                                    f"{class_label} → {subject_name_value}"
+                                    + (
+                                        f" — 👨‍🏫 Assigned: {assigned_names[0]}"
+                                        if assigned_names else ""
+                                    )
+                                )
+                                subject_assignment_options[option_label] = (
+                                    cl["id"],
+                                    subject["id"]
+                                )
 
                     current_assignment_set = set()
                     try:
@@ -4156,13 +4226,37 @@ def classes_subjects():
                         if (str(ids[0]), str(ids[1])) in current_assignment_set
                     ]
 
+                    assignment_subject_search = st.text_input(
+                        "🔎 Search Subject",
+                        placeholder="Type subject name or code...",
+                        key=f"subject_assignment_subject_search_{school_id}"
+                    ).strip().lower()
+
+                    filtered_subject_assignment_options = {
+                        label: value for label, value in subject_assignment_options.items()
+                        if not assignment_subject_search or assignment_subject_search in label.lower()
+                    }
+
+                    filtered_current_selected_labels = [
+                        label for label in current_selected_labels
+                        if label in filtered_subject_assignment_options
+                    ]
+
                     selected_assignment_subjects = st.multiselect(
                         "📖 Select Subject(s) for the Selected Class(es)",
-                        list(subject_assignment_options.keys()),
-                        default=current_selected_labels,
+                        list(filtered_subject_assignment_options.keys()),
+                        default=filtered_current_selected_labels,
                         placeholder="Select one or more Class + Subject combinations",
                         key=f"subject_assignment_subjects_{school_id}"
                     )
+
+                    if blocked_subject_labels:
+                        st.info(
+                            "🔒 The following Class + Subject combinations are already "
+                            "assigned to another teacher and cannot be assigned twice:"
+                        )
+                        for blocked_label in blocked_subject_labels:
+                            st.write(f"• {blocked_label}")
 
                     if selected_assignment_classes and not subject_assignment_options:
                         st.warning("No active subjects are available in the selected class(es).")
@@ -4233,6 +4327,132 @@ def classes_subjects():
                         except Exception as e:
                             st.error("Could not save Teacher Subject Assignments.")
                             st.code(str(e))
+
+    st.divider()
+
+    # -----------------------------------------------------
+    # SUBJECT MASTER / MULTI-CLASS ALLOTMENT
+    # -----------------------------------------------------
+    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+        with st.expander("📖 Subject Creation & Multi-Class Allotment", expanded=True):
+            st.caption(
+                "Create a subject once, then allot the same subject to multiple classes "
+                "from the dropdown. A subject cannot be duplicated within the same class."
+            )
+
+            master_subject_name = st.text_input(
+                "📖 Subject Name",
+                placeholder="Example: Mathematics",
+                key=f"master_subject_name_{school_id}"
+            )
+            mc1, mc2 = st.columns(2)
+            with mc1:
+                master_subject_code = st.text_input(
+                    "Subject Code",
+                    placeholder="Example: MATH",
+                    key=f"master_subject_code_{school_id}"
+                )
+            with mc2:
+                master_max_marks = st.number_input(
+                    "Maximum Marks",
+                    min_value=1.0,
+                    value=100.0,
+                    key=f"master_subject_max_{school_id}"
+                )
+
+            master_passing_marks = st.number_input(
+                "Passing Marks",
+                min_value=0.0,
+                value=33.0,
+                key=f"master_subject_pass_{school_id}"
+            )
+
+            master_class_search = st.text_input(
+                "🔎 Search Classes",
+                placeholder="Type class, section or academic year...",
+                key=f"master_subject_class_search_{school_id}"
+            ).strip().lower()
+
+            master_class_options = {}
+            for cl in class_data:
+                label = (
+                    f"{cl.get('class_name') or '-'} | "
+                    f"Section: {cl.get('section') or '-'} | "
+                    f"{cl.get('academic_year') or '-'}"
+                )
+                if not master_class_search or master_class_search in label.lower():
+                    master_class_options[label] = cl
+
+            selected_master_classes = st.multiselect(
+                "🏫 Allot Subject to Class(es)",
+                list(master_class_options.keys()),
+                placeholder="Select one or more classes",
+                key=f"master_subject_classes_{school_id}"
+            )
+
+            if st.button(
+                "➕ Create / Allot Subject",
+                type="primary",
+                use_container_width=True,
+                key=f"create_allot_subject_{school_id}"
+            ):
+                subject_name = master_subject_name.strip()
+                subject_code = master_subject_code.strip()
+
+                if not subject_name:
+                    st.warning("Subject name is required.")
+                elif master_passing_marks > master_max_marks:
+                    st.error("Passing marks cannot exceed maximum marks.")
+                elif not selected_master_classes:
+                    st.warning("Select at least one class.")
+                else:
+                    try:
+                        added_classes = []
+                        skipped_classes = []
+
+                        for class_label in selected_master_classes:
+                            cl = master_class_options[class_label]
+                            existing = (
+                                sb.table("subjects")
+                                .select("id")
+                                .eq("school_id", school_id)
+                                .eq("class_id", cl["id"])
+                                .ilike("subject_name", subject_name)
+                                .execute()
+                                .data or []
+                            )
+
+                            if existing:
+                                skipped_classes.append(class_label)
+                                continue
+
+                            sb.table("subjects").insert({
+                                "school_id": school_id,
+                                "class_id": cl["id"],
+                                "name": subject_name,
+                                "subject_name": subject_name,
+                                "code": subject_code,
+                                "max_marks": master_max_marks,
+                                "passing_marks": master_passing_marks,
+                                "active": True
+                            }).execute()
+                            added_classes.append(class_label)
+
+                        if added_classes:
+                            st.success(
+                                f"✅ Subject '{subject_name}' allotted to "
+                                f"{len(added_classes)} class(es)."
+                            )
+                        if skipped_classes:
+                            st.info(
+                                "ℹ️ Already existed in: "
+                                + ", ".join(skipped_classes)
+                            )
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error("Could not create/allot subject.")
+                        st.code(str(e))
 
     st.divider()
 
