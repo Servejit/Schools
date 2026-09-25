@@ -16592,4 +16592,37 @@ if st.session_state.logged_in:
     apply_role_theme()
     dashboard()
 else:
+    login(        elif not school_id:
+            st.info("Your Parent account is not linked to a school yet.")
+
+        st.divider()
+
+        # -------------------------------------------------
+        # SCHOOL-WIDE SUBJECT-WISE PREMIUM
+        # -------------------------------------------------
+        if school_id and subject_wise_parent_student_premium_enabled(school_id):
+            subject_wise_premium_view(
+                school_id,
+                [],
+                "Parent"
+            )
+
+
+    else:
+
+        st.error(
+            f"Unknown role: {role}"
+        )
+
+
+# =========================================================
+# START
+# =========================================================
+
+if st.session_state.logged_in:
+
+    # Admin+Teacher theme follows the explicitly selected working mode.
+    apply_role_theme()
+    dashboard()
+else:
     login()
