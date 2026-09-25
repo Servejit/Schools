@@ -6057,6 +6057,246 @@ def print_templates():
 
     st.divider()
 
+    # -------------------------------------------------
+    # DEFAULT REPORT CARD SETTINGS
+    # Works even when NO A4 template is uploaded.
+    # These settings are stored as a hidden configuration row
+    # in print_templates and are used by the white A4 fallback.
+    # -------------------------------------------------
+    st.subheader("🏫 Default Report Card Settings")
+    st.caption(
+        "These settings work even if no A4 template is uploaded. "
+        "The Report Card will print on a clean white A4 sheet."
+    )
+
+    try:
+        default_rows = (
+            sb.table("print_templates")
+            .select(
+                "id,school_id,config_json,active,created_at,updated_at"
+            )
+            .eq("school_id", school_id)
+            .eq("active", True)
+            .execute()
+            .data or []
+        )
+        default_template = next(
+            (
+                row for row in default_rows
+                if get_template_config(row).get(
+                    "is_default_report_card"
+                )
+            ),
+            None
+        )
+    except Exception:
+        default_template = None
+
+    default_config = (
+        get_template_config(default_template)
+        if default_template
+        else {}
+    )
+    default_logo_path = (
+        default_config.get("school_logo_path")
+        or default_config.get("logo_path")
+        or default_config.get("school_logo")
+        or default_config.get("logo")
+    )
+
+    if default_logo_path:
+        default_logo_bytes = download_storage_file(default_logo_path)
+        if default_logo_bytes:
+            st.image(
+                default_logo_bytes,
+                width=110,
+                caption="Current Default School Logo"
+            )
+        else:
+            st.warning(
+                "Default logo is saved but could not be loaded from Storage."
+            )
+    else:
+        st.info(
+            "No default school logo saved. Upload one below."
+        )
+
+    default_logo_upload = st.file_uploader(
+        "Upload / Replace School Logo",
+        type=["png", "jpg", "jpeg"],
+        key=f"default_school_logo_{school_id}"
+    )
+
+    try:
+        default_logo_size = int(
+            default_config.get("school_logo_size", 52)
+        )
+    except Exception:
+        default_logo_size = 52
+
+    default_logo_size = st.slider(
+        "Logo Size",
+        min_value=30,
+        max_value=80,
+        value=max(30, min(80, default_logo_size)),
+        step=2,
+        key=f"default_logo_size_{school_id}",
+        help="Controls the logo size on Report Cards, including the white A4 fallback."
+    )
+
+    dc1, dc2 = st.columns(2)
+
+    with dc1:
+        if st.button(
+            "💾 Save Default Logo Settings",
+            use_container_width=True,
+            key=f"save_default_logo_{school_id}"
+        ):
+            try:
+                config = dict(default_config)
+                old_logo_path = (
+                    config.get("school_logo_path")
+                    or config.get("logo_path")
+                    or config.get("school_logo")
+                    or config.get("logo")
+                )
+
+                if default_logo_upload:
+                    ext = (
+                        default_logo_upload.name
+                        .rsplit(".", 1)[-1]
+                        .lower()
+                    )
+                    logo_path = (
+                        f"{school_id}/school-logo/"
+                        f"{uuid.uuid4().hex}.{ext}"
+                    )
+
+                    sb.storage.from_("school-assets").upload(
+                        logo_path,
+                        default_logo_upload.getvalue(),
+                        file_options={
+                            "content-type": default_logo_upload.type,
+                            "upsert": "false"
+                        }
+                    )
+                    config["school_logo_path"] = logo_path
+                    config["school_logo_size"] = int(
+                        default_logo_size
+                    )
+
+                    if old_logo_path and old_logo_path != logo_path:
+                        try:
+                            sb.storage.from_("school-assets").remove(
+                                [old_logo_path]
+                            )
+                        except Exception:
+                            pass
+                else:
+                    config["school_logo_size"] = int(
+                        default_logo_size
+                    )
+
+                config["template_type"] = "Report Card"
+                config["is_default_report_card"] = True
+                config["school_id"] = str(school_id)
+                config.setdefault("show_school_name", True)
+
+                payload = {
+                    "config_json": json.dumps(config),
+                    "active": True,
+                    "updated_at": datetime.datetime.now(
+                        datetime.timezone.utc
+                    ).isoformat()
+                }
+
+                if default_template:
+                    (
+                        sb.table("print_templates")
+                        .update(payload)
+                        .eq("id", default_template["id"])
+                        .eq("school_id", school_id)
+                        .execute()
+                    )
+                else:
+                    (
+                        sb.table("print_templates")
+                        .insert({
+                            "school_id": school_id,
+                            "name": "__DEFAULT_REPORT_CARD__",
+                            "template_name": "Default Report Card Settings",
+                            "page_size": "A4",
+                            "orientation": "Portrait",
+                            "storage_path": None,
+                            "file_path": None,
+                            "file_type": "pdf",
+                            **payload
+                        })
+                        .execute()
+                    )
+
+                st.success(
+                    "✅ Default Report Card logo/settings saved successfully."
+                )
+                st.rerun()
+
+            except Exception as e:
+                st.error(
+                    "Could not save the default Report Card logo/settings."
+                )
+                st.code(str(e))
+
+    with dc2:
+        if default_logo_path and st.button(
+            "🗑️ Remove Default Logo",
+            use_container_width=True,
+            key=f"remove_default_logo_{school_id}"
+        ):
+            try:
+                if default_logo_path:
+                    try:
+                        sb.storage.from_("school-assets").remove(
+                            [default_logo_path]
+                        )
+                    except Exception:
+                        pass
+
+                config = dict(default_config)
+                for logo_key in [
+                    "school_logo_path",
+                    "logo_path",
+                    "school_logo",
+                    "logo"
+                ]:
+                    config.pop(logo_key, None)
+
+                config["is_default_report_card"] = True
+                config["template_type"] = "Report Card"
+                config["school_id"] = str(school_id)
+
+                if default_template:
+                    (
+                        sb.table("print_templates")
+                        .update({
+                            "config_json": json.dumps(config),
+                            "updated_at": datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat()
+                        })
+                        .eq("id", default_template["id"])
+                        .eq("school_id", school_id)
+                        .execute()
+                    )
+
+                st.success("Default school logo removed successfully.")
+                st.rerun()
+
+            except Exception as e:
+                st.error("Could not remove the default school logo.")
+                st.code(str(e))
+
+    st.divider()
+
     st.subheader("📋 Existing A4 Templates")
 
     try:
@@ -6081,13 +6321,21 @@ def print_templates():
         st.code(str(e))
         return
 
-    if not template_data:
-
-        st.info(
-            "No A4 templates uploaded for this school yet."
+    # The special default Report Card settings row is not an uploaded
+    # A4 template. Keep it hidden from the uploaded-template list.
+    template_data = [
+        template
+        for template in template_data
+        if not get_template_config(template).get(
+            "is_default_report_card"
         )
+    ]
 
-        return
+    if not template_data:
+        st.info(
+            "No A4 templates uploaded for this school yet. "
+            "The default white A4 Report Card can still be used."
+        )
 
     for template in template_data:
 
@@ -6831,6 +7079,34 @@ def school_logo_from_template(template):
         if value:
             return str(value).strip()
 
+    # If the selected Report Card has no template-specific logo,
+    # automatically use the school's Print Template default logo.
+    school_id = (
+        template.get("school_id")
+        or config.get("school_id")
+    )
+    if school_id:
+        try:
+            rows = (
+                sb.table("print_templates")
+                .select("config_json")
+                .eq("school_id", school_id)
+                .eq("active", True)
+                .execute()
+                .data or []
+            )
+            for row in rows:
+                default_config = get_template_config(row)
+                if (
+                    default_config.get("is_default_report_card")
+                    and default_config.get("school_logo_path")
+                ):
+                    return str(
+                        default_config["school_logo_path"]
+                    ).strip()
+        except Exception:
+            pass
+
     return None
 
 
@@ -6842,7 +7118,37 @@ def school_logo_size_from_template(template):
     except Exception:
         size = 52
 
-    return max(20, min(30, size))
+    if not config.get("school_logo_size"):
+        school_id = (
+            template.get("school_id")
+            or config.get("school_id")
+        )
+        if school_id:
+            try:
+                rows = (
+                    sb.table("print_templates")
+                    .select("config_json")
+                    .eq("school_id", school_id)
+                    .eq("active", True)
+                    .execute()
+                    .data or []
+                )
+                for row in rows:
+                    default_config = get_template_config(row)
+                    if default_config.get("is_default_report_card"):
+                        try:
+                            size = int(
+                                default_config.get(
+                                    "school_logo_size", size
+                                )
+                            )
+                        except Exception:
+                            pass
+                        break
+            except Exception:
+                pass
+
+    return max(30, min(80, size))
 
 
 def pdf_page_size(orientation, page_size=None):
@@ -11594,6 +11900,7 @@ def report_cards():
         # Built-in white A4 Report Card. Uploading a template remains optional.
         report_templates = [{
             "id": "__default_report_card__",
+            "school_id": school_id,
             "name": "Default White A4 Report Card",
             "template_name": "Default White A4 Report Card",
             "page_size": "A4",
@@ -11603,7 +11910,8 @@ def report_cards():
             "file_type": "pdf",
             "config_json": json.dumps({
                 "template_type": "Report Card",
-                "show_school_name": True
+                "show_school_name": True,
+                "school_id": str(school_id)
             }),
             "active": True
         }]
@@ -12661,12 +12969,14 @@ def parent_report_cards_view(school_id, parent_user_id):
     if not report_templates:
         report_templates = [{
             "id": "__default_report_card__",
+            "school_id": school_id,
             "template_name": "Default White A4 Report Card",
             "orientation": "Portrait",
             "file_type": "pdf",
             "config_json": json.dumps({
                 "template_type": "Report Card",
-                "show_school_name": True
+                "show_school_name": True,
+                "school_id": str(school_id)
             }),
         }]
 
@@ -12907,12 +13217,14 @@ def student_report_card_view(school_id, student_id):
     if not report_templates:
         report_templates = [{
             "id": "__default_report_card__",
+            "school_id": school_id,
             "template_name": "Default White A4 Report Card",
             "orientation": "Portrait",
             "file_type": "pdf",
             "config_json": json.dumps({
                 "template_type": "Report Card",
-                "show_school_name": True
+                "show_school_name": True,
+                "school_id": str(school_id)
             }),
         }]
 
@@ -16388,12 +16700,14 @@ def dashboard():
                         if not report_templates:
                             report_templates = [{
                                 "id": "__default_report_card__",
+            "school_id": school_id,
                                 "template_name": "Default White A4 Report Card",
                                 "orientation": "Portrait",
                                 "file_type": "pdf",
                                 "config_json": json.dumps({
                                     "template_type": "Report Card",
-                                    "show_school_name": True
+                                    "show_school_name": True,
+                                    "school_id": str(school_id)
                                 }),
                             }]
                             template_bytes = None
