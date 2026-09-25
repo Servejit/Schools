@@ -7416,12 +7416,12 @@ def create_report_overlay(
         left = 90
         right = width - 90
 
-        # Student photo: reduced to about half the previous size.
-        # Keep the full photo visible without cropping or distortion.
-        photo_x = width - 105
+        # Student photo: passport-size, slightly larger than before.
+        # Keep it on the LEFT, aligned with the Student Name details.
+        photo_x = left
         photo_y = height - 185
-        photo_w = 38
-        photo_h = 48
+        photo_w = 50
+        photo_h = 65
 
         info_y = height - 155
 
@@ -7441,12 +7441,12 @@ def create_report_overlay(
         left = 90
         right = width - 90
 
-        # Student photo: reduced to about half the previous size.
-        # Keep the full photo visible without cropping or distortion.
-        photo_x = width - 115
+        # Student photo: passport-size, slightly larger than before.
+        # Keep it on the LEFT, aligned with the Student Name details.
+        photo_x = left
         photo_y = height - 145
-        photo_w = 43
-        photo_h = 53
+        photo_w = 50
+        photo_h = 65
 
         info_y = height - 145
 
@@ -7636,6 +7636,11 @@ def create_report_overlay(
     # -----------------------------------------------------
 
     detail_y = info_y - 55
+
+    # Align the passport-size photo with the Student Name line.
+    # Its LEFT edge matches the Student Name/table LEFT edge.
+    photo_y = detail_y - photo_h + 8
+
     details = [
 
         (
