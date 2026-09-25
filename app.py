@@ -10160,7 +10160,7 @@ def create_report_overlay(
                 logo_box_h = logo_size
 
                 # Move the logo 2 spaces down.
-                logo_top_y = height - 42 - 6
+                logo_top_y = height - 42
                 logo_box_y = logo_top_y - logo_box_h
 
                 pdf.setStrokeColorRGB(
