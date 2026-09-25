@@ -8980,6 +8980,271 @@ def restore_report_cards_from_excel(uploaded_file, school_id):
 # REPORT CARD GENERATOR
 # =========================================================
 
+def marks_backup_and_result_tools(school_id):
+    role = st.session_state.profile.get("role")
+
+    if role not in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+        return
+
+    st.subheader("📦 Marks Backup, Recovery & Result Weightage")
+    st.caption(
+        "Download a complete Excel backup of all exams for this school. "
+        "Each exam is kept in a separate Excel sheet."
+    )
+
+    # -----------------------------------------------------
+    # DIRECT EXCEL DOWNLOAD
+    # -----------------------------------------------------
+    # Always prepare the current backup so the Download Excel
+    # button is immediately visible. No extra Create button is required.
+    try:
+        current_backup = build_marks_backup_workbook(school_id)
+        school_name = (
+            str(st.session_state.get("selected_school_name") or "School")
+            .replace("/", "_")
+            .replace("\\", "_")
+            .replace(" ", "_")
+        )
+        backup_stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        direct_name = f"{school_name}_All_Exam_Marks_Backup_{backup_stamp}.xlsx"
+
+        st.download_button(
+            "⬇️ Download All Exam Marks Excel",
+            data=current_backup,
+            file_name=direct_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key=f"direct_all_exam_marks_download_{school_id}"
+        )
+        st.success(
+            "✅ Excel backup is ready. It contains separate sheets for PT-1, "
+            "PT-2, Half Yearly, Annual and other exams available in this school."
+        )
+    except Exception as e:
+        st.error("Could not prepare the current Excel marks backup.")
+        st.code(str(e))
+
+    # Backup created immediately after Save All Marks.
+    pending_bytes = st.session_state.pop("_marks_backup_bytes", None)
+    pending_name = st.session_state.pop("_marks_backup_filename", None)
+    if pending_bytes:
+        st.download_button(
+            "⬇️ Download Fresh Backup After Last Marks Update",
+            data=pending_bytes,
+            file_name=pending_name or "School_Marks_Backup.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key=f"fresh_marks_backup_download_{school_id}"
+        )
+
+    st.divider()
+
+    # -----------------------------------------------------
+    # GOOGLE SHEETS / DRIVE
+    # -----------------------------------------------------
+    st.markdown("### ☁️ Google Sheets / Google Drive")
+    st.caption(
+        "Sync the current marks backup to this school's Google Sheet and "
+        "save a dated .xlsx copy in Google Drive."
+    )
+
+    if not st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
+        st.warning(
+            "Google backup is not connected yet. The Excel download above "
+            "works without Google. Add GOOGLE_SERVICE_ACCOUNT_JSON to "
+            "Streamlit Secrets to enable Google Sheets + Drive."
+        )
+    else:
+        if st.button(
+            "☁️ Sync All Exam Marks to Google Sheets + Drive",
+            use_container_width=True,
+            key=f"sync_google_marks_report_{school_id}"
+        ):
+            try:
+                result = sync_school_marks_to_google(school_id)
+                st.session_state["_google_marks_sheet_url"] = result["spreadsheet_url"]
+                st.session_state["_google_marks_xlsx_name"] = result["xlsx_name"]
+                st.success("✅ Google Sheet and dated Excel backup updated.")
+                st.markdown(
+                    f"[📊 Open School Google Sheet]({result['spreadsheet_url']})"
+                )
+                st.caption(
+                    f"📁 Dated Excel saved in Google Drive: {result['xlsx_name']}"
+                )
+            except Exception as e:
+                st.error("Google backup could not be completed.")
+                st.code(str(e))
+
+        saved_sheet_url = st.session_state.get("_google_marks_sheet_url")
+        if saved_sheet_url:
+            st.markdown(
+                f"[📊 Open Last Synced Google Sheet]({saved_sheet_url})"
+            )
+
+    st.divider()
+
+    # -----------------------------------------------------
+    # RECOVERY
+    # -----------------------------------------------------
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.markdown("### ♻️ Recover Marks")
+        uploaded_backup = st.file_uploader(
+            "Upload a previous Marks Backup Excel",
+            type=["xlsx"],
+            key=f"marks_restore_upload_{school_id}"
+        )
+
+        if uploaded_backup:
+            if st.button(
+                "🔍 Validate Backup",
+                use_container_width=True,
+                key=f"validate_marks_backup_{school_id}"
+            ):
+                try:
+                    sheets = pd.read_excel(
+                        uploaded_backup,
+                        sheet_name=None,
+                        engine="openpyxl"
+                    )
+                    summary = []
+                    for name, df in sheets.items():
+                        if name not in {"Backup_Info", "Students", "Subjects"}:
+                            summary.append({
+                                "Exam / Sheet": name,
+                                "Rows": int(len(df))
+                            })
+                    st.session_state["_validated_backup_name"] = uploaded_backup.name
+                    st.session_state["_validated_backup_summary"] = summary
+                    st.success("Backup validated. Review the rows below before restoring.")
+                except Exception as e:
+                    st.error("This Excel file could not be validated.")
+                    st.code(str(e))
+
+        summary = st.session_state.get("_validated_backup_summary")
+        if summary:
+            st.dataframe(
+                pd.DataFrame(summary),
+                hide_index=True,
+                use_container_width=True
+            )
+            if st.button(
+                "♻️ Restore Marks From This Backup",
+                type="primary",
+                use_container_width=True,
+                key=f"restore_marks_backup_{school_id}"
+            ):
+                try:
+                    restored, inserted, updated, skipped = restore_marks_from_backup(
+                        uploaded_backup,
+                        school_id
+                    )
+                    st.success(
+                        f"Restored {restored} mark rows "
+                        f"({inserted} new, {updated} updated)."
+                    )
+                    if skipped:
+                        st.warning(
+                            f"{len(skipped)} rows were skipped. Check the details below."
+                        )
+                        for item in skipped[:30]:
+                            st.caption(item)
+                    st.session_state.pop("_validated_backup_summary", None)
+                    st.rerun()
+                except Exception as e:
+                    st.error("Could not restore the backup.")
+                    st.code(str(e))
+
+    with c2:
+        st.markdown("### ⚖️ Exam Result Weightage")
+
+        exams = get_exam_assessments(school_id, active_only=True)
+        academic_year = get_school_academic_year(school_id)
+
+        if not exams:
+            st.info("Create exams first in Exam / Assessment.")
+        elif not academic_year:
+            st.warning("Academic Session is not available in the school's active classes.")
+        else:
+            current_weights = get_exam_result_weights(school_id, academic_year)
+            weight_table = []
+            for exam in exams:
+                weight_table.append({
+                    "Exam": exam.get("name") or "",
+                    "Exam ID": str(exam.get("id")),
+                    "Weight %": current_weights.get(str(exam.get("id")), 0.0)
+                })
+
+            weight_df = pd.DataFrame(weight_table)
+            edited_weights = st.data_editor(
+                weight_df,
+                hide_index=True,
+                use_container_width=True,
+                disabled=["Exam", "Exam ID"],
+                column_config={
+                    "Weight %": st.column_config.NumberColumn(
+                        "Weight %",
+                        min_value=0.0,
+                        max_value=100.0,
+                        step=1.0,
+                        format="%.2f"
+                    )
+                },
+                key=f"exam_weight_editor_{school_id}_{academic_year}"
+            )
+
+            total_weight = float(
+                pd.to_numeric(
+                    edited_weights["Weight %"],
+                    errors="coerce"
+                ).fillna(0).sum()
+            )
+            if abs(total_weight - 100.0) > 0.01:
+                st.warning(
+                    f"Current weight total is {total_weight:g}%. "
+                    "Use 100% when these exams together make the final result."
+                )
+            else:
+                st.success("✅ Weight total is 100%.")
+
+            if st.button(
+                "💾 Save Exam Weightage",
+                type="primary",
+                use_container_width=True,
+                key=f"save_exam_weights_{school_id}"
+            ):
+                try:
+                    for _, row in edited_weights.iterrows():
+                        exam_id = str(row["Exam ID"])
+                        weight = float(row["Weight %"] or 0)
+                        sb.table("exam_result_weights").upsert({
+                            "school_id": school_id,
+                            "academic_year": academic_year,
+                            "exam_id": exam_id,
+                            "weight_percent": weight,
+                            "updated_at": datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat()
+                        }).execute()
+
+                    mark_saved(f"save_exam_weights_{school_id}")
+                    st.success("✅ Exam weightage saved successfully.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(
+                        "Could not save exam weightage. "
+                        "Run the exam_result_weights SQL setup first if this is the first time."
+                    )
+                    st.code(str(e))
+
+            st.caption(
+                "Example: PT-1 10%, PT-2 10%, Half Yearly 30%, Annual 50%. "
+                "Raw exam marks are never changed; weightage is used only for the final result."
+            )
+
+
+
 def report_cards():
 
     st.header("📄 Report Card Generator")
