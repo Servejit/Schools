@@ -9631,20 +9631,44 @@ def create_report_overlay(
             str(school_name)
         )
 
-        header_y = height - 49
-        for header_value, prefix in [
-            (school_address, ""),
-            (school_website, ""),
-            (school_contact, "Contact: ")
-        ]:
-            if header_value:
-                pdf.setFont("Helvetica", 8)
+        # Keep the header compact: Address on one line,
+        # Website and Contact on the same line below it.
+        pdf.setFont("Helvetica", 8)
+
+        if school_address:
+            pdf.drawCentredString(
+                width / 2,
+                height - 49,
+                str(school_address)
+            )
+
+        website_text = str(school_website).strip()
+        contact_text = str(school_contact).strip()
+
+        if website_text or contact_text:
+            if website_text and contact_text:
+                pdf.drawString(
+                    width / 2 - 180,
+                    height - 60,
+                    f"Website: {website_text}"
+                )
+                pdf.drawString(
+                    width / 2 + 35,
+                    height - 60,
+                    f"Contact: {contact_text}"
+                )
+            elif website_text:
                 pdf.drawCentredString(
                     width / 2,
-                    header_y,
-                    f"{prefix}{header_value}"
+                    height - 60,
+                    f"Website: {website_text}"
                 )
-                header_y -= 11
+            else:
+                pdf.drawCentredString(
+                    width / 2,
+                    height - 60,
+                    f"Contact: {contact_text}"
+                )
 
     # School logo on the LEFT side
     if school_logo_path:
