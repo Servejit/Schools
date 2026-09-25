@@ -7660,14 +7660,19 @@ def create_report_overlay(
     )
 
     signature_y = margin
+
+    # Align signatures with the marks table columns.
+    teacher_signature_x = table_x + subject_col / 2
+    principal_signature_x = table_x + subject_col + max_col + marks_col + result_col + grade_col / 2
+
     pdf.drawCentredString(
-        teacher_x,
+        teacher_signature_x,
         signature_y,
         "Teacher Signature"
     )
 
     pdf.drawCentredString(
-        principal_x,
+        principal_signature_x,
         signature_y,
         "Principal Signature"
     )
