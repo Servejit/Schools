@@ -12963,7 +12963,10 @@ def parent_report_cards_view(school_id, parent_user_id):
         )
         report_templates = [
             t for t in templates
-            if get_template_config(t).get("template_type") == "Report Card"
+            if (
+                get_template_config(t).get("template_type") == "Report Card"
+                and not get_template_config(t).get("is_default_report_card")
+            )
         ]
     except Exception as e:
         st.error("Could not load the school's Report Card template.")
