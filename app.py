@@ -9610,32 +9610,41 @@ def create_report_overlay(
         school_info.get("address")
         or ""
     )
+    school_website = (
+        school_info.get("website")
+        or ""
+    )
+    school_contact = (
+        school_info.get("contact_number")
+        or school_info.get("contact")
+        or ""
+    )
 
-    # School name/address are optional content.  The dashboard setting
-    # controls the generated overlay, so OFF means neither is drawn.
+    # SINGLE Report Card header control from Print Template Dashboard.
+    # ON = School Name + Address + Website + Contact Number.
+    # OFF = all four hidden.
     if show_school_name:
-        pdf.setFont(
-            "Helvetica-Bold",
-            19
-        )
-
+        pdf.setFont("Helvetica-Bold", 19)
         pdf.drawCentredString(
             width / 2,
             height - 38,
-            school_name
+            str(school_name)
         )
 
-        if school_address:
-            pdf.setFont(
-                "Helvetica",
-                8
-            )
-
-            pdf.drawCentredString(
-                width / 2,
-                height - 49,
-                school_address
-            )
+        header_y = height - 49
+        for header_value, prefix in [
+            (school_address, ""),
+            (school_website, ""),
+            (school_contact, "Contact: ")
+        ]:
+            if header_value:
+                pdf.setFont("Helvetica", 8)
+                pdf.drawCentredString(
+                    width / 2,
+                    header_y,
+                    f"{prefix}{header_value}"
+                )
+                header_y -= 11
 
     # School logo on the LEFT side
     if school_logo_path:
