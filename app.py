@@ -9624,7 +9624,7 @@ def create_report_overlay(
     # OFF = all four hidden.
     if show_school_name:
         # Letterhead-style school header.
-        name_font = 26
+        name_font = 24
         name_max_width = table_width
         try:
             while (
@@ -9642,15 +9642,15 @@ def create_report_overlay(
         pdf.setFont("Helvetica-Bold", name_font)
         pdf.drawCentredString(
             width / 2,
-            height - 30,
+            height - 40,
             str(school_name)
         )
 
         if school_address:
-            pdf.setFont("Helvetica", 11)
+            pdf.setFont("Helvetica", 16)
             pdf.drawCentredString(
                 width / 2,
-                height - 47,
+                height - 58,
                 str(school_address)
             )
 
@@ -9658,14 +9658,14 @@ def create_report_overlay(
         contact_text = str(school_contact).strip()
 
         if website_text or contact_text:
-            pdf.setFont("Helvetica", 10)
+            pdf.setFont("Helvetica", 16)
             if website_text and contact_text:
-                pdf.drawString(width / 2 - 175, height - 63, f"Website: {website_text}")
-                pdf.drawString(width / 2 + 35, height - 63, f"Contact: {contact_text}")
+                pdf.drawString(width / 2 - 175, height - 79, f"Website: {website_text}")
+                pdf.drawString(width / 2 + 35, height - 79, f"Contact: {contact_text}")
             elif website_text:
-                pdf.drawCentredString(width / 2, height - 63, f"Website: {website_text}")
+                pdf.drawCentredString(width / 2, height - 79, f"Website: {website_text}")
             else:
-                pdf.drawCentredString(width / 2, height - 63, f"Contact: {contact_text}")
+                pdf.drawCentredString(width / 2, height - 79, f"Contact: {contact_text}")
 
     # School logo on the LEFT side
     if school_logo_path:
@@ -9743,7 +9743,7 @@ def create_report_overlay(
 
     pdf.setFont(
         "Helvetica-Bold",
-        13
+        18
     )
 
     pdf.drawCentredString(
