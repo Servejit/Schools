@@ -9750,7 +9750,7 @@ def create_report_overlay(
 
     pdf.drawCentredString(
         width / 2,
-        height - 78,
+        height - 88,
         "REPORT CARD"
     )
 
@@ -9761,7 +9761,7 @@ def create_report_overlay(
 
     pdf.drawCentredString(
         width / 2,
-        height - 92,
+        height - 102,
         str(exam_name)    )
 
     # -----------------------------------------------------
@@ -9988,7 +9988,7 @@ def create_report_overlay(
             table_top - row_height
         )
 
-    # Header alignment
+    # Header alignment: Subject stays left-aligned as in the original layout.
     header_centers = [
         table_x + subject_col / 2,
         x_positions[1] + max_col / 2,
@@ -9997,11 +9997,17 @@ def create_report_overlay(
         x_positions[4] + grade_col / 2
     ]
 
-    for i, header in enumerate(headers):
+    pdf.drawString(
+        table_x + 5,
+        table_top - row_height + max(3, row_height / 2 - 3),
+        headers[0]
+    )
+
+    for i in range(1, len(headers)):
         pdf.drawCentredString(
             header_centers[i],
             table_top - row_height + max(3, row_height / 2 - 3),
-            header
+            headers[i]
         )
 
     y = table_top - row_height
@@ -10093,9 +10099,9 @@ def create_report_overlay(
         if len(subject_text) > 31:
             subject_text = subject_text[:30] + "…"
 
-        # Subject name centered in the Subject column.
-        pdf.drawCentredString(
-            header_centers[0],
+        # Subject name left-aligned in the Subject column.
+        pdf.drawString(
+            table_x + 5,
             baseline,
             subject_text
         )
@@ -10229,13 +10235,13 @@ def create_report_overlay(
 
     pdf.drawCentredString(
         teacher_x,
-        55,
+        75,
         "Teacher Signature"
     )
 
     pdf.drawCentredString(
         principal_x,
-        55,
+        75,
         "Principal Signature"
     )
 
