@@ -16519,3 +16519,6 @@ if st.session_state.logged_in:
 
     # Admin+Teacher theme follows the explicitly selected working mode.
     apply_role_theme()
+    dashboard()
+else:
+    login()
