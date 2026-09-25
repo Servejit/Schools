@@ -595,6 +595,17 @@ def schools():
             key="school_address"
         )
 
+        website = st.text_input(
+            "School Website",
+            key="school_website",
+            placeholder="https://www.example.com"
+        )
+
+        contact_number = st.text_input(
+            "Contact Number",
+            key="school_contact_number"
+        )
+
         if st.button(
             "Add School",
             use_container_width=True
@@ -625,6 +636,8 @@ def schools():
                         "name": name.strip(),
                         "code": code.strip(),
                         "address": address.strip(),
+                        "website": website.strip(),
+                        "contact_number": contact_number.strip(),
                         "active": True
                     })
                     .execute()
@@ -792,6 +805,18 @@ def schools():
                     key=f"school_edit_address_{school_id}"
                 )
 
+                edit_website = st.text_input(
+                    "Website",
+                    value=school.get("website", ""),
+                    key=f"school_edit_website_{school_id}"
+                )
+
+                edit_contact_number = st.text_input(
+                    "Contact Number",
+                    value=school.get("contact_number", ""),
+                    key=f"school_edit_contact_{school_id}"
+                )
+
                 save_key = f"school_save_{school_id}"
                 show_save_message(save_key)
 
@@ -821,7 +846,9 @@ def schools():
                             .update({
                                 "name": edit_name.strip(),
                                 "code": edit_code.strip(),
-                                "address": edit_address.strip()
+                                "address": edit_address.strip(),
+                                "website": edit_website.strip(),
+                                "contact_number": edit_contact_number.strip()
                             })
                             .eq("id", school_id)
                             .execute()
@@ -834,6 +861,71 @@ def schools():
                     except Exception as e:
                         st.error("Could not update school.")
                         st.code(str(e))
+
+
+# =========================================================
+# SCHOOL PROFILE SETTINGS
+# =========================================================
+
+def school_profile_settings():
+    role = st.session_state.profile.get("role")
+    school_id = st.session_state.profile.get("school_id")
+
+    if role not in ["Admin", "Admin+Teacher", "SuperAdmin"]:
+        st.error("You do not have permission to change school details.")
+        return
+
+    if not school_id:
+        st.warning("Your account is not assigned to a school.")
+        return
+
+    try:
+        school = (
+            sb.table("schools").select("*").eq("id", school_id).single().execute().data
+        )
+    except Exception as e:
+        st.error("Could not load school details.")
+        st.code(str(e))
+        return
+
+    if not school:
+        st.warning("School details not found.")
+        return
+
+    st.header("🏫 School Profile")
+    st.caption("Update the school details used throughout the app and Report Cards.")
+
+    name = st.text_input("School Name", value=school.get("name") or "", key="profile_school_name")
+    code = st.text_input("School Code", value=school.get("code") or "", key="profile_school_code")
+    address = st.text_area("Address", value=school.get("address") or "", key="profile_school_address")
+    website = st.text_input("Website", value=school.get("website") or "", key="profile_school_website")
+    contact = st.text_input("Contact Number", value=school.get("contact_number") or "", key="profile_school_contact")
+
+    if st.button("💾 Update School Details", use_container_width=True):
+        if not name.strip() or not code.strip():
+            st.warning("School Name and School Code are required.")
+            return
+        try:
+            duplicate = (
+                sb.table("schools").select("id")
+                .eq("code", code.strip()).neq("id", school_id)
+                .execute().data or []
+            )
+            if duplicate:
+                st.error("School code already exists.")
+                return
+            sb.table("schools").update({
+                "name": name.strip(),
+                "code": code.strip(),
+                "address": address.strip(),
+                "website": website.strip(),
+                "contact_number": contact.strip()
+            }).eq("id", school_id).execute()
+            st.success("✅ School details updated successfully.")
+            st.rerun()
+        except Exception as e:
+            st.error("Could not update school details.")
+            st.code(str(e))
 
 
 # =========================================================
@@ -888,6 +980,15 @@ def users():
                 "Address",
                 key="quick_school_address"
             )
+            quick_school_website = st.text_input(
+                "Website",
+                key="quick_school_website",
+                placeholder="https://www.example.com"
+            )
+            quick_school_contact = st.text_input(
+                "Contact Number",
+                key="quick_school_contact"
+            )
 
             if st.button(
                 "➕ Add School",
@@ -912,6 +1013,8 @@ def users():
                                 "name": quick_school_name.strip(),
                                 "code": quick_school_code.strip(),
                                 "address": quick_school_address.strip(),
+                                "website": quick_school_website.strip(),
+                                "contact_number": quick_school_contact.strip(),
                                 "active": True
                             }).execute()
                             st.success("✅ School added successfully.")
@@ -5918,7 +6021,8 @@ def print_templates():
                 config = {
                     "template_type": template_type,
                     "original_file_name": original_name,
-                    "show_school_name": True
+                    "show_school_name": True,
+                    "show_school_contact": True
                 }
 
                 (
@@ -6161,9 +6265,9 @@ def print_templates():
                 )
 
                 status_label = (
-                    "🟢 ON — School Name & Address WILL PRINT"
+                    "🟢 ON — Name + Address + Website + Contact WILL PRINT"
                     if show_school_name
-                    else "🔴 OFF — School Name & Address WILL NOT PRINT"
+                    else "🔴 OFF — Name + Address + Website + Contact HIDDEN"
                 )
 
                 if st.button(
@@ -6203,7 +6307,7 @@ def print_templates():
                         background:{'#198754' if show_school_name else '#DC3545'};
                         color:white;
                     ">
-                        {'NAME + ADDRESS WILL PRINT' if show_school_name else 'NAME + ADDRESS HIDDEN'}
+                        {'NAME + ADDRESS + WEBSITE + CONTACT WILL PRINT' if show_school_name else 'NAME + ADDRESS + WEBSITE + CONTACT HIDDEN'}
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -6930,6 +7034,8 @@ def create_report_overlay(
         school_info.get("address")
         or ""
     )
+    school_website = school_info.get("website") or ""
+    school_contact = school_info.get("contact_number") or ""
 
     if show_school_name:
         # Fit the school name inside the 2 cm protected area.
@@ -15715,6 +15821,7 @@ def dashboard():
             st.title("🛠️ Admin Dashboard")
 
             admin_menu_items = [
+                "🏫 School Profile",
                 "👥 Users",
                 "🎓 Students",
                 "📚 Classes & Subjects",
@@ -15744,7 +15851,10 @@ def dashboard():
             )
             reset_dashboard_working_state("admin_teacher_admin_menu", menu)
 
-            if menu == "👥 Users":
+            if menu == "🏫 School Profile":
+                school_profile_settings()
+
+            elif menu == "👥 Users":
                 users()
 
             elif menu == "🎓 Students":
