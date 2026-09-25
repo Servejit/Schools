@@ -114,11 +114,9 @@ sb = get_supabase_client()
 # Marks are rounded to a maximum of 2 decimal places, but unnecessary
 # trailing zeros are never displayed: 88 -> 88, 88.5 -> 88.5, 88.25 -> 88.25.
 def format_mark(value):
+    """Display marks/numeric result values consistently with exactly 2 decimals."""
     try:
-        number = round(float(value), 2)
-        if number == int(number):
-            return str(int(number))
-        return f"{number:.2f}".rstrip("0").rstrip(".")
+        return f"{float(value):.2f}"
     except (TypeError, ValueError):
         return str(value) if value is not None else ""
 
