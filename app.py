@@ -14106,22 +14106,12 @@ def reports():
         "Subject Summary",
         "Attendance Summary"
     ]
-    if role in ["Admin", "Admin+Teacher"] and premium_feature_enabled(
-        school_id,
-        st.session_state.user.id,
-        "school_academic_status"
-    ):
-        report_options.append("💎 School Academic Status")
 
     report_type = st.selectbox(
         "📊 Report Type",
         report_options,
         key="reports_type"
     )
-
-    if report_type == "💎 School Academic Status":
-        school_academic_status(school_id)
-        return
 
     # -----------------------------------------------------
     # STUDENT RECORDS EXCEL
@@ -15508,14 +15498,16 @@ def dashboard():
                 "📊 Reports"
             ]
 
-            # Premium Features is visible to Admin only when SuperAdmin
-            # has activated Premium access for this Admin.
+            # Premium Features and School Academic Status are separate
+            # dashboard items. School Academic Status is itself a Premium
+            # feature and is shown separately only when this Admin has access.
             if role in ["Admin", "Admin+Teacher"] and premium_feature_enabled(
                 profile.get("school_id"),
                 st.session_state.user.id,
                 "school_academic_status"
             ):
                 admin_menu_items.append("💎 Premium Features")
+                admin_menu_items.append("💎 School Academic Status")
 
             menu = st.radio(
                 "Admin Menu",
@@ -15560,6 +15552,9 @@ def dashboard():
 
             elif menu == "💎 Premium Features":
                 premium_feature_management()
+
+            elif menu == "💎 School Academic Status":
+                school_academic_status(profile.get("school_id"))
 
     # =====================================================
     # TEACHER
