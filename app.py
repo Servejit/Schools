@@ -10213,25 +10213,44 @@ def create_report_overlay(
     # Remarks
     # -----------------------------------------------------
 
-    # Keep Remarks fully inside the same Subject column as Teacher Signature.
-    remarks_x = table_x
-    remarks_width = subject_col
+    # Keep the complete Remarks block column-wise aligned with
+    # the Teacher Signature: same Subject-column center and boundaries.
     teacher_signature_x = table_x + subject_col / 2
+    remarks_width = subject_col
 
     pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawCentredString(teacher_signature_x, remarks_y + 35, "Remarks:")
-
-    pdf.setFont("Helvetica", 9)
-    draw_wrapped_text(
-        pdf,
-        student.get("remarks") or "",
-        remarks_x,
-        remarks_y + 20,
-        remarks_width,
-        "Helvetica",
-        9,
-        12
+    pdf.drawCentredString(
+        teacher_signature_x,
+        remarks_y + 35,
+        "Remarks:"
     )
+
+    # Center every wrapped Remarks line in the same Subject column.
+    remarks_text = str(student.get("remarks") or "").strip()
+    if remarks_text:
+        pdf.setFont("Helvetica", 9)
+        words = remarks_text.split()
+        lines = []
+        current = ""
+        for word in words:
+            test = f"{current} {word}".strip()
+            if pdf.stringWidth(test, "Helvetica", 9) <= remarks_width - 10:
+                current = test
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+
+        remarks_line_y = remarks_y + 20
+        for line in lines:
+            pdf.drawCentredString(
+                teacher_signature_x,
+                remarks_line_y,
+                line
+            )
+            remarks_line_y -= 12
 
     # -----------------------------------------------------
     # Signature labels ONLY
