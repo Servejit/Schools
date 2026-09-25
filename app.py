@@ -870,7 +870,7 @@ def schools():
 # =========================================================
 
 def school_profile_settings():
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
     school_id = st.session_state.profile.get("school_id")
 
     if role not in ["Admin", "Admin+Teacher", "SuperAdmin"]:
@@ -968,7 +968,7 @@ def users():
     # -----------------------------------------------------
     # SUPERADMIN QUICK ADD SCHOOL
     # -----------------------------------------------------
-    if st.session_state.profile.get("role") == "SuperAdmin":
+    if get_active_theme_role() == "SuperAdmin":
         with st.expander("🏫 ➕ Add New School", expanded=False):
             quick_school_name = st.text_input(
                 "School Name",
@@ -1032,7 +1032,7 @@ def users():
     # Admin+Teacher: full school access.
     # Teacher: only students belonging to classes assigned to
     # this teacher as Class Teacher.
-    management_role = st.session_state.profile.get("role")
+    management_role = get_active_theme_role()
 
     if management_role in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
         with st.expander("👨‍👩‍👧 Parent → Student Linking", expanded=False):
@@ -1204,7 +1204,7 @@ def users():
 
         # SuperAdmin can create users in any active school.
         # Admin can create users only inside their own school.
-        if st.session_state.profile.get("role") in ["Admin", "Admin+Teacher"]:
+        if get_active_theme_role() in ["Admin", "Admin+Teacher"]:
             admin_school_id = str(st.session_state.profile.get("school_id") or "")
             admin_school_label = next(
                 (
@@ -1235,7 +1235,7 @@ def users():
             key="create_user_password"
         )
 
-        creator_role = st.session_state.profile.get("role")
+        creator_role = get_active_theme_role()
         create_role_options = ["Admin", "Teacher", "Student", "Parent"]
 
         # SuperAdmin, Admin and Admin+Teacher have full user-management authority.
@@ -1367,7 +1367,7 @@ def users():
             user_query = user_query.eq("school_id", "__NO_EXISTING_SCHOOL__")
 
         # Admin must only load users belonging to their own school.
-        if st.session_state.profile.get("role") in ["Admin", "Admin+Teacher"]:
+        if get_active_theme_role() in ["Admin", "Admin+Teacher"]:
             user_query = user_query.eq(
                 "school_id",
                 st.session_state.profile.get("school_id")
@@ -1409,7 +1409,7 @@ def users():
     # -----------------------------------------------------
     # USER LIST FILTER / SELECT
     # -----------------------------------------------------
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
 
     if role == "SuperAdmin":
         filter_school_options = ["All Schools"] + list(school_map.keys())
@@ -2274,7 +2274,7 @@ def get_exam_assessments(school_id, active_only=True):
 
 def exam_assessment_settings():
     st.header("📝 Exam / Assessment Settings")
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
     if role not in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         st.error("Only Admin can manage Exam / Assessment names.")
         return
@@ -2634,7 +2634,7 @@ def students():
 
     st.header("🎓 Student Management")
 
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
 
     school_id = get_selected_school(
         "student_selected_school"
@@ -3872,7 +3872,7 @@ def students():
 
 def classes_subjects():
 
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
 
     st.header("📚 Classes & Subjects")
 
@@ -3935,7 +3935,7 @@ def classes_subjects():
         )
     except Exception as e:
         teacher_data = []
-        if st.session_state.profile.get("role") in ["SuperAdmin", "Admin"]:
+        if get_active_theme_role() in ["SuperAdmin", "Admin"]:
             st.warning("Could not load teachers for class assignment.")
 
     teacher_options = {"Not Assigned": None}
@@ -5339,7 +5339,7 @@ def bulk_marks():
         )
         st.divider()
 
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
 
     if role not in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
         st.error("You do not have permission to enter marks.")
@@ -5818,7 +5818,7 @@ def bulk_marks():
 def attendance():
     st.header("📅 Attendance")
 
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
 
     if role not in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
         st.error("You do not have permission to manage attendance.")
@@ -6048,7 +6048,7 @@ def print_templates():
 
     st.header("🖨️ A4 Print Templates")
 
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
 
     if role not in [
         "SuperAdmin",
@@ -6714,7 +6714,7 @@ def print_templates():
 def attendance():
     st.header("📅 Attendance")
 
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
 
     if role not in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
         st.error("You do not have permission to manage attendance.")
@@ -9822,7 +9822,7 @@ def _share_drive_file(drive_service, file_id, email, role="reader"):
 
 def _google_target_emails(school_id):
     """Return only users who are allowed to access this school's files."""
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
     current_email = str(
         st.session_state.profile.get("email") or ""
     ).strip()
@@ -9839,7 +9839,7 @@ def _google_target_emails(school_id):
         if not bool(profile.get("active", True)):
             continue
         email = str(profile.get("email") or "").strip()
-        p_role = profile.get("role")
+        p_role = get_active_theme_role()
         same_school = str(profile.get("school_id")) == str(school_id)
 
         if not email:
@@ -10095,7 +10095,7 @@ def sync_school_marks_to_google(school_id):
 def list_google_school_backups():
     """List Google Sheets and XLSX backups visible to the current role."""
     _, drive_service = get_google_services()
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
     current_school_id = st.session_state.profile.get("school_id")
 
     if role == "SuperAdmin":
@@ -10193,7 +10193,7 @@ def list_google_school_backups():
 
 
 def google_marks_backup_section(school_id):
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
     if role not in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         return
 
@@ -10323,7 +10323,7 @@ def google_marks_backup_section(school_id):
 
 
 def marks_backup_and_result_tools(school_id):
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
 
     if role not in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         return
@@ -12783,7 +12783,7 @@ def premium_feature_management():
         show_save_message(f"save_parent_report_card_{_current_school_id}")
 
     """Manage Premium access permissions."""
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
     school_id = st.session_state.profile.get("school_id")
 
     if role == "SuperAdmin":
@@ -13596,7 +13596,7 @@ def school_academic_status(school_id):
     st.subheader("💎 School Academic Status")
     st.caption("Premium academic performance analysis. SuperAdmin has full access.")
 
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
 
     # SuperAdmin can select any school.
     if role == "SuperAdmin":
@@ -14143,7 +14143,7 @@ def school_academic_status(school_id):
 def reports():
     st.header("📊 Reports")
 
-    role = st.session_state.profile.get("role")
+    role = get_active_theme_role()
     if role not in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
         st.error("You do not have permission to view reports.")
         return
