@@ -5839,7 +5839,7 @@ def print_templates():
 
         school_info = (
             sb.table("schools")
-            .select("id,name,code,address")
+            .select("id,name,code,address,website,contact_number")
             .eq("id", school_id)
             .maybe_single()
             .execute()
@@ -6258,10 +6258,13 @@ def print_templates():
                 # REPORT CARD CONTENT CONTROLS
                 # -------------------------------------------------
                 st.markdown("#### ⚙️ Report Card Content Controls")
-                st.caption("These settings are saved separately for each Report Card template.")
+                st.caption("These settings control School Name + Address + Website + Contact Number and are saved separately for each Report Card template.")
 
                 show_school_name = bool(
                     config.get("show_school_name", True)
+                )
+                show_school_contact = bool(
+                    config.get("show_school_contact", show_school_name)
                 )
 
                 status_label = (
@@ -6277,7 +6280,9 @@ def print_templates():
                 ):
                     try:
                         content_config = get_template_config(template)
-                        content_config["show_school_name"] = not show_school_name
+                        new_show = not show_school_name
+                        content_config["show_school_name"] = new_show
+                        content_config["show_school_contact"] = new_show
 
                         sb.table("print_templates").update({
                             "config_json": json.dumps(content_config),
@@ -10372,7 +10377,7 @@ def build_report_cards_excel(school_id, allowed_class_pairs=None):
     """
     school = (
         sb.table("schools")
-        .select("id,name,code,address")
+        .select("id,name,code,address,website,contact_number")
         .eq("id", school_id)
         .maybe_single()
         .execute()
@@ -10733,6 +10738,8 @@ def build_report_cards_excel(school_id, allowed_class_pairs=None):
         ["School Name", school.get("name") or ""],
         ["School Code", school.get("code") or ""],
         ["School Address", school.get("address") or ""],
+        ["School Website", school.get("website") or ""],
+        ["School Contact Number", school.get("contact_number") or ""],
         [
             "Created At",
             datetime.datetime.now(
@@ -11412,9 +11419,7 @@ def report_cards():
 
         school_info = (
             sb.table("schools")
-            .select(
-                "id,name,code,address"
-            )
+            .select("id,name,code,address,website,contact_number")
             .eq("id", school_id)
             .maybe_single()
             .execute()
@@ -12564,7 +12569,7 @@ def parent_report_cards_view(school_id, parent_user_id):
     try:
         school_info = (
             sb.table("schools")
-            .select("id,name,code,address")
+            .select("id,name,code,address,website,contact_number")
             .eq("id", school_id)
             .maybe_single()
             .execute()
@@ -12808,7 +12813,7 @@ def student_report_card_view(school_id, student_id):
     try:
         school_info = (
             sb.table("schools")
-            .select("id,name,code,address")
+            .select("id,name,code,address,website,contact_number")
             .eq("id", school_id)
             .maybe_single()
             .execute()
@@ -16360,7 +16365,7 @@ def dashboard():
                                     else:
                                         school_info = (
                                             sb.table("schools")
-                                            .select("id,name,code,address")
+                                            .select("id,name,code,address,website,contact_number")
                                             .eq("id", school_id)
                                             .maybe_single()
                                             .execute()
