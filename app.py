@@ -12679,10 +12679,10 @@ def parent_report_cards_view(school_id, parent_user_id):
             template_bytes = sb.storage.from_("school-assets").download(
                 template_path
             )
-    except Exception as e:
-        st.error("Could not load the Report Card template.")
-        st.code(str(e))
-        return
+        except Exception as e:
+            st.error("Could not load the Report Card template.")
+            st.code(str(e))
+            return
 
     try:
         school_info = (
