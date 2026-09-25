@@ -9647,7 +9647,7 @@ def create_report_overlay(
         pdf.setFont("Helvetica-Bold", name_font)
         pdf.drawCentredString(
             width / 2,
-            height - 40,
+            height - 42,
             str(school_name)
         )
 
@@ -9655,7 +9655,7 @@ def create_report_overlay(
             pdf.setFont("Helvetica", 16)
             pdf.drawCentredString(
                 width / 2,
-                height - 58,
+                height - 60,
                 str(school_address)
             )
 
@@ -9665,12 +9665,12 @@ def create_report_overlay(
         if website_text or contact_text:
             pdf.setFont("Helvetica", 16)
             if website_text and contact_text:
-                pdf.drawString(width / 2 - 175, height - 79, f"Website: {website_text}")
-                pdf.drawString(width / 2 + 35, height - 79, f"Contact: {contact_text}")
+                pdf.drawString(width / 2 - 175, height - 81, f"Website: {website_text}")
+                pdf.drawString(width / 2 + 35, height - 81, f"Contact: {contact_text}")
             elif website_text:
-                pdf.drawCentredString(width / 2, height - 79, f"Website: {website_text}")
+                pdf.drawCentredString(width / 2, height - 81, f"Website: {website_text}")
             else:
-                pdf.drawCentredString(width / 2, height - 79, f"Contact: {contact_text}")
+                pdf.drawCentredString(width / 2, height - 81, f"Contact: {contact_text}")
 
     # School logo on the LEFT side
     if school_logo_path:
