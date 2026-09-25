@@ -13486,7 +13486,13 @@ def subject_wise_premium_view(school_id, student_ids, viewer_label):
 
                 bg = subject_colors[subject_key]
                 st.dataframe(
-                    filtered_df.style.map(
+                    filtered_df.style
+                    .format({
+                        "Marks": "{:.2f}",
+                        "Maximum": "{:.2f}",
+                        "Percentage": "{:.2f}%"
+                    })
+                    .map(
                         lambda _: f"background-color: {bg}"
                     ),
                     hide_index=True,
