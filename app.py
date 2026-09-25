@@ -10914,7 +10914,7 @@ def report_cards():
         "SuperAdmin",
         "Admin",
         "Admin+Teacher"
-    ] and role != "Teacher":
+    ]:
         st.subheader("⚙️ Report Card Content Settings")
         st.caption(
             "No Report Card print template is uploaded. These settings "
@@ -11204,7 +11204,7 @@ def report_cards():
 
         template_map[label] = template
 
-    if role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+    if raw_role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
         selected_template_label = st.selectbox(
             "🖨️ Select Active Report Card Template",
             list(template_map.keys()),
