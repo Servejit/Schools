@@ -7205,6 +7205,8 @@ def create_report_overlay(
     # -----------------------------------------------------
 
     detail_y = info_y - 28
+    # Left side: Student Name, Class, Admission No.
+    # Right side: Father Name, Section, Date of Birth.
     details = [
 
         (
@@ -7249,6 +7251,9 @@ def create_report_overlay(
 
     for index, item in enumerate(details):
 
+        # Explicit two-column layout:
+        # left column = Student Name / Class / Admission No.
+        # right column = Father Name / Section / Date of Birth.
         col = index % 2
         row = index // 2
 
