@@ -6258,7 +6258,7 @@ def print_templates():
                 # REPORT CARD CONTENT CONTROLS
                 # -------------------------------------------------
                 st.markdown("#### ⚙️ Report Card Content Controls")
-                st.caption("These settings control School Name + Address + Website + Contact Number and are saved separately for each Report Card template.")
+                st.caption("Single Report Card header control: School Name + Address + Website + Contact Number. This setting is saved separately for this Report Card template.")
 
                 show_school_name = bool(
                     config.get("show_school_name", True)
@@ -7070,6 +7070,8 @@ def create_report_overlay(
             str(school_name)
         )
 
+        header_y = height - margin - 16
+
         if school_address:
             pdf.setFont(
                 "Helvetica",
@@ -7077,8 +7079,26 @@ def create_report_overlay(
             )
             pdf.drawCentredString(
                 width / 2,
-                height - margin - 16,
+                header_y,
                 school_address
+            )
+            header_y -= 11
+
+        if school_website:
+            pdf.setFont("Helvetica", 8)
+            pdf.drawCentredString(
+                width / 2,
+                header_y,
+                str(school_website)
+            )
+            header_y -= 11
+
+        if school_contact:
+            pdf.setFont("Helvetica", 8)
+            pdf.drawCentredString(
+                width / 2,
+                header_y,
+                f"Contact: {school_contact}"
             )
 
     # School logo on the LEFT side
@@ -7694,7 +7714,8 @@ def make_report_card_pdf(
         present_days=present_days,
         school_logo_path=school_logo_path,
         school_logo_size=school_logo_size,
-        page_size=template_page_size
+        page_size=template_page_size,
+        show_school_name=show_school_name
     )
     overlay_doc = fitz.open(
         stream=overlay_bytes,
@@ -15826,8 +15847,7 @@ def dashboard():
             st.title("🛠️ Admin Dashboard")
 
             admin_menu_items = [
-                "🏫 School Profile",
-                "👥 Users",
+                    "👥 Users",
                 "🎓 Students",
                 "📚 Classes & Subjects",
                 "📝 Exam / Assessment",
