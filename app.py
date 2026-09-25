@@ -10748,6 +10748,47 @@ def make_report_card_pdf(
     show_school_name=True
 ):
 
+    # Always resolve the school's uploaded Report Card logo here as well.
+    # This guarantees the logo is printed whether a background template is
+    # uploaded or the built-in white A4 page is used.
+    if not school_logo_path:
+        try:
+            fallback_school_id = (
+                school_info.get("id") if school_info else None
+            )
+            if fallback_school_id:
+                default_rows = (
+                    sb.table("print_templates")
+                    .select("config_json")
+                    .eq("school_id", fallback_school_id)
+                    .eq("active", True)
+                    .execute()
+                    .data or []
+                )
+                for default_row in default_rows:
+                    default_config = get_template_config(default_row)
+                    if default_config.get("is_default_report_card"):
+                        school_logo_path = (
+                            default_config.get("school_logo_data")
+                            or default_config.get("school_logo_path")
+                            or default_config.get("logo_path")
+                            or default_config.get("school_logo")
+                            or default_config.get("logo")
+                        )
+                        if school_logo_path:
+                            try:
+                                school_logo_size = int(
+                                    default_config.get(
+                                        "school_logo_size",
+                                        school_logo_size
+                                    )
+                                )
+                            except Exception:
+                                pass
+                            break
+        except Exception:
+            pass
+
     overlay_bytes = create_report_overlay(
         student=student,
         school_info=school_info,
