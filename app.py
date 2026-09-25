@@ -16562,9 +16562,9 @@ def dashboard():
                                         use_container_width=True,
                                         key="parent_download_report_card"
                                     )
-                                    except Exception as e:
-                                        st.error("Could not generate the Report Card.")
-                                        st.code(str(e))
+                                except Exception as e:
+                                    st.error("Could not generate the Report Card.")
+                                    st.code(str(e))
 
         elif not school_id:
             st.info("Your Parent account is not linked to a school yet.")
