@@ -10154,14 +10154,13 @@ def create_report_overlay(
                 # Keep the logo clearly outside the table and very close
                 # to its left edge. This makes the position visibly
                 # different while keeping a small non-overlapping gap.
-                logo_box_x = max(8, left - logo_size - 2)
+                # Move the logo 3 spaces inward toward the table.
+                logo_box_x = max(8, left - logo_size - 2 + 12)
                 logo_box_w = logo_size
                 logo_box_h = logo_size
 
-                # Align the TOP of the logo with the top of the
-                # School Name header area. The logo must never rise
-                # above the School Name.
-                logo_top_y = height - 42
+                # Move the logo 2 spaces down.
+                logo_top_y = height - 42 - 12
                 logo_box_y = logo_top_y - logo_box_h
 
                 pdf.setStrokeColorRGB(
