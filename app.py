@@ -7572,6 +7572,7 @@ def create_report_overlay(
         9.5
     )
 
+    # Align the summary row directly with the marks table columns.
     total_x = table_x
     percentage_x = table_x + table_width * 0.43
     grade_x = table_x + table_width * 0.76
@@ -9559,8 +9560,9 @@ def create_report_overlay(
 
     if portrait:
 
-        left = 45
-        right = width - 45
+        # Keep the marks table away from both page borders.
+        left = 60
+        right = width - 60
 
         photo_x = width - 125
         photo_y = height - 205
@@ -9569,9 +9571,9 @@ def create_report_overlay(
 
         info_y = height - 155
 
-        table_x = 45
+        table_x = left
         table_y = height - 330
-        table_width = width - 90
+        table_width = right - left
 
         # Move lower report content upward by about 2 spaces.
         remarks_y = 130
@@ -9581,8 +9583,9 @@ def create_report_overlay(
 
     else:
 
-        left = 45
-        right = width - 45
+        # Keep the marks table away from both page borders.
+        left = 60
+        right = width - 60
 
         photo_x = width - 145
         photo_y = height - 175
@@ -9591,9 +9594,9 @@ def create_report_overlay(
 
         info_y = height - 145
 
-        table_x = 45
+        table_x = left
         table_y = height - 270
-        table_width = width - 90
+        table_width = right - left
 
         # Move lower report content upward by about 2 spaces.
         remarks_y = 85
@@ -9815,7 +9818,8 @@ def create_report_overlay(
         9
     )
 
-    col1_x = left
+    # Align student details exactly with the marks table edges/columns.
+    col1_x = table_x
     # Align the right-side student-detail column with the marks table.
     # Start the right-side details exactly at the left edge of
     # the Grade column in the marks table.
@@ -10209,9 +10213,9 @@ def create_report_overlay(
     # Remarks
     # -----------------------------------------------------
 
-    # Align Remarks with the Teacher Signature column.
-    remarks_x = teacher_x - 50
-    remarks_width = max(180, (principal_x - teacher_x) + 100)
+    # Keep Remarks in the same column as the Teacher Signature.
+    remarks_width = 120 if portrait else 170
+    remarks_x = teacher_x - (remarks_width / 2)
 
     pdf.setFont("Helvetica-Bold", 10)
     pdf.drawString(remarks_x, remarks_y + 35, "Remarks:")
