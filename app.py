@@ -27,6 +27,7 @@ from supabase import create_client
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.utils import ImageReader, simpleSplit
+from reportlab.pdfbase import pdfmetrics
 
 
 # =========================================================
@@ -8007,6 +8008,46 @@ def make_report_card_pdf(
     school_logo_size=52,
     show_school_name=True
 ):
+
+    # Resolve the school default logo here as a final fallback. This is
+    # intentionally done inside PDF generation so the logo works for every
+    # Report Card path, including the white A4 fallback and older templates.
+    if not school_logo_path:
+        try:
+            fallback_school_id = school_info.get("id") if school_info else None
+            if fallback_school_id:
+                default_rows = (
+                    sb.table("print_templates")
+                    .select("config_json")
+                    .eq("school_id", fallback_school_id)
+                    .eq("active", True)
+                    .execute()
+                    .data or []
+                )
+                for default_row in default_rows:
+                    default_config = get_template_config(default_row)
+                    if default_config.get("is_default_report_card"):
+                        school_logo_path = (
+                            default_config.get("school_logo_path")
+                            or default_config.get("logo_path")
+                            or default_config.get("school_logo")
+                            or default_config.get("logo")
+                        )
+                        if school_logo_path:
+                            try:
+                                school_logo_size = int(
+                                    default_config.get(
+                                        "school_logo_size", school_logo_size
+                                    )
+                                )
+                            except Exception:
+                                pass
+                        break
+        except Exception:
+            pass
+
+    if school_logo_path:
+        school_logo_path = str(school_logo_path).strip()
 
     # Always inspect the selected template before drawing the report.
     # The overlay therefore uses the same page dimensions/orientation as
