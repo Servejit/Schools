@@ -9770,7 +9770,7 @@ def create_report_overlay(
     # Student details
     # -----------------------------------------------------
 
-    detail_y = info_y - 35
+    detail_y = info_y - 55
     details = [
 
         (
