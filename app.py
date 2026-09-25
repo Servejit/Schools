@@ -8073,6 +8073,43 @@ def make_report_card_pdf(
 
     orientation = detected_orientation
 
+    # Always resolve the school's saved default logo before creating
+    # the overlay. The later Report Card workflow definitions use this
+    # function, so this fallback must live here as well.
+    if not school_logo_path:
+        try:
+            fallback_school_id = school_info.get("id") if school_info else None
+            if fallback_school_id:
+                rows = (
+                    sb.table("print_templates")
+                    .select("config_json")
+                    .eq("school_id", fallback_school_id)
+                    .eq("active", True)
+                    .execute()
+                    .data or []
+                )
+                for row in rows:
+                    cfg = get_template_config(row)
+                    if cfg.get("is_default_report_card"):
+                        school_logo_path = (
+                            cfg.get("school_logo_data")
+                            or cfg.get("school_logo_path")
+                            or cfg.get("logo_path")
+                            or cfg.get("school_logo")
+                            or cfg.get("logo")
+                        )
+                        if school_logo_path:
+                            try:
+                                school_logo_size = int(
+                                    cfg.get("school_logo_size", school_logo_size)
+                                )
+                            except Exception:
+                                pass
+                        break
+        except Exception:
+            pass
+
+
     overlay_bytes = create_report_overlay(
         student=student,
         school_info=school_info,
@@ -9831,6 +9868,7 @@ def school_logo_from_template(template):
     config = get_template_config(template)
 
     for key in [
+        "school_logo_data",
         "school_logo_path",
         "logo_path",
         "school_logo",
@@ -9840,8 +9878,37 @@ def school_logo_from_template(template):
         if value:
             return str(value).strip()
 
-    return None
+    school_id = (
+        template.get("school_id")
+        or config.get("school_id")
+        or (st.session_state.get("profile") or {}).get("school_id")
+    )
+    if school_id:
+        try:
+            rows = (
+                sb.table("print_templates")
+                .select("config_json")
+                .eq("school_id", school_id)
+                .eq("active", True)
+                .execute()
+                .data or []
+            )
+            for row in rows:
+                default_config = get_template_config(row)
+                if default_config.get("is_default_report_card"):
+                    value = (
+                        default_config.get("school_logo_data")
+                        or default_config.get("school_logo_path")
+                        or default_config.get("logo_path")
+                        or default_config.get("school_logo")
+                        or default_config.get("logo")
+                    )
+                    if value:
+                        return str(value).strip()
+        except Exception:
+            pass
 
+    return None
 
 def school_logo_size_from_template(template):
     config = get_template_config(template)
