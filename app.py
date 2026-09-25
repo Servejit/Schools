@@ -9671,7 +9671,7 @@ def create_report_overlay(
         contact_text = str(school_contact).strip()
 
         if website_text or contact_text:
-            pdf.setFont("Helvetica", 14)
+            pdf.setFont("Helvetica", 12)
             if website_text and contact_text:
                 pdf.drawString(width / 2 - 175, height - 93, f"Website: {website_text}")
                 pdf.drawString(width / 2 + 35, height - 93, f"Contact: {contact_text}")
