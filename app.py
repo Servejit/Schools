@@ -9558,14 +9558,14 @@ def create_report_overlay(
         right = width - 45
 
         photo_x = width - 125
-        photo_y = height - 175
+        photo_y = height - 205
         photo_w = 75
         photo_h = 95
 
-        info_y = height - 75
+        info_y = height - 105
 
         table_x = 45
-        table_y = height - 250
+        table_y = height - 280
         table_width = width - 90
 
         # Move lower report content upward by about 2 spaces.
@@ -9580,14 +9580,14 @@ def create_report_overlay(
         right = width - 45
 
         photo_x = width - 145
-        photo_y = height - 145
+        photo_y = height - 175
         photo_w = 85
         photo_h = 105
 
-        info_y = height - 65
+        info_y = height - 95
 
         table_x = 45
-        table_y = height - 190
+        table_y = height - 220
         table_width = width - 90
 
         # Move lower report content upward by about 2 spaces.
@@ -9623,21 +9623,35 @@ def create_report_overlay(
     # ON = School Name + Address + Website + Contact Number.
     # OFF = all four hidden.
     if show_school_name:
-        pdf.setFont("Helvetica-Bold", 19)
+        # Letterhead-style school header.  The school name is deliberately
+        # larger, while address / website / contact scale proportionally.
+        name_font = 26
+        name_max_width = table_width
+        try:
+            while (
+                name_font > 15
+                and pdf.stringWidth(
+                    str(school_name),
+                    "Helvetica-Bold",
+                    name_font
+                ) > name_max_width
+            ):
+                name_font -= 0.5
+        except Exception:
+            pass
+
+        pdf.setFont("Helvetica-Bold", name_font)
         pdf.drawCentredString(
             width / 2,
-            height - 38,
+            height - 30,
             str(school_name)
         )
 
-        # Keep the header compact: Address on one line,
-        # Website and Contact on the same line below it.
-        pdf.setFont("Helvetica", 8)
-
         if school_address:
+            pdf.setFont("Helvetica", 11)
             pdf.drawCentredString(
                 width / 2,
-                height - 49,
+                height - 47,
                 str(school_address)
             )
 
@@ -9645,27 +9659,28 @@ def create_report_overlay(
         contact_text = str(school_contact).strip()
 
         if website_text or contact_text:
+            pdf.setFont("Helvetica", 10)
             if website_text and contact_text:
                 pdf.drawString(
-                    width / 2 - 180,
-                    height - 60,
+                    width / 2 - 175,
+                    height - 63,
                     f"Website: {website_text}"
                 )
                 pdf.drawString(
                     width / 2 + 35,
-                    height - 60,
+                    height - 63,
                     f"Contact: {contact_text}"
                 )
             elif website_text:
                 pdf.drawCentredString(
                     width / 2,
-                    height - 60,
+                    height - 63,
                     f"Website: {website_text}"
                 )
             else:
                 pdf.drawCentredString(
                     width / 2,
-                    height - 60,
+                    height - 63,
                     f"Contact: {contact_text}"
                 )
 
@@ -10197,13 +10212,21 @@ def create_report_overlay(
     # Remarks
     # -----------------------------------------------------
 
+    # Keep Remarks in the same left-side column as the Teacher Signature.
+    # This gives the lower section a clean column-wise alignment.
+    remarks_x = teacher_x - 50
+    remarks_width = max(
+        180,
+        (principal_x - teacher_x) + 100
+    )
+
     pdf.setFont(
         "Helvetica-Bold",
         10
     )
 
     pdf.drawString(
-        table_x,
+        remarks_x,
         remarks_y + 35,
         "Remarks:"
     )
@@ -10216,9 +10239,9 @@ def create_report_overlay(
     draw_wrapped_text(
         pdf,
         student.get("remarks") or "",
-        table_x,
+        remarks_x,
         remarks_y + 20,
-        table_width,
+        remarks_width,
         "Helvetica",
         9,
         12
@@ -10235,13 +10258,13 @@ def create_report_overlay(
 
     pdf.drawCentredString(
         teacher_x,
-        75,
+        105,
         "Teacher Signature"
     )
 
     pdf.drawCentredString(
         principal_x,
-        75,
+        105,
         "Principal Signature"
     )
 
@@ -16197,324 +16220,3 @@ def dashboard():
         school_id = profile.get("school_id")
 
         show_dashboard_notices(
-            school_id,
-            "📢 Notices"
-        )
-
-        # -------------------------------------------------
-        # PARENT REPORT CARDS
-        # -------------------------------------------------
-        if school_id and parent_report_card_enabled(school_id):
-
-            st.subheader("📄 My Child Report Cards")
-
-            try:
-                linked_rows = (
-                    sb.table("parent_student_links")
-                    .select("student_id")
-                    .eq("parent_id", st.session_state.user.id)
-                    .execute()
-                    .data or []
-                )
-            except Exception:
-                linked_rows = []
-
-            linked_ids = [
-                str(x.get("student_id"))
-                for x in linked_rows
-                if x.get("student_id")
-            ]
-
-            if not linked_ids:
-                st.info("No child is linked to your Parent account yet.")
-            else:
-                try:
-                    child_rows = (
-                        sb.table("students")
-                        .select(
-                            "id,school_id,user_id,name,admission_no,"
-                            "class_name,section,date_of_birth,gender,"
-                            "father_name,parent_name,parent_phone,"
-                            "remarks,photo_path,active"
-                        )
-                        .eq("school_id", school_id)
-                        .eq("active", True)
-                        .in_("id", linked_ids)
-                        .order("name")
-                        .execute()
-                        .data or []
-                    )
-                except Exception:
-                    child_rows = []
-
-                if not child_rows:
-                    st.info("No active linked child is available.")
-                else:
-                    child_map = {
-                        str(x["id"]): x for x in child_rows
-                    }
-                    child_options = {
-                        (
-                            f"{x.get('name') or 'Student'} | "
-                            f"Class {x.get('class_name') or '-'} | "
-                            f"Section {x.get('section') or '-'} | "
-                            f"Admission {x.get('admission_no') or '-'}"
-                        ): x
-                        for x in child_rows
-                    }
-
-                    selected_child_label = st.selectbox(
-                        "🎓 Child",
-                        list(child_options.keys()),
-                        key="parent_report_card_child"
-                    )
-                    selected_child = child_options[selected_child_label]
-
-                    try:
-                        exam_options = get_exam_assessments(school_id)
-                    except Exception:
-                        exam_options = []
-
-                    exam_names = [
-                        str(x.get("name") or "").strip()
-                        for x in exam_options
-                        if x.get("name")
-                    ]
-
-                    if not exam_names:
-                        st.info("No Exam / Assessment is available yet.")
-                    else:
-                        exam_name = st.selectbox(
-                            "📝 Exam / Assessment",
-                            exam_names,
-                            key="parent_report_card_exam"
-                        )
-
-                        try:
-                            template_data = (
-                                sb.table("print_templates")
-                                .select(
-                                    "id,name,template_name,page_size,"
-                                    "orientation,storage_path,file_path,"
-                                    "file_type,config_json,active,created_at"
-                                )
-                                .eq("school_id", school_id)
-                                .eq("active", True)
-                                .order("created_at", desc=True)
-                                .execute()
-                                .data or []
-                            )
-                            report_templates = [
-                                x for x in template_data
-                                if get_template_config(x).get("template_type")
-                                == "Report Card"
-                            ]
-                        except Exception:
-                            report_templates = []
-
-                        if not report_templates:
-                            st.info("No active Report Card template is available.")
-                        else:
-                            selected_template = report_templates[0]
-                            template_path = (
-                                selected_template.get("file_path")
-                                or selected_template.get("storage_path")
-                            )
-
-                            if not template_path:
-                                st.info("The Report Card template is not configured yet.")
-                            else:
-                                try:
-                                    template_bytes = (
-                                        sb.storage
-                                        .from_("school-assets")
-                                        .download(template_path)
-                                    )
-                                except Exception:
-                                    template_bytes = None
-
-                                if not template_bytes:
-                                    st.info("The Report Card template could not be loaded.")
-                                else:
-                                    subject_data = (
-                                        sb.table("subjects")
-                                        .select(
-                                            "id,school_id,class_id,name,subject_name,"
-                                            "code,max_marks,passing_marks,active"
-                                        )
-                                        .eq("school_id", school_id)
-                                        .eq("active", True)
-                                        .order("subject_name")
-                                        .execute()
-                                        .data or []
-                                    )
-
-                                    marks_rows = (
-                                        sb.table("marks")
-                                        .select(
-                                            "id,student_id,subject_id,exam_name,"
-                                            "marks,max_marks,class_id"
-                                        )
-                                        .eq("school_id", school_id)
-                                        .eq("student_id", selected_child["id"])
-                                        .eq("exam_name", exam_name)
-                                        .execute()
-                                        .data or []
-                                    )
-
-                                    marks_by_subject = {
-                                        str(x.get("subject_id")): x
-                                        for x in marks_rows
-                                    }
-                                    marked_class_ids = {
-                                        str(x.get("class_id"))
-                                        for x in marks_rows
-                                        if x.get("class_id") is not None
-                                    }
-
-                                    child_marks = []
-                                    for subject in subject_data:
-                                        sid = str(subject.get("id"))
-                                        if marked_class_ids:
-                                            if str(subject.get("class_id")) not in marked_class_ids:
-                                                continue
-                                        elif sid not in marks_by_subject:
-                                            continue
-
-                                        row = marks_by_subject.get(sid)
-                                        combined = dict(row) if row else {
-                                            "id": None,
-                                            "student_id": selected_child["id"],
-                                            "subject_id": subject.get("id"),
-                                            "exam_name": exam_name,
-                                            "marks": None,
-                                            "max_marks": subject.get("max_marks"),
-                                            "class_id": subject.get("class_id")
-                                        }
-                                        combined["subject_name"] = (
-                                            subject.get("subject_name")
-                                            or subject.get("name")
-                                            or "Subject"
-                                        )
-                                        combined["passing_marks"] = (
-                                            subject.get("passing_marks")                                            if subject.get("passing_marks") is not None
-                                            else 33
-                                        )
-                                        if combined.get("max_marks") is None:
-                                            combined["max_marks"] = (
-                                                subject.get("max_marks")
-                                                if subject.get("max_marks") is not None
-                                                else 100
-                                            )
-                                        child_marks.append(combined)
-
-                                    if not child_marks:
-                                        st.info(
-                                            f"No marks found for {selected_child.get('name') or 'this child'} "
-                                            f"for {exam_name}."
-                                        )
-                                    else:
-                                        school_info = (
-                                            sb.table("schools")
-                                            .select("id,name,code,address,website,contact_number")
-                                            .eq("id", school_id)
-                                            .maybe_single()
-                                            .execute()
-                                            .data
-                                        ) or {}
-
-                                        config = get_template_config(selected_template)
-                                        orientation = selected_template.get("orientation") or "Portrait"
-                                        file_type = (selected_template.get("file_type") or "").lower()
-                                        logo_size = school_logo_size_from_template(selected_template)
-
-                                        if st.button(
-                                            "📄 View / Download Report Card",
-                                            type="primary",
-                                            use_container_width=True,
-                                            key="parent_view_report_card"
-                                        ):
-                                            try:
-                                                pdf_bytes = make_report_card_pdf(
-                                                    template_bytes=template_bytes,
-                                                    template_type="Report Card",
-                                                    orientation=orientation,
-                                                    student=selected_child,
-                                                    school_info=school_info,
-                                                    subjects=subject_data,
-                                                    marks_rows=child_marks,
-                                                    exam_name=exam_name,
-                                                    file_type=file_type,
-                                                    total_attendance=attendance_summary(
-                                                        selected_child["id"], school_id
-                                                    )[0],
-                                                    present_days=attendance_summary(
-                                                        selected_child["id"], school_id
-                                                    )[1],
-                                                    school_logo_path=school_logo_from_template(
-                                                        selected_template
-                                                    ),
-                                                    school_logo_size=logo_size,
-                                                    show_school_name=bool(get_template_config(selected_template).get("show_school_name", True))
-                                                )
-
-                                                safe_name = (
-                                                    str(selected_child.get("name") or "Student")
-                                                    .replace("/", "_")
-                                                    .replace(chr(92), "_")
-                                                    .replace(" ", "_")
-                                                )
-                                                safe_exam = (
-                                                    str(exam_name)
-                                                    .replace("/", "_")
-                                                    .replace(chr(92), "_")
-                                                    .replace(" ", "_")
-                                                )
-                                                st.success("✅ Report card generated successfully.")
-                                                st.download_button(
-                                                    "⬇️ Download Report Card PDF",
-                                                    data=pdf_bytes,
-                                                    file_name=f"{safe_name}_{safe_exam}_ReportCard.pdf",
-                                                    mime="application/pdf",
-                                                    type="primary",
-                                                    use_container_width=True,
-                                                    key="parent_download_report_card"
-                                                )
-                                            except Exception as e:
-                                                st.error("Could not generate the Report Card.")
-                                                st.code(str(e))
-
-        elif not school_id:
-            st.info("Your Parent account is not linked to a school yet.")
-
-        st.divider()
-
-        # -------------------------------------------------
-        # SCHOOL-WIDE SUBJECT-WISE PREMIUM
-        # -------------------------------------------------
-        if school_id and subject_wise_parent_student_premium_enabled(school_id):
-            subject_wise_premium_view(
-                school_id,
-                [],
-                "Parent"
-            )
-
-
-    else:
-
-        st.error(
-            f"Unknown role: {role}"
-        )
-
-
-# =========================================================
-# START
-# =========================================================
-
-if st.session_state.logged_in:
-
-    # Admin+Teacher theme follows the explicitly selected working mode.
-    apply_role_theme()
-    dashboard()
-else:
-    login()
