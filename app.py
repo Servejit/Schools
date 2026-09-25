@@ -9770,7 +9770,7 @@ def create_report_overlay(
 
     pdf.setFont(
         "Helvetica",
-        9
+        12
     )
 
     pdf.drawCentredString(
