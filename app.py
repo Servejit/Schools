@@ -7416,10 +7416,12 @@ def create_report_overlay(
         left = 90
         right = width - 90
 
-        photo_x = width - 125
-        photo_y = height - 205
-        photo_w = 75
-        photo_h = 95
+        # Student photo: reduced to about half the previous size.
+        # Keep the full photo visible without cropping or distortion.
+        photo_x = width - 105
+        photo_y = height - 185
+        photo_w = 38
+        photo_h = 48
 
         info_y = height - 155
 
@@ -7439,10 +7441,12 @@ def create_report_overlay(
         left = 90
         right = width - 90
 
-        photo_x = width - 145
-        photo_y = height - 175
-        photo_w = 85
-        photo_h = 105
+        # Student photo: reduced to about half the previous size.
+        # Keep the full photo visible without cropping or distortion.
+        photo_x = width - 115
+        photo_y = height - 145
+        photo_w = 43
+        photo_h = 53
 
         info_y = height - 145
 
@@ -7734,13 +7738,14 @@ def create_report_overlay(
                     io.BytesIO(photo_bytes)
                 ).convert("RGB")
 
-                image = ImageOps.fit(
-                    image,
+                # Contain the complete original photo inside the
+                # smaller box. ImageOps.fit would crop the photo.
+                image.thumbnail(
                     (
                         max(1, int(photo_w * 3)),
                         max(1, int(photo_h * 3))
                     ),
-                    method=Image.Resampling.LANCZOS
+                    Image.Resampling.LANCZOS
                 )
 
                 img_buffer = io.BytesIO()
@@ -7756,7 +7761,8 @@ def create_report_overlay(
                     photo_y,
                     width=photo_w,
                     height=photo_h,
-                    preserveAspectRatio=False,
+                    preserveAspectRatio=True,
+                    anchor="c",
                     mask="auto"
                 )
 
