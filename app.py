@@ -9750,7 +9750,7 @@ def create_report_overlay(
 
     pdf.drawCentredString(
         width / 2,
-        height - 68,
+        height - 78,
         "REPORT CARD"
     )
 
@@ -9761,7 +9761,7 @@ def create_report_overlay(
 
     pdf.drawCentredString(
         width / 2,
-        height - 82,
+        height - 92,
         str(exam_name)    )
 
     # -----------------------------------------------------
@@ -9913,11 +9913,11 @@ def create_report_overlay(
     table_top = table_y
 
     # Keep every marks-related column comfortably visible.
-    subject_col = table_width * 0.38
-    max_col = table_width * 0.15
-    marks_col = table_width * 0.17
-    result_col = table_width * 0.15
-    grade_col = table_width * 0.15
+    subject_col = table_width * 0.28
+    max_col = table_width * 0.18
+    marks_col = table_width * 0.22
+    result_col = table_width * 0.16
+    grade_col = table_width * 0.16
 
     headers = [
         "Subject",
@@ -9998,18 +9998,11 @@ def create_report_overlay(
     ]
 
     for i, header in enumerate(headers):
-        if i == 0:
-            pdf.drawString(
-                table_x + 4,
-                table_top - row_height + max(3, row_height / 2 - 3),
-                header
-            )
-        else:
-            pdf.drawCentredString(
-                header_centers[i],
-                table_top - row_height + max(3, row_height / 2 - 3),
-                header
-            )
+        pdf.drawCentredString(
+            header_centers[i],
+            table_top - row_height + max(3, row_height / 2 - 3),
+            header
+        )
 
     y = table_top - row_height
 
@@ -10100,9 +10093,9 @@ def create_report_overlay(
         if len(subject_text) > 31:
             subject_text = subject_text[:30] + "…"
 
-        # Subject
-        pdf.drawString(
-            table_x + 4,
+        # Subject name centered in the Subject column.
+        pdf.drawCentredString(
+            header_centers[0],
             baseline,
             subject_text
         )
