@@ -245,9 +245,9 @@ def apply_role_theme():
     }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton > button {{
         width: 100% !important;
-        min-height: 2.35rem !important;
-        height: 2.35rem !important;
-        padding: 0.18rem 0.35rem !important;
+        min-height: 1.95rem !important;
+        height: 1.95rem !important;
+        padding: 0.04rem 0.30rem !important;
         font-size: 1.04rem !important;
         line-height: 1 !important;
         white-space: nowrap !important;
