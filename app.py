@@ -240,19 +240,23 @@ def apply_role_theme():
     }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton > button {{
         width: 100% !important;
-        min-height: 1.48rem !important;
-        height: 1.48rem !important;
-        padding: 0.04rem 0.16rem !important;
-        font-size: 0.68rem !important;
+        min-height: 1.55rem !important;
+        height: 1.55rem !important;
+        padding: 0.04rem 0.20rem !important;
+        font-size: 0.70rem !important;
         line-height: 1 !important;
-        white-space: normal !important;
+        white-space: nowrap !important;
         overflow: hidden !important;
-        text-overflow: clip !important;
-        word-break: break-word !important;
+        text-overflow: ellipsis !important;
         border-radius: 9999px !important;
         border-width: 1px !important;
         border-style: solid !important;
         box-sizing: border-box !important;
+    }}
+    .stApp div[data-testid="stHorizontalBlock"] .stButton > button p {{
+        font-size: 0.70rem !important;
+        margin: 0 !important;
+        line-height: 1 !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"] {{
         gap: 0.05rem !important;
@@ -16321,7 +16325,7 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render every dashboard function in two compact rows/columns."""
+    """Render dashboard functions as compact circular-icon tabs in two columns."""
     if not options:
         return None
 
@@ -16335,8 +16339,14 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # Create a real two-column row for every pair. This keeps every
-    # function visible and prevents Streamlit from collapsing the layout.
+    # Clean circular icon sequence. The actual option value is kept unchanged
+    # so all existing dashboard logic continues to work.
+    circle_colors = [
+        "🟠", "🟣", "🔴", "🟢", "🔵", "🟡",
+        "🟠", "🟣", "🔴", "🟢", "🔵", "🟡",
+        "🟠", "🟣", "🔴", "🟢"
+    ]
+
     for row_start in range(0, len(options), 2):
         row_cols = st.columns([1, 1], gap="small")
 
@@ -16346,10 +16356,21 @@ def dashboard_menu_2col(title, options, key):
                 continue
 
             option = options[option_index]
+
+            # Remove the old navigation emoji from the display only.
+            # Existing option strings remain unchanged for menu processing.
+            display_name = option
+            if " " in option:
+                first, rest = option.split(" ", 1)
+                if any(ord(ch) > 0x1F000 for ch in first):
+                    display_name = rest
+
+            label = f"{circle_colors[option_index]} {display_name}"
+
             with row_cols[col_index]:
                 is_selected = option == current
                 if st.button(
-                    option,
+                    label,
                     key=f"{key}_button_{option_index}",
                     use_container_width=True,
                     type="primary" if is_selected else "secondary"
