@@ -16357,8 +16357,114 @@ def class_teacher_notices(profile):
                             st.error("Could not delete the notice.")
                             st.code(str(e))
 
+def _close_dashboard_function_window():
+    st.session_state.pop("_dashboard_open_function", None)
+
+
+def _run_dashboard_function_in_window(function_name, profile):
+    """Run exactly one dashboard function inside the single active window."""
+    role = profile.get("role")
+    active_role = get_active_theme_role()
+
+    if role == "Admin+Teacher":
+        role = active_role
+
+    if role == "SuperAdmin":
+        if function_name == "🏫 Schools":
+            schools()
+        elif function_name == "👥 Users":
+            users()
+        elif function_name == "🎓 Students":
+            students()
+        elif function_name == "📚 Classes & Subjects":
+            classes_subjects()
+        elif function_name == "📝 Exam / Assessment":
+            exam_assessment_settings()
+        elif function_name == "📝 Marks":
+            bulk_marks()
+        elif function_name == "📅 Attendance":
+            attendance()
+        elif function_name == "📢 Notices":
+            class_teacher_notices(profile)
+        elif function_name == "🖨️ Print Templates":
+            print_templates()
+        elif function_name == "📄 Report Cards":
+            report_cards()
+        elif function_name == "📊 Reports":
+            reports()
+        elif function_name == "💎 Premium Features":
+            premium_feature_management()
+        elif function_name == "💎 School Academic Status":
+            school_academic_status(profile.get("school_id"))
+
+    elif role == "Teacher":
+        if function_name == "🎓 Students":
+            students()
+        elif function_name == "👥 Users":
+            users()
+        elif function_name == "📝 Marks":
+            bulk_marks()
+        elif function_name == "📅 Attendance":
+            attendance()
+        elif function_name == "📢 Notices":
+            class_teacher_notices(profile)
+        elif function_name == "📄 Report Cards":
+            report_cards()
+        elif function_name == "📊 Reports":
+            reports()
+        elif function_name == "💎 Subject-wise Premium":
+            subject_wise_premium_view(
+                profile.get("school_id"),
+                [],
+                "Teacher"
+            )
+        elif function_name == "💎 School Academic Status":
+            school_academic_status(profile.get("school_id"))
+
+    elif role == "Admin":
+        if function_name == "👥 Users":
+            users()
+        elif function_name == "🎓 Students":
+            students()
+        elif function_name == "📚 Classes & Subjects":
+            classes_subjects()
+        elif function_name == "📝 Exam / Assessment":
+            exam_assessment_settings()
+        elif function_name == "📝 Marks":
+            bulk_marks()
+        elif function_name == "📅 Attendance":
+            attendance()
+        elif function_name == "📢 Notices":
+            class_teacher_notices(profile)
+        elif function_name == "🖨️ Print Templates":
+            print_templates()
+        elif function_name == "📄 Report Cards":
+            report_cards()
+        elif function_name == "📊 Reports":
+            reports()
+        elif function_name == "💎 Premium Features":
+            premium_feature_management()
+        elif function_name == "💎 School Academic Status":
+            school_academic_status(profile.get("school_id"))
+
+
+@st.dialog("Function Window", width="large", dismissible=True, on_dismiss=_close_dashboard_function_window)
+def open_dashboard_function_window(function_name, profile):
+    st.markdown(
+        f"<div class='dashboard-menu-title'>Selected Function: {function_name}</div>",
+        unsafe_allow_html=True
+    )
+    _run_dashboard_function_in_window(function_name, profile)
+
+
 def dashboard_menu_2col(title, options, key):
-    """Render dashboard functions as professional horizontal bars."""
+    """Render dashboard functions as professional horizontal bars.
+
+    Only one function is active at a time. When a different function is
+    selected, it becomes the active function and opens in the single
+    professional function window. This avoids multiple functions being
+    active at once while preserving the existing horizontal-bar layout.
+    """
     if not options:
         return None
 
@@ -16367,13 +16473,22 @@ def dashboard_menu_2col(title, options, key):
         current = options[0]
         st.session_state[key] = current
 
+    # If a function window is already requested for this menu, do not render
+    # another dashboard function underneath it. The caller will open the
+    # window immediately after the menu returns.
+    pending_window = st.session_state.get("_dashboard_open_function")
+    if (
+        isinstance(pending_window, dict)
+        and pending_window.get("key") == key
+        and pending_window.get("function") in options
+    ):
+        return "__DASHBOARD_FUNCTION_WINDOW__"
+
     st.markdown(
         f"<div class='dashboard-menu-title'>{title}</div>",
         unsafe_allow_html=True
     )
 
-    # Keep the existing processing order while presenting the functions
-    # in two clean professional horizontal columns.
     left_options = options[::2]
     right_options = options[1::2]
 
@@ -16407,11 +16522,15 @@ def dashboard_menu_2col(title, options, key):
         selected = right_selected
 
     if selected != current:
-        # st.radio already reruns the script when its value changes.
-        # Avoid a second rerun so dashboard navigation responds faster.
         st.session_state[key] = selected
+        st.session_state["_dashboard_open_function"] = {
+            "key": key,
+            "function": selected
+        }
+        return "__DASHBOARD_FUNCTION_WINDOW__"
 
     return selected
+
 
 def dashboard():
 
@@ -16589,6 +16708,14 @@ def dashboard():
         )
         reset_dashboard_working_state("_superadmin_menu", menu)
 
+        if menu == "__DASHBOARD_FUNCTION_WINDOW__":
+            pending = st.session_state.get("_dashboard_open_function") or {}
+            open_dashboard_function_window(
+                pending.get("function"),
+                profile
+            )
+            menu = None
+
         if menu == "🏫 Schools":
             schools()
 
@@ -16720,6 +16847,14 @@ def dashboard():
             )
             reset_dashboard_working_state("admin_teacher_teacher_menu", menu)
 
+            if menu == "__DASHBOARD_FUNCTION_WINDOW__":
+                pending = st.session_state.get("_dashboard_open_function") or {}
+                open_dashboard_function_window(
+                    pending.get("function"),
+                    profile
+                )
+                menu = None
+
             if menu == "🎓 Students":
                 students()
 
@@ -16784,6 +16919,14 @@ def dashboard():
                 "admin_teacher_admin_menu"
             )
             reset_dashboard_working_state("admin_teacher_admin_menu", menu)
+
+            if menu == "__DASHBOARD_FUNCTION_WINDOW__":
+                pending = st.session_state.get("_dashboard_open_function") or {}
+                open_dashboard_function_window(
+                    pending.get("function"),
+                    profile
+                )
+                menu = None
 
             if menu == "🏫 School Profile":
                 school_profile_settings()
@@ -16909,6 +17052,14 @@ def dashboard():
             teacher_menu_options,
             "teacher_dashboard_menu"
         )
+
+        if menu == "__DASHBOARD_FUNCTION_WINDOW__":
+            pending = st.session_state.get("_dashboard_open_function") or {}
+            open_dashboard_function_window(
+                pending.get("function"),
+                profile
+            )
+            menu = None
 
         if menu == "🎓 Students":
             students()
