@@ -16327,7 +16327,7 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render dashboard functions in a compact dropdown with distinct colours."""
+    """Render dashboard functions using the default Streamlit selectbox style."""
     if not options:
         return None
 
@@ -16348,52 +16348,8 @@ def dashboard_menu_2col(title, options, key):
         key=f"{key}_select",
         label_visibility="collapsed"
     )
+
     st.session_state[key] = selected
-
-    function_colors = [
-        "#E67E22", "#8E44AD", "#C0392B", "#27AE60",
-        "#2980B9", "#D4AC0D", "#16A085", "#E84393",
-        "#6C5CE7", "#00A8A8", "#D35400", "#2C3E50",
-        "#1ABC9C", "#C2185B", "#5D4037", "#455A64"
-    ]
-
-    selected_index = options.index(selected)
-    selected_color = function_colors[selected_index % len(function_colors)]
-
-    # BaseWeb renders the dropdown options in a portal outside the selectbox.
-    # Target the visible selected value directly and colour each option by text.
-    option_rules = ""
-    for option, color in zip(options, function_colors):
-        safe_option = option.replace("\\", "\\\\").replace('"', '\\"')
-        option_rules += f'''
-        div[role="option"][aria-label="{safe_option}"] {{
-            color: {color} !important;
-            font-weight: 600 !important;
-        }}
-        div[role="option"][aria-label="{safe_option}"] * {{
-            color: {color} !important;
-        }}
-        '''
-
-    st.markdown(
-        f"""
-        <style>
-        div[data-testid="stSelectbox"] [data-baseweb="select"] {{
-            border-radius: 8px !important;
-        }}
-        div[data-testid="stSelectbox"] [data-baseweb="select"] [role="button"] {{
-            color: {selected_color} !important;
-            font-weight: 700 !important;
-        }}
-        div[data-testid="stSelectbox"] [data-baseweb="select"] [role="button"] * {{
-            color: {selected_color} !important;
-        }}
-        {option_rules}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
     return selected
 
 def dashboard():
