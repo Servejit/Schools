@@ -16327,7 +16327,7 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render dashboard functions in one professional dropdown list."""
+    """Render dashboard functions in one dropdown with a different text colour for every function."""
     if not options:
         return None
 
@@ -16348,29 +16348,49 @@ def dashboard_menu_2col(title, options, key):
         key=f"{key}_select",
         label_visibility="collapsed"
     )
-
     st.session_state[key] = selected
 
-    # Give every function its own distinct background colour.
+    # Every function has its own text colour in the dropdown.
     function_colors = [
-        "#FFF3CD", "#E8DDFC", "#F8D7DA", "#D4EDDA",
-        "#D6EAF8", "#FFF0B3", "#D5F5E3", "#FADBD8",
-        "#DDEBF7", "#E2F0D9", "#EADCF8", "#FCE4D6",
-        "#D9EAF7", "#E8F5E9", "#F3E5F5", "#FFF8E1"
+        "#E67E22", "#8E44AD", "#C0392B", "#27AE60",
+        "#2980B9", "#D4AC0D", "#16A085", "#E84393",
+        "#6C5CE7", "#00A8A8", "#9B59B6", "#D35400",
+        "#2C3E50", "#1ABC9C", "#7F8C8D", "#8E44AD"
     ]
-    color = function_colors[options.index(selected) % len(function_colors)]
+
+    option_css = ""
+    for i, color in enumerate(function_colors[:len(options)]):
+        option_css += f"""
+        [role="option"]:nth-child({i + 1}) {{
+            color: {color} !important;
+            font-weight: 600 !important;
+        }}
+        [role="option"]:nth-child({i + 1}) div,
+        [role="option"]:nth-child({i + 1}) span {{
+            color: {color} !important;
+        }}
+        """
+
+    selected_index = options.index(selected)
+    selected_color = function_colors[selected_index % len(function_colors)]
 
     st.markdown(
         f"""
         <style>
-        div[data-testid="stSelectbox"]:has(select) {{
-            background: {color} !important;
+        /* Selected function text */
+        div[data-testid="stSelectbox"] [data-baseweb="select"] {{
             border-radius: 8px !important;
-            padding: 3px !important;
         }}
-        div[data-testid="stSelectbox"] > div {{
-            background: {color} !important;
+        div[data-testid="stSelectbox"] [data-baseweb="select"] [role="button"] {{
+            color: {selected_color} !important;
+            font-weight: 700 !important;
         }}
+        div[data-testid="stSelectbox"] [data-baseweb="select"] [role="button"] * {{
+            color: {selected_color} !important;
+        }}
+
+        /* Individual function colours in the opened dropdown */
+        {option_css}
         </style>
         """,
         unsafe_allow_html=True
