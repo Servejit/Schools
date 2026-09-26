@@ -13638,69 +13638,6 @@ def premium_feature_management():
         </style>
         """, unsafe_allow_html=True)
 
-        st.subheader("📄 Parent / Student Report Card Access")
-        report_card_feature_key = "parent_report_card"
-        try:
-            report_existing = (
-                sb.table("premium_feature_access")
-                .select("id,active")
-                .eq("school_id", school_id)
-                .eq("admin_id", st.session_state.user.id)
-                .eq("feature_key", report_card_feature_key)
-                .maybe_single()
-                .execute()
-                .data
-            )
-        except Exception:
-            report_existing = None
-
-        report_card_active = bool(
-            report_existing and report_existing.get("active") is True
-        )
-        new_report_card_active = st.toggle(
-            "Allow Parents and Students to view Report Cards (Parents: linked children; Students: own record)",
-            value=report_card_active,
-            key=f"allow_parent_report_cards_{school_id}"
-        )
-
-        if st.button(
-            "🔵 💾 Save Parent / Student Report Card Permission",
-            use_container_width=True,
-            key=f"save_parent_report_card_{school_id}"
-        ):
-            try:
-                if report_existing:
-                    (
-                        sb.table("premium_feature_access")
-                        .update({
-                            "active": bool(new_report_card_active),
-                            "updated_at": datetime.datetime.now(
-                                datetime.timezone.utc
-                            ).isoformat()
-                        })
-                        .eq("id", report_existing["id"])
-                        .execute()
-                    )
-                else:
-                    (
-                        sb.table("premium_feature_access")
-                        .insert({
-                            "school_id": school_id,
-                            "admin_id": st.session_state.user.id,
-                            "feature_key": report_card_feature_key,
-                            "active": bool(new_report_card_active)
-                        })
-                        .execute()
-                    )
-
-                mark_saved(f"save_parent_report_card_{school_id}")
-                st.success("✅ Saved successfully.")
-                st.rerun()
-            except Exception as e:
-                st.error("Could not save Parent / Student Report Card permission.")
-                st.code(str(e))
-
-
         # -------------------------------------------------
         # SCHOOL ACADEMIC STATUS — ALL TEACHERS
         # -------------------------------------------------
@@ -13862,75 +13799,6 @@ def premium_feature_management():
         )
 
         # -------------------------------------------------
-        # PARENT / STUDENT ACCESS
-        # -------------------------------------------------
-        st.markdown("#### 👨‍👩‍👧 Parent & Student Access")
-        feature_key = "subject_wise_premium_parent_student"
-        try:
-            existing = (
-                sb.table("premium_feature_access")
-                .select("id,active")
-                .eq("school_id", school_id)
-                .eq("admin_id", st.session_state.user.id)
-                .eq("feature_key", feature_key)
-                .maybe_single()
-                .execute()
-                .data
-            )
-        except Exception:
-            existing = None
-
-        current_active = bool(existing and existing.get("active") is True)
-
-        new_active = st.toggle(
-            "Allow Parents and Students to view Subject-wise Premium",
-            value=current_active,
-            key=f"allow_parent_student_subjectwise_{school_id}"
-        )
-
-        if st.button(
-            ("🟢 " if new_active else "🔴 ") + "💾 Save Subject-wise Premium — Parent & Student",
-            type="primary",
-            use_container_width=True,
-            key=f"save_parent_student_premium_{school_id}"
-        ):
-            try:
-                if existing:
-                    (
-                        sb.table("premium_feature_access")
-                        .update({
-                            "active": bool(new_active),
-                            "updated_at": datetime.datetime.now(
-                                datetime.timezone.utc
-                            ).isoformat()
-                        })
-                        .eq("id", existing["id"])
-                        .execute()
-                    )
-                else:
-                    (
-                        sb.table("premium_feature_access")
-                        .insert({
-                            "school_id": school_id,
-                            "admin_id": st.session_state.user.id,
-                            "feature_key": feature_key,
-                            "active": bool(new_active)
-                        })
-                        .execute()
-                    )
-
-                mark_saved(f"save_parent_student_premium_{school_id}")
-                st.success(
-                    "✅ Subject-wise Premium Parent & Student permission saved."
-                )
-                st.rerun()
-            except Exception as e:
-                st.error(
-                    "Could not save Subject-wise Premium Parent & Student permission."
-                )
-                st.code(str(e))
-
-        # -------------------------------------------------
         # TEACHER ACCESS — ONE SETTING FOR ALL TEACHERS
         # -------------------------------------------------
         st.markdown("#### 👨‍🏫 Teacher Access")
@@ -14066,6 +13934,76 @@ def premium_feature_management():
                 )
                 st.code(str(e))
 
+
+        # PARENT / STUDENT ACCESS
+        # -------------------------------------------------
+        st.markdown("#### 👨‍👩‍👧 Parent & Student Access")
+        feature_key = "subject_wise_premium_parent_student"
+        try:
+            existing = (
+                sb.table("premium_feature_access")
+                .select("id,active")
+                .eq("school_id", school_id)
+                .eq("admin_id", st.session_state.user.id)
+                .eq("feature_key", feature_key)
+                .maybe_single()
+                .execute()
+                .data
+            )
+        except Exception:
+            existing = None
+
+        current_active = bool(existing and existing.get("active") is True)
+
+        new_active = st.toggle(
+            "Allow Parents and Students to view Subject-wise Premium",
+            value=current_active,
+            key=f"allow_parent_student_subjectwise_{school_id}"
+        )
+
+        if st.button(
+            ("🟢 " if new_active else "🔴 ") + "💾 Save Subject-wise Premium — Parent & Student",
+            type="primary",
+            use_container_width=True,
+            key=f"save_parent_student_premium_{school_id}"
+        ):
+            try:
+                if existing:
+                    (
+                        sb.table("premium_feature_access")
+                        .update({
+                            "active": bool(new_active),
+                            "updated_at": datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat()
+                        })
+                        .eq("id", existing["id"])
+                        .execute()
+                    )
+                else:
+                    (
+                        sb.table("premium_feature_access")
+                        .insert({
+                            "school_id": school_id,
+                            "admin_id": st.session_state.user.id,
+                            "feature_key": feature_key,
+                            "active": bool(new_active)
+                        })
+                        .execute()
+                    )
+
+                mark_saved(f"save_parent_student_premium_{school_id}")
+                st.success(
+                    "✅ Subject-wise Premium Parent & Student permission saved."
+                )
+                st.rerun()
+            except Exception as e:
+                st.error(
+                    "Could not save Subject-wise Premium Parent & Student permission."
+                )
+                st.code(str(e))
+
+        # -------------------------------------------------
         feature_key = "subject_wise_premium_parent_student"
         try:
             existing = (
@@ -14084,6 +14022,71 @@ def premium_feature_management():
         current_active = bool(existing and existing.get("active") is True)
 
         return
+
+
+        st.subheader("📄 Parent / Student Report Card Access")
+        report_card_feature_key = "parent_report_card"
+        try:
+            report_existing = (
+                sb.table("premium_feature_access")
+                .select("id,active")
+                .eq("school_id", school_id)
+                .eq("admin_id", st.session_state.user.id)
+                .eq("feature_key", report_card_feature_key)
+                .maybe_single()
+                .execute()
+                .data
+            )
+        except Exception:
+            report_existing = None
+
+        report_card_active = bool(
+            report_existing and report_existing.get("active") is True
+        )
+        new_report_card_active = st.toggle(
+            "Allow Parents and Students to view Report Cards (Parents: linked children; Students: own record)",
+            value=report_card_active,
+            key=f"allow_parent_report_cards_{school_id}"
+        )
+
+        if st.button(
+            "🔵 💾 Save Parent / Student Report Card Permission",
+            use_container_width=True,
+            key=f"save_parent_report_card_{school_id}"
+        ):
+            try:
+                if report_existing:
+                    (
+                        sb.table("premium_feature_access")
+                        .update({
+                            "active": bool(new_report_card_active),
+                            "updated_at": datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat()
+                        })
+                        .eq("id", report_existing["id"])
+                        .execute()
+                    )
+                else:
+                    (
+                        sb.table("premium_feature_access")
+                        .insert({
+                            "school_id": school_id,
+                            "admin_id": st.session_state.user.id,
+                            "feature_key": report_card_feature_key,
+                            "active": bool(new_report_card_active)
+                        })
+                        .execute()
+                    )
+
+                mark_saved(f"save_parent_report_card_{school_id}")
+                st.success("✅ Saved successfully.")
+                st.rerun()
+            except Exception as e:
+                st.error("Could not save Parent / Student Report Card permission.")
+                st.code(str(e))
+
+
 
     st.error("Only SuperAdmin or Admin can manage Premium permissions.")
 
