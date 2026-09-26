@@ -190,11 +190,29 @@ def apply_role_theme():
     }}
     [data-testid="stSidebar"] * {{ color: #FFFFFF !important; }}
 
-    /* Titles, headings and dividers follow the role colour */
+    /* Universal compact appearance: same sizing across every role/theme */
     .stApp h1, .stApp h2, .stApp h3 {{
         color: {theme["accent2"]};
+        font-family: inherit;
+        line-height: 1.2;
+        margin-top: 0.45rem;
+        margin-bottom: 0.45rem;
     }}
-    .stApp hr {{ border-color: {theme["soft"]}; }}
+    .stApp h1 {{ font-size: 1.55rem !important; }}
+    .stApp h2 {{ font-size: 1.30rem !important; }}
+    .stApp h3 {{ font-size: 1.10rem !important; }}
+    .stApp p, .stApp label, .stApp .stMarkdown {{
+        font-size: 0.92rem;
+    }}
+    .stApp hr {{ border-color: {theme["soft"]}; margin: 0.65rem 0; }}
+    .stButton > button {{
+        font-size: 0.90rem !important;
+        padding: 0.42rem 0.75rem !important;
+        min-height: 2.35rem !important;
+    }}
+    div[data-testid="stToggle"] label {{
+        font-size: 0.92rem !important;
+    }}
 
     /* Navigation / radio buttons */
     div[role="radiogroup"] label {{
