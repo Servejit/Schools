@@ -16504,25 +16504,17 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # Two equal columns with each function shown as its own bar.
-    for row_start in range(0, len(options), 2):
-        cols = st.columns(2, gap="small")
-        for offset, col in enumerate(cols):
-            index = row_start + offset
-            if index >= len(options):
-                break
-            with col:
-                name = options[index]
-                if st.button(
-                    name,
-                    key=f"{key}_function_{index}",
-                    type="primary" if name == current else "secondary",
-                    use_container_width=True
-                ):
-                    if name != current:
-                        st.session_state[key] = name
-                        st.rerun()
-
+    # Full-width horizontal bars for every dashboard function.
+    for index, name in enumerate(options):
+        if st.button(
+            name,
+            key=f"{key}_function_{index}",
+            type="primary" if name == current else "secondary",
+            use_container_width=True
+        ):
+            if name != current:
+                st.session_state[key] = name
+                st.rerun()
 
     _enable_dashboard_long_press()
 
