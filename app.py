@@ -13825,14 +13825,107 @@ def premium_feature_management():
                 st.code(str(e))
 
         # -------------------------------------------------
-        # SUBJECT-WISE PREMIUM — ALL TEACHERS
+        # SUBJECT-WISE PREMIUM — SEPARATE ACCESS BY AUDIENCE
         # -------------------------------------------------
         st.divider()
-        st.subheader("📚 Subject-wise Premium — Teacher Access")
+        st.subheader("📚 Subject-wise Premium Access")
+        st.caption(
+            "Parent/Student access and Teacher access are separate permissions. "
+            "Changing one does not change the other."
+        )
+
+        # -------------------------------------------------
+        # PARENT / STUDENT ACCESS
+        # -------------------------------------------------
+        st.markdown("#### 👨‍👩‍👧 Parent & Student Access")
+        feature_key = "subject_wise_premium_parent_student"
+        try:
+            existing = (
+                sb.table("premium_feature_access")
+                .select("id,active")
+                .eq("school_id", school_id)
+                .eq("admin_id", st.session_state.user.id)
+                .eq("feature_key", feature_key)
+                .maybe_single()
+                .execute()
+                .data
+            )
+        except Exception:
+            existing = None
+
+        current_active = bool(existing and existing.get("active") is True)
+
+        new_active = st.toggle(
+            "Allow Parents and Students to view Subject-wise Premium",
+            value=current_active,
+            key=f"allow_parent_student_subjectwise_{school_id}"
+        )
+
+        if st.button(
+            "💾 Save Subject-wise Premium — Parent & Student",
+            type="primary",
+            use_container_width=True,
+            key=f"save_parent_student_premium_{school_id}"
+        ):
+            try:
+                if existing:
+                    (
+                        sb.table("premium_feature_access")
+                        .update({
+                            "active": bool(new_active),
+                            "updated_at": datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat()
+                        })
+                        .eq("id", existing["id"])
+                        .execute()
+                    )
+                else:
+                    (
+                        sb.table("premium_feature_access")
+                        .insert({
+                            "school_id": school_id,
+                            "admin_id": st.session_state.user.id,
+                            "feature_key": feature_key,
+                            "active": bool(new_active)
+                        })
+                        .execute()
+                    )
+
+                mark_saved(f"save_parent_student_premium_{school_id}")
+                st.success(
+                    "✅ Subject-wise Premium Parent & Student permission saved."
+                )
+                st.rerun()
+            except Exception as e:
+                st.error(
+                    "Could not save Subject-wise Premium Parent & Student permission."
+                )
+                st.code(str(e))
+
+        # -------------------------------------------------
+        # TEACHER ACCESS — ONE SETTING FOR ALL TEACHERS
+        # -------------------------------------------------
+        st.markdown("#### 👨‍🏫 Teacher Access")
         st.caption(
             "One setting applies to ALL active Teachers and Admin+Teacher accounts "
             "in this school. No teacher-by-teacher selection is required."
         )
+
+        try:
+            teacher_rows = (
+                sb.table("profiles")
+                .select("id,email,full_name,role,active,school_id")
+                .eq("school_id", school_id)
+                .in_("role", ["Teacher", "Admin+Teacher"])
+                .order("full_name")
+                .execute()
+                .data or []
+            )
+        except Exception:
+            teacher_rows = []
+
+        active_teachers = [x for x in teacher_rows if x.get("active", True)]
 
         subject_teacher_key = "subject_wise_premium_teacher"
         try:
@@ -13842,14 +13935,18 @@ def premium_feature_management():
                 .eq("school_id", school_id)
                 .eq("admin_id", st.session_state.user.id)
                 .eq("feature_key", subject_teacher_key)
-                .maybe_single().execute().data
+                .maybe_single()
+                .execute()
+                .data
             )
         except Exception:
             subject_teacher_existing = None
 
         subject_teacher_current = bool(
-            subject_teacher_existing and subject_teacher_existing.get("active") is True
+            subject_teacher_existing
+            and subject_teacher_existing.get("active") is True
         )
+
         subject_teacher_new = st.toggle(
             "Allow ALL Teachers to view Subject-wise Premium",
             value=subject_teacher_current,
@@ -13857,20 +13954,25 @@ def premium_feature_management():
         )
 
         if st.button(
-            "💾 Save Subject-wise Premium for ALL Teachers",
+            "💾 Save Subject-wise Premium — Teacher",
             type="primary",
             use_container_width=True,
             key=f"save_all_teachers_subjectwise_{school_id}"
         ):
             try:
-                # Store one school/admin master permission and also materialize
-                # the same permission for every active teacher. This lets each
-                # teacher check only their own row without needing broad SELECT
-                # access to premium_feature_access.
+                # Store one Admin/master permission and synchronize it to
+                # each active Teacher/Admin+Teacher account. The UI remains
+                # a single Teacher permission, while the per-user rows allow
+                # secure teacher-side permission checks.
                 if subject_teacher_existing:
                     (
                         sb.table("premium_feature_access")
-                        .update({"active": bool(subject_teacher_new)})
+                        .update({
+                            "active": bool(subject_teacher_new),
+                            "updated_at": datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat()
+                        })
                         .eq("id", subject_teacher_existing["id"])
                         .execute()
                     )
@@ -13882,25 +13984,35 @@ def premium_feature_management():
                             "admin_id": st.session_state.user.id,
                             "feature_key": subject_teacher_key,
                             "active": bool(subject_teacher_new)
-                        }).execute()
+                        })
+                        .execute()
                     )
 
                 for teacher in active_teachers:
                     teacher_id = teacher.get("id")
                     if not teacher_id:
                         continue
+
                     existing_teacher = (
                         sb.table("premium_feature_access")
                         .select("id")
                         .eq("school_id", school_id)
                         .eq("admin_id", teacher_id)
                         .eq("feature_key", subject_teacher_key)
-                        .maybe_single().execute().data
+                        .maybe_single()
+                        .execute()
+                        .data
                     )
+
                     if existing_teacher:
                         (
                             sb.table("premium_feature_access")
-                            .update({"active": bool(subject_teacher_new)})
+                            .update({
+                                "active": bool(subject_teacher_new),
+                                "updated_at": datetime.datetime.now(
+                                    datetime.timezone.utc
+                                ).isoformat()
+                            })
                             .eq("id", existing_teacher["id"])
                             .execute()
                         )
@@ -13912,16 +14024,19 @@ def premium_feature_management():
                                 "admin_id": teacher_id,
                                 "feature_key": subject_teacher_key,
                                 "active": bool(subject_teacher_new)
-                            }).execute()
+                            })
+                            .execute()
                         )
 
                 mark_saved(f"save_all_teachers_subjectwise_{school_id}")
                 st.success(
-                    "✅ Subject-wise Premium permission updated for all active Teachers."
+                    "✅ Subject-wise Premium Teacher permission saved for all active Teachers."
                 )
                 st.rerun()
             except Exception as e:
-                st.error("Could not save Subject-wise Premium Teacher permission.")
+                st.error(
+                    "Could not save Subject-wise Premium Teacher permission."
+                )
                 st.code(str(e))
 
         feature_key = "subject_wise_premium_parent_student"
