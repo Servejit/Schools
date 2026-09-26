@@ -16610,10 +16610,10 @@ def dashboard():
                 "📝 Exam / Assessment",
                 "📝 Marks",
                 "📅 Attendance",
-                "📄 Report Cards",
-                "📊 Reports",
                 "📢 Notices",
                 "🖨️ Print Templates",
+                "📄 Report Cards",
+                "📊 Reports",
                 "💎 Premium Features",
                 "💎 School Academic Status"
             ],
@@ -16731,8 +16731,8 @@ def dashboard():
             render_teacher_dashboard_user_search(profile, "admin_teacher")
 
             teacher_menu_items = [
-                "🎓 Students",
                 "👥 Users",
+                "🎓 Students",
                 "📝 Marks",
                 "📅 Attendance",
                 "📢 Notices",
