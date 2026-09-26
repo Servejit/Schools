@@ -16405,7 +16405,7 @@ def _close_dashboard_function_window():
 
 
 def _enable_dashboard_long_press():
-    """Attach a same-tab long-press handler to dashboard function buttons."""
+    """Open a dashboard function in a new browser tab on long press."""
     components.html("""
     <script>
     (() => {
@@ -16431,11 +16431,11 @@ def _enable_dashboard_long_press():
               longPressed = true;
               const url = new URL(window.parent.location.href);
               url.searchParams.set(
-                "longpress_function",
+                "dashboard_function",
                 button.innerText.trim()
               );
-              // Same tab/window: browser session and Streamlit session are retained.
-              window.parent.location.href = url.toString();
+              // Open the selected function in a new tab/window.
+              window.parent.open(url.toString(), "_blank");
             }, 650);
           };
 
@@ -16469,21 +16469,21 @@ def _enable_dashboard_long_press():
     })();
     </script>
     """, height=0)
-    
+
 
 def dashboard_menu_2col(title, options, key):
     """Fast three-column dashboard navigation with stable function ordering."""
     if not options:
         return None
 
-    # A long press selects the function in the same browser tab.
+    # A long press opens the selected function in a new tab/window.
     try:
-        longpress = st.query_params.get("longpress_function")
-        if isinstance(longpress, list):
-            longpress = longpress[0] if longpress else None
-        if longpress in options:
-            st.session_state[key] = longpress
-            del st.query_params["longpress_function"]
+        launched = st.query_params.get("dashboard_function")
+        if isinstance(launched, list):
+            launched = launched[0] if launched else None
+        if launched in options:
+            st.session_state[key] = launched
+            del st.query_params["dashboard_function"]
     except Exception:
         pass
 
@@ -16703,14 +16703,6 @@ def dashboard():
         )
         reset_dashboard_working_state("_superadmin_menu", menu)
 
-        if menu == "__DASHBOARD_FUNCTION_WINDOW__":
-            pending = st.session_state.get("_dashboard_open_function") or {}
-            open_dashboard_function_window(
-                pending.get("function"),
-                profile
-            )
-            menu = None
-
         if menu == "🏫 Schools":
             schools()
 
@@ -16841,14 +16833,6 @@ def dashboard():
                 "admin_teacher_teacher_menu"
             )
             reset_dashboard_working_state("admin_teacher_teacher_menu", menu)
-
-            if menu == "__DASHBOARD_FUNCTION_WINDOW__":
-                pending = st.session_state.get("_dashboard_open_function") or {}
-                open_dashboard_function_window(
-                    pending.get("function"),
-                    profile
-                )
-                menu = None
 
             if menu == "🎓 Students":
                 students()
