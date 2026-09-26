@@ -182,102 +182,102 @@ def apply_role_theme():
 
     st.markdown(f"""<style>
     /* Main role theme */
-    .stApp {{
-        background: linear-gradient(180deg, {{theme["bg"]}} 0%, #FFFFFF 100%);
-        color: {{theme["text"]}};
-    }}
-    [data-testid="stHeader"] {{ background: transparent; }}
-    [data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, {{theme["accent2"]}} 0%, {{theme["accent"]}} 100%);
-    }}
-    [data-testid="stSidebar"] * {{ color: #FFFFFF !important; }}
+    .stApp {
+        background: linear-gradient(180deg, {theme["bg"]} 0%, #FFFFFF 100%);
+        color: {theme["text"]};
+    }
+    [data-testid="stHeader"] { background: transparent; }
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, {theme["accent2"]} 0%, {theme["accent"]} 100%);
+    }
+    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
     /* Universal compact appearance: same sizing across every role/theme */
     .stApp # --- Dashboard checkbox two-column layout ---
 st.markdown("""
 <style>
-.dashboard-menu-title {{
+.dashboard-menu-title {
     font-weight: 700;
     font-size: 0.95rem;
     margin: 0.35rem 0 0.55rem;
-}}
+}
 
 /* Keep every dashboard checkbox row side-by-side at 50% / 50%. */
-.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) {{
+.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) {
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: nowrap !important;
     width: 100% !important;
     gap: 0.5rem !important;
-}}
+}
 
-.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) > div[data-testid="column"] {{
+.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) > div[data-testid="column"] {
     flex: 0 0 calc(50% - 0.25rem) !important;
     width: calc(50% - 0.25rem) !important;
     max-width: calc(50% - 0.25rem) !important;
     min-width: 0 !important;
-}}
+}
 
-.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) div[data-testid="stCheckbox"] label {{
+.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) div[data-testid="stCheckbox"] label {
     font-size: 0.82rem !important;
     font-weight: 600 !important;
-}}
+}
 
-.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) div[data-testid="stCheckbox"] p {{
+.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) div[data-testid="stCheckbox"] p {
     font-size: 0.82rem !important;
     margin: 0 !important;
-}}
+}
 </style>
 """, unsafe_allow_html=True)
 
-h1, .stApp h2, .stApp h3 {{
-        color: {{theme["accent2"]}};
+h1, .stApp h2, .stApp h3 {
+        color: {theme["accent2"]};
         font-family: inherit;
         line-height: 1.2;
         margin-top: 0.45rem;
         margin-bottom: 0.45rem;
-    }}
-    .stApp h1 {{ font-size: 1.55rem !important; }}
-    .stApp h2 {{ font-size: 1.30rem !important; }}
-    .stApp h3 {{ font-size: 1.10rem !important; }}
-    .stApp p, .stApp label, .stApp .stMarkdown {{
+    }
+    .stApp h1 { font-size: 1.55rem !important; }
+    .stApp h2 { font-size: 1.30rem !important; }
+    .stApp h3 { font-size: 1.10rem !important; }
+    .stApp p, .stApp label, .stApp .stMarkdown {
         font-size: 0.92rem;
-    }}
-    .stApp hr {{ border-color: {{theme["soft"]}}; margin: 0.65rem 0; }}
-    .stButton > button {{
+    }
+    .stApp hr { border-color: {theme["soft"]}; margin: 0.65rem 0; }
+    .stButton > button {
         font-size: 0.90rem !important;
         padding: 0.42rem 0.75rem !important;
         min-height: 2.35rem !important;
-    }}
-    div[data-testid="stToggle"] label {{
+    }
+    div[data-testid="stToggle"] label {
         font-size: 0.92rem !important;
-    }}
+    }
 
     /* Perfectly balanced two-column dashboard navigation */
     /* Compact universal two-column dashboard menu */
-    .dashboard-menu-title {{
+    .dashboard-menu-title {
         font-weight: 700;
         font-size: 0.88rem;
         line-height: 1.1;
         margin: 0.20rem 0 0.30rem;
-    }}
-    .stApp div[data-testid="column"] {{
+    }
+    .stApp div[data-testid="column"] {
         min-width: 0 !important;
-    }}
+    }
     /* Compact dashboard rows: always fit two tabs across the screen */
-    .stApp div[data-testid="stHorizontalBlock"] {{
+    .stApp div[data-testid="stHorizontalBlock"] {
         gap: 0.18rem !important;
         margin-bottom: 0 !important;
         width: 100% !important;
         max-width: 100% !important;
-    }}
-    .stApp div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{
+    }
+    .stApp div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
         min-width: 0 !important;
-    }}
-    .stApp div[data-testid="stHorizontalBlock"] .stButton {{
+    }
+    .stApp div[data-testid="stHorizontalBlock"] .stButton {
         margin: 0 0 0.03rem 0 !important;
-    }}
-    .stApp div[data-testid="stHorizontalBlock"] .stButton > button {{
+    }
+    .stApp div[data-testid="stHorizontalBlock"] .stButton > button {
         width: 100% !important;
         min-height: 1.55rem !important;
         height: 1.55rem !important;
@@ -291,123 +291,123 @@ h1, .stApp h2, .stApp h3 {{
         border-width: 1px !important;
         border-style: solid !important;
         box-sizing: border-box !important;
-    }}
-    .stApp div[data-testid="stHorizontalBlock"] .stButton > button p {{
+    }
+    .stApp div[data-testid="stHorizontalBlock"] .stButton > button p {
         font-size: 0.70rem !important;
         margin: 0 !important;
         line-height: 1 !important;
-    }}
-    .stApp div[data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"] {{
+    }
+    .stApp div[data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"] {
         gap: 0.05rem !important;
-    }}
+    }
 
     /* Navigation / radio buttons */
-    div[role="radiogroup"] label {{
+    div[role="radiogroup"] label {
         border-radius: 10px;
         padding: 5px 9px;
-    }}
-    div[role="radiogroup"] label:hover {{
-        background: {{theme["soft"]}};
-    }}
+    }
+    div[role="radiogroup"] label:hover {
+        background: {theme["soft"]};
+    }
 
     /* Buttons */
-    .stButton > button {{
-        border: 1px solid {{theme["accent"]}};
-        color: {{theme["accent2"]}};
+    .stButton > button {
+        border: 1px solid {theme["accent"]};
+        color: {theme["accent2"]};
         border-radius: 10px;
         font-weight: 600;
         transition: all .15s ease;
-    }}
-    .stButton > button:hover {{
-        background: {{theme["accent"]}};
+    }
+    .stButton > button:hover {
+        background: {theme["accent"]};
         color: #FFFFFF;
-        border-color: {{theme["accent2"]}};
-    }}
-    .stButton > button[kind="primary"] {{
-        background: {{theme["accent"]}};
+        border-color: {theme["accent2"]};
+    }
+    .stButton > button[kind="primary"] {
+        background: {theme["accent"]};
         color: #FFFFFF;
-        border-color: {{theme["accent"]}};
-    }}
+        border-color: {theme["accent"]};
+    }
 
     /* Inputs and select controls */
-    .stTextInput input:focus, .stTextArea textarea:focus {{
-        border-color: {{theme["accent"]}} !important;
-        box-shadow: 0 0 0 1px {{theme["accent"]}} !important;
-    }}
-    div[data-baseweb="select"] > div:focus-within {{
-        border-color: {{theme["accent"]}} !important;
-        box-shadow: 0 0 0 1px {{theme["accent"]}} !important;
-    }}
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: {theme["accent"]} !important;
+        box-shadow: 0 0 0 1px {theme["accent"]} !important;
+    }
+    div[data-baseweb="select"] > div:focus-within {
+        border-color: {theme["accent"]} !important;
+        box-shadow: 0 0 0 1px {theme["accent"]} !important;
+    }
 
     /* Cards / metrics */
-    div[data-testid="stMetric"] {{
-        background: {{theme["surface"]}};
-        border: 1px solid {{theme["soft"]}};
-        border-top: 4px solid {{theme["accent"]}};
+    div[data-testid="stMetric"] {
+        background: {theme["surface"]};
+        border: 1px solid {theme["soft"]};
+        border-top: 4px solid {theme["accent"]};
         border-radius: 14px;
         padding: 12px;
         box-shadow: 0 2px 8px rgba(0,0,0,.06);
-    }}
-    .role-theme-card {{
-        background: {{theme["surface"]}};
-        border: 1px solid {{theme["soft"]}};
-        border-left: 5px solid {{theme["accent"]}};
+    }
+    .role-theme-card {
+        background: {theme["surface"]};
+        border: 1px solid {theme["soft"]};
+        border-left: 5px solid {theme["accent"]};
         border-radius: 14px;
         padding: 14px 16px;
         margin: 8px 0;
         box-shadow: 0 2px 8px rgba(0,0,0,.05);
-    }}
+    }
 
     /* Streamlit expanders */
-    div[data-testid="stExpander"] {{
-        border-color: {{theme["soft"]}};
+    div[data-testid="stExpander"] {
+        border-color: {theme["soft"]};
         border-radius: 12px;
-    }}
+    }
 
     /* Keep data tables/forms readable while the dashboard carries the role theme */
-    div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {{
+    div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {
         border-radius: 10px;
-    }}
+    }
 
     /* Golden flashing school notices */
-    .school-notice-card {{
+    .school-notice-card {
         background: #FFFDF0;
         border: 2px solid #D4AF37;
         border-radius: 14px;
         padding: 14px 16px;
         margin: 10px 0;
         box-shadow: 0 3px 12px rgba(212,175,55,.20);
-    }}
-    .school-notice-heading {{
+    }
+    .school-notice-heading {
         display: flex;
         align-items: center;
         gap: 12px;
         flex-wrap: wrap;
         margin-bottom: 8px;
-    }}
-    .school-notice-flash {{
+    }
+    .school-notice-flash {
         color: #D4AF37;
         font-size: 1.35rem;
         font-weight: 900;
         letter-spacing: 1.5px;
         text-shadow: 0 0 6px rgba(212,175,55,.65);
         animation: schoolNoticeGoldenFlash 1.15s infinite;
-    }}
-    .school-notice-date {{
+    }
+    .school-notice-date {
         color: #6B5500;
         font-weight: 700;
         font-size: 1rem;
-    }}
-    .school-notice-message {{
+    }
+    .school-notice-message {
         color: #2F2600;
         font-size: 1rem;
         line-height: 1.55;
         white-space: normal;
-    }}
-    @keyframes schoolNoticeGoldenFlash {{
-        0%, 100% {{ opacity: 1; text-shadow: 0 0 5px rgba(212,175,55,.45); }}
-        50% {{ opacity: .35; text-shadow: 0 0 18px rgba(255,215,0,1); }}
-    }}
+    }
+    @keyframes schoolNoticeGoldenFlash {
+        0%, 100% { opacity: 1; text-shadow: 0 0 5px rgba(212,175,55,.45); }
+        50% { opacity: .35; text-shadow: 0 0 18px rgba(255,215,0,1); }
+    }
 
     </style>""", unsafe_allow_html=True)
 
