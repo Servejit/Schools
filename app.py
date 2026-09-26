@@ -16490,10 +16490,10 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # Three equal columns. Functions are placed left-to-right, row-by-row,
-    # so related functions remain adjacent in the displayed sequence.
-    for row_start in range(0, len(options), 3):
-        cols = st.columns(3, gap="small")
+    # Two equal columns. Functions stay in the exact list order,
+    # left-to-right and then top-to-bottom.
+    for row_start in range(0, len(options), 2):
+        cols = st.columns(2, gap="small")
         for offset, col in enumerate(cols):
             index = row_start + offset
             if index >= len(options):
