@@ -12915,7 +12915,9 @@ def parent_report_cards_enabled(school_id):
             )
             .execute()
         )
-        data = result.data
+        # Supabase RPC may return None when the RPC response is unavailable.
+        # Never dereference .data directly; treat a missing response as disabled.
+        data = getattr(result, "data", None) if result is not None else None
         if isinstance(data, bool):
             return data
         if isinstance(data, list) and data:
@@ -14269,7 +14271,9 @@ def subject_wise_parent_student_premium_enabled(school_id):
             )
             .execute()
         )
-        data = result.data
+        # Supabase RPC may return None when the RPC response is unavailable.
+        # Never dereference .data directly; treat a missing response as disabled.
+        data = getattr(result, "data", None) if result is not None else None
         if isinstance(data, bool):
             return data
         if isinstance(data, list) and data:
