@@ -14282,7 +14282,7 @@ def premium_feature_management():
 
 
 def subject_wise_teacher_premium_enabled(school_id, teacher_id):
-    """Check the school-wide Subject-wise Premium permission for a Teacher."""
+    """Check Teacher Subject-wise Premium through a secure Supabase RPC."""
     if not school_id or not teacher_id:
         return False
 
@@ -14293,17 +14293,23 @@ def subject_wise_teacher_premium_enabled(school_id, teacher_id):
         return cached[1]
 
     try:
-        query_result = (
-            sb.table("premium_feature_access")
-            .select("active")
-            .eq("school_id", school_id)
-            .eq("admin_id", teacher_id)
-            .eq("feature_key", "subject_wise_premium_teacher")
-            .maybe_single()
+        result = (
+            sb.rpc(
+                "teacher_premium_feature_enabled",
+                {
+                    "p_school_id": school_id,
+                    "p_feature_key": "subject_wise_premium_teacher"
+                }
+            )
             .execute()
         )
-        row = getattr(query_result, "data", None) if query_result is not None else None
-        value = bool(row and row.get("active") is True)
+        data = getattr(result, "data", None) if result is not None else None
+        value = bool(data) if isinstance(data, bool) else bool(
+            data and (
+                data.get("enabled") if isinstance(data, dict)
+                else data[0] if isinstance(data, list) else False
+            )
+        )
         cache[cache_key] = (time.time(), value)
         return value
     except Exception:
