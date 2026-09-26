@@ -229,8 +229,10 @@ def apply_role_theme():
     .stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"]) {{
         display: flex !important;
         flex-wrap: nowrap !important;
-        gap: 0.30rem !important;
+        gap: 0.16rem !important;
         margin-bottom: 0 !important;
+        width: 100% !important;
+        overflow: visible !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"]) > div[data-testid="column"] {{
         flex: 1 1 0 !important;
@@ -238,17 +240,20 @@ def apply_role_theme():
         min-width: 0 !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton {{
-        margin: 0 0 0.08rem 0 !important;
+        margin: 0 0 0.03rem 0 !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton > button {{
         width: 100% !important;
-        min-height: 1.72rem !important;
-        height: 1.72rem !important;
-        padding: 0.08rem 0.30rem !important;
-        font-size: 0.78rem !important;
+        min-height: 1.48rem !important;
+        height: 1.48rem !important;
+        padding: 0.04rem 0.16rem !important;
+        font-size: 0.68rem !important;
         line-height: 1 !important;
-        white-space: nowrap !important;
-        border-radius: 5px !important;
+        white-space: normal !important;
+        overflow: hidden !important;
+        text-overflow: clip !important;
+        word-break: break-word !important;
+        border-radius: 4px !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"] {{
         gap: 0.05rem !important;
