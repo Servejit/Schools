@@ -16375,102 +16375,6 @@ def _close_dashboard_function_window():
     st.session_state.pop("_dashboard_open_function", None)
 
 
-def _run_dashboard_function_in_window(function_name, profile):
-    """Run exactly one dashboard function inside the single active window."""
-    role = profile.get("role")
-    active_role = get_active_theme_role()
-
-    if role == "Admin+Teacher":
-        role = active_role
-
-    if role == "SuperAdmin":
-        if function_name == "🏫 Schools":
-            schools()
-        elif function_name == "👥 Users":
-            users()
-        elif function_name == "🎓 Students":
-            students()
-        elif function_name == "📚 Classes & Subjects":
-            classes_subjects()
-        elif function_name == "📝 Exam / Assessment":
-            exam_assessment_settings()
-        elif function_name == "📝 Marks":
-            bulk_marks()
-        elif function_name == "📅 Attendance":
-            attendance()
-        elif function_name == "📢 Notices":
-            class_teacher_notices(profile)
-        elif function_name == "🖨️ Print Templates":
-            print_templates()
-        elif function_name == "📄 Report Cards":
-            report_cards()
-        elif function_name == "📊 Reports":
-            reports()
-        elif function_name == "💎 Premium Features":
-            premium_feature_management()
-        elif function_name == "💎 School Academic Status":
-            school_academic_status(profile.get("school_id"))
-
-    elif role == "Teacher":
-        if function_name == "🎓 Students":
-            students()
-        elif function_name == "👥 Users":
-            users()
-        elif function_name == "📝 Marks":
-            bulk_marks()
-        elif function_name == "📅 Attendance":
-            attendance()
-        elif function_name == "📢 Notices":
-            class_teacher_notices(profile)
-        elif function_name == "📄 Report Cards":
-            report_cards()
-        elif function_name == "📊 Reports":
-            reports()
-        elif function_name == "💎 Subject-wise Premium":
-            subject_wise_premium_view(
-                profile.get("school_id"),
-                [],
-                "Teacher"
-            )
-        elif function_name == "💎 School Academic Status":
-            school_academic_status(profile.get("school_id"))
-
-    elif role == "Admin":
-        if function_name == "👥 Users":
-            users()
-        elif function_name == "🎓 Students":
-            students()
-        elif function_name == "📚 Classes & Subjects":
-            classes_subjects()
-        elif function_name == "📝 Exam / Assessment":
-            exam_assessment_settings()
-        elif function_name == "📝 Marks":
-            bulk_marks()
-        elif function_name == "📅 Attendance":
-            attendance()
-        elif function_name == "📢 Notices":
-            class_teacher_notices(profile)
-        elif function_name == "🖨️ Print Templates":
-            print_templates()
-        elif function_name == "📄 Report Cards":
-            report_cards()
-        elif function_name == "📊 Reports":
-            reports()
-        elif function_name == "💎 Premium Features":
-            premium_feature_management()
-        elif function_name == "💎 School Academic Status":
-            school_academic_status(profile.get("school_id"))
-
-
-@st.dialog("Function Window", width="large", dismissible=True, on_dismiss=_close_dashboard_function_window)
-def open_dashboard_function_window(function_name, profile):
-    st.markdown(
-        f"<div class='dashboard-menu-title'>Selected Function: {function_name}</div>",
-        unsafe_allow_html=True
-    )
-    _run_dashboard_function_in_window(function_name, profile)
-
-
 def dashboard_menu_2col(title, options, key):
     """Render one-active-function dashboard navigation as professional bars."""
     if not options:
@@ -16480,15 +16384,6 @@ def dashboard_menu_2col(title, options, key):
     if current not in options:
         current = options[0]
         st.session_state[key] = current
-
-    # If another function is already open, keep exactly that one active.
-    pending_window = st.session_state.get("_dashboard_open_function")
-    if (
-        isinstance(pending_window, dict)
-        and pending_window.get("key") == key
-        and pending_window.get("function") in options
-    ):
-        return "__DASHBOARD_FUNCTION_WINDOW__"
 
     st.markdown(
         f"<div class='dashboard-menu-title'>{title}</div>",
@@ -16510,11 +16405,7 @@ def dashboard_menu_2col(title, options, key):
             ):
                 if function_name != current:
                     st.session_state[key] = function_name
-                    st.session_state["_dashboard_open_function"] = {
-                        "key": key,
-                        "function": function_name
-                    }
-                    return "__DASHBOARD_FUNCTION_WINDOW__"
+
         return None
 
     for i in range(max(len(left_options), len(right_options))):
@@ -16527,8 +16418,7 @@ def dashboard_menu_2col(title, options, key):
             if i < len(right_options) else None
         )
 
-        if left_result or right_result:
-            return "__DASHBOARD_FUNCTION_WINDOW__"
+
 
     return current
 def dashboard():
