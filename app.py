@@ -254,7 +254,7 @@ def apply_role_theme():
         border-width: 1px !important;
         border-style: solid !important;
         border-color: {theme["accent"]} !important;
-        background: {theme["soft"]} !important;
+        background: #FFFFFF !important;
         color: {theme["accent2"]} !important;
         font-weight: 700 !important;
         box-sizing: border-box !important;
