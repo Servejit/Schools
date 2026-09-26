@@ -1735,7 +1735,7 @@ def users():
                 if (
                     role == "SuperAdmin"
                     or (
-                        role in ["Admin", "Admin+Teacher"]
+                        role in ["Admin", "Admin+Teacher", "Teacher"]
                         and user.get("role") != "SuperAdmin"
                     )
                 ):
@@ -1928,8 +1928,8 @@ def users():
                     school_labels[0]
                 )
 
-                # Admin cannot move a user to another school.
-                if role in ["Admin", "Admin+Teacher"]:
+                # Admin and Class Teacher cannot move a managed user to another school.
+                if role in ["Admin", "Admin+Teacher", "Teacher"]:
                     admin_school_id = str(
                         st.session_state.profile.get("school_id") or ""
                     )
@@ -1980,6 +1980,33 @@ def users():
                             .execute()
                             .data or []
                         )
+
+                        # A Class Teacher can link/manage a Parent only with
+                        # students from the Class Teacher's own class(es).
+                        if role == "Teacher":
+                            teacher_edit_classes = (
+                                sb.table("classes")
+                                .select("class_name,section")
+                                .eq("school_id", edit_school_id)
+                                .eq("class_teacher_id", st.session_state.user.id)
+                                .eq("active", True)
+                                .execute()
+                                .data or []
+                            )
+                            teacher_allowed_edit_classes = {
+                                (
+                                    str(x.get("class_name") or "").strip().lower(),
+                                    str(x.get("section") or "").strip().lower()
+                                )
+                                for x in teacher_edit_classes
+                            }
+                            parent_student_rows = [
+                                s for s in parent_student_rows
+                                if (
+                                    str(s.get("class_name") or "").strip().lower(),
+                                    str(s.get("section") or "").strip().lower()
+                                ) in teacher_allowed_edit_classes
+                            ]
                     except Exception:
                         parent_student_rows = []
 
