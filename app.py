@@ -223,6 +223,7 @@ def apply_role_theme():
         font-size: 0.88rem;
         line-height: 1.1;
         margin: 0.20rem 0 0.30rem;
+        color: {theme["accent2"]} !important;
     }}
     .stApp div[data-testid="column"] {{
         min-width: 0 !important;
