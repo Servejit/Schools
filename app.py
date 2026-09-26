@@ -16397,7 +16397,7 @@ def _close_dashboard_function_window():
 
 
 def dashboard_menu_2col(title, options, key):
-    """Render one-active-function dashboard navigation as professional bars."""
+    """Simple, fast dashboard navigation."""
     if not options:
         return None
 
@@ -16411,37 +16411,39 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # Two balanced columns, but only ONE function can be visually active.
     left_options = options[::2]
     right_options = options[1::2]
     col1, col2 = st.columns(2, gap="small")
 
-    def render_function_button(container, function_name, position):
-        with container:
-            if st.button(
-                function_name,
-                key=f"{key}_function_{position}",
-                type="primary" if function_name == current else "secondary",
-                use_container_width=True
-            ):
-                if function_name != current:
-                    st.session_state[key] = function_name
-
-        return None
-
     for i in range(max(len(left_options), len(right_options))):
-        left_result = (
-            render_function_button(col1, left_options[i], f"L{i}")
-            if i < len(left_options) else None
-        )
-        right_result = (
-            render_function_button(col2, right_options[i], f"R{i}")
-            if i < len(right_options) else None
-        )
+        if i < len(left_options):
+            with col1:
+                name = left_options[i]
+                if st.button(
+                    name,
+                    key=f"{key}_function_L{i}",
+                    type="primary" if name == current else "secondary",
+                    use_container_width=True
+                ):
+                    if name != current:
+                        st.session_state[key] = name
+                        st.rerun()
 
+        if i < len(right_options):
+            with col2:
+                name = right_options[i]
+                if st.button(
+                    name,
+                    key=f"{key}_function_R{i}",
+                    type="primary" if name == current else "secondary",
+                    use_container_width=True
+                ):
+                    if name != current:
+                        st.session_state[key] = name
+                        st.rerun()
 
+    return st.session_state.get(key)
 
-    return current
 def dashboard():
 
     # Reset dashboard-specific selections whenever the user changes dashboard.
