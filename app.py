@@ -13854,12 +13854,19 @@ def premium_feature_management():
             key=f"allow_all_teachers_academic_status_{school_id}"
         )
 
-        if st.button(
-            ("🟢 " if new_all_teacher_academic else "🔴 ") + "💾 Save School Academic Status for ALL Teachers",
-            type="primary",
-            use_container_width=True,
-            key=f"save_all_teachers_academic_status_{school_id}"
-        ):
+        # All permission On/Off controls use the same auto-save behavior:
+        # changing the toggle immediately saves it and the status indicator
+        # uses the exact same green/red state.
+        st.markdown(
+            f"<div class='premium-permission-status "
+            f"{'on' if new_all_teacher_academic else 'off'}'>"
+            f"{'🟢 ON — Saved' if new_all_teacher_academic else '🔴 OFF — Saved'}"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+        if new_all_teacher_academic != teacher_master_current:
+            try:
             try:
                 # Keep one Admin/master setting and synchronize the same
                 # permission to every active Teacher/Admin+Teacher account.
