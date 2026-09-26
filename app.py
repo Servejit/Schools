@@ -14042,7 +14042,7 @@ def premium_feature_management():
                     if not teacher_id:
                         continue
 
-                    existing_teacher = (
+                    _existing_teacher_result = (
                         sb.table("premium_feature_access")
                         .select("id")
                         .eq("school_id", school_id)
@@ -14050,7 +14050,11 @@ def premium_feature_management():
                         .eq("feature_key", subject_teacher_key)
                         .maybe_single()
                         .execute()
-                        .data
+                    )
+                    existing_teacher = (
+                        getattr(_existing_teacher_result, "data", None)
+                        if _existing_teacher_result is not None
+                        else None
                     )
 
                     if existing_teacher:
