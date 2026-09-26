@@ -225,23 +225,15 @@ def apply_role_theme():
     .stApp div[data-testid="column"] {{
         min-width: 0 !important;
     }}
-    /* Keep dashboard button columns side-by-side even on narrow screens */
-    .stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"]) {{
-        display: flex !important;
-        flex-wrap: nowrap !important;
-        gap: 0.16rem !important;
+    /* Compact dashboard rows: always fit two tabs across the screen */
+    .stApp div[data-testid="stHorizontalBlock"] {{
+        gap: 0.18rem !important;
         margin-bottom: 0 !important;
         width: 100% !important;
         max-width: 100% !important;
-        overflow: hidden !important;
     }}
-    .stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"]) > div[data-testid="column"] {{
-        flex: 1 1 0 !important;
-        width: 50% !important;
-        max-width: 50% !important;
+    .stApp div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{
         min-width: 0 !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton {{
         margin: 0 0 0.03rem 0 !important;
@@ -16326,7 +16318,7 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render every dashboard function as a compact two-column tab grid."""
+    """Render every dashboard function in two compact rows/columns."""
     if not options:
         return None
 
@@ -16340,22 +16332,27 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # Two equal columns. Each button is deliberately compact so the
-    # complete dashboard menu occupies minimum vertical space on mobile.
-    left_col, right_col = st.columns(2, gap="small")
+    # Create a real two-column row for every pair. This keeps every
+    # function visible and prevents Streamlit from collapsing the layout.
+    for row_start in range(0, len(options), 2):
+        row_cols = st.columns([1, 1], gap="small")
 
-    for index, option in enumerate(options):
-        target_col = left_col if index % 2 == 0 else right_col
-        with target_col:
-            is_selected = option == current
-            if st.button(
-                option,
-                key=f"{key}_button_{index}",
-                use_container_width=True,
-                type="primary" if is_selected else "secondary"
-            ):
-                st.session_state[key] = option
-                st.rerun()
+        for col_index in range(2):
+            option_index = row_start + col_index
+            if option_index >= len(options):
+                continue
+
+            option = options[option_index]
+            with row_cols[col_index]:
+                is_selected = option == current
+                if st.button(
+                    option,
+                    key=f"{key}_button_{option_index}",
+                    use_container_width=True,
+                    type="primary" if is_selected else "secondary"
+                ):
+                    st.session_state[key] = option
+                    st.rerun()
 
     return st.session_state.get(key)
 def dashboard():
