@@ -262,8 +262,8 @@ def apply_role_theme():
         font-weight: 700 !important;
         box-sizing: border-box !important;
     }}
-     .stApp div[data-testid="stHorizontalBlock"] .stButton > button p {{
-        font-size: 1.12rem !important;
+    .stApp div[data-testid="stHorizontalBlock"] .stButton > button p {{
+        font-size: 1.04rem !important;
         margin: 0 !important;
         line-height: 1 !important;
         color: inherit !important;
