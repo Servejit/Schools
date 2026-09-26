@@ -17004,8 +17004,8 @@ def dashboard():
         # their own assigned class(es). A normal subject-only Teacher cannot
         # create, modify, activate, deactivate or delete users.
         teacher_menu_options = [
-            "🎓 Students",
             "👥 Users",
+            "🎓 Students",
             "📝 Marks",
             "📅 Attendance",
             "📢 Notices",
