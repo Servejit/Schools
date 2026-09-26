@@ -248,7 +248,7 @@ def apply_role_theme():
         min-height: 2.35rem !important;
         height: 2.35rem !important;
         padding: 0.18rem 0.35rem !important;
-        font-size: 1.12rem !important;
+        font-size: 1.04rem !important;
         line-height: 1 !important;
         white-space: nowrap !important;
         overflow: hidden !important;
