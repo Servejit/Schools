@@ -16327,7 +16327,7 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render dashboard functions in one simple dropdown list."""
+    """Render dashboard functions in one professional dropdown list."""
     if not options:
         return None
 
@@ -16350,6 +16350,32 @@ def dashboard_menu_2col(title, options, key):
     )
 
     st.session_state[key] = selected
+
+    # Give every function its own distinct background colour.
+    function_colors = [
+        "#FFF3CD", "#E8DDFC", "#F8D7DA", "#D4EDDA",
+        "#D6EAF8", "#FFF0B3", "#D5F5E3", "#FADBD8",
+        "#DDEBF7", "#E2F0D9", "#EADCF8", "#FCE4D6",
+        "#D9EAF7", "#E8F5E9", "#F3E5F5", "#FFF8E1"
+    ]
+    color = function_colors[options.index(selected) % len(function_colors)]
+
+    st.markdown(
+        f"""
+        <style>
+        div[data-testid="stSelectbox"]:has(select) {{
+            background: {color} !important;
+            border-radius: 8px !important;
+            padding: 3px !important;
+        }}
+        div[data-testid="stSelectbox"] > div {{
+            background: {color} !important;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
     return selected
 
 def dashboard():
