@@ -16071,6 +16071,8 @@ def dashboard():
         if active_mode == "Teacher":
             st.title("👨‍🏫 Teacher Dashboard")
 
+            render_teacher_dashboard_user_search(profile, "admin_teacher")
+
             teacher_menu_items = [
                 "🎓 Students",
                 "👥 Users",
@@ -16234,167 +16236,7 @@ def dashboard():
         # -------------------------------------------------
         # QUICK USER SEARCH ON TEACHER DASHBOARD
         # -------------------------------------------------
-        # This input is intentionally outside the data-loading try/except so
-        # it is ALWAYS visible on the Teacher Dashboard, even if a database
-        # query temporarily fails or no users have been linked yet.
-        st.subheader("🔎 Search Class Users")
-        dashboard_user_search = st.text_input(
-            "Search Student / Parent",
-            placeholder="Type name, email, class, section, admission no. or roll no.",
-            key="teacher_dashboard_user_search_text"
-        ).strip().lower()
-
-        # Keep the actual searchable dropdown below the search box. Visibility
-        # and permissions are separate: only users from the Class Teacher's
-        # assigned class(es) are added to its options.
-        try:
-            quick_allowed_classes = {
-                (
-                    str(x.get("class_name") or "").strip().lower(),
-                    str(x.get("section") or "").strip().lower()
-                )
-                for x in teacher_class_rows
-            }
-
-            quick_students = (
-                sb.table("students")
-                .select(
-                    "id,user_id,name,class_name,section,admission_no,roll_no,"
-                    "school_id,active"
-                )
-                .eq("school_id", profile.get("school_id"))
-                .eq("active", True)
-                .execute()
-                .data or []
-            )
-            quick_students = [
-                s for s in quick_students
-                if (
-                    str(s.get("class_name") or "").strip().lower(),
-                    str(s.get("section") or "").strip().lower()
-                ) in quick_allowed_classes
-            ]
-
-            quick_student_ids = [
-                str(s.get("id"))
-                for s in quick_students
-                if s.get("id")
-            ]
-            quick_student_user_ids = {
-                str(s.get("user_id"))
-                for s in quick_students
-                if s.get("user_id")
-            }
-
-            quick_parent_ids = set()
-            if quick_student_ids:
-                quick_links = (
-                    sb.table("parent_student_links")
-                    .select("parent_id,student_id")
-                    .in_("student_id", quick_student_ids)
-                    .execute()
-                    .data or []
-                )
-                quick_parent_ids = {
-                    str(x.get("parent_id"))
-                    for x in quick_links
-                    if x.get("parent_id")
-                }
-
-            quick_profiles = (
-                sb.table("profiles")
-                .select("id,full_name,email,role,school_id,active")
-                .eq("school_id", profile.get("school_id"))
-                .eq("active", True)
-                .in_(
-                    "role",
-                    ["Student", "Parent"]
-                )
-                .execute()
-                .data or []
-            )
-
-            quick_allowed_user_ids = (
-                quick_student_user_ids | quick_parent_ids
-            )
-
-            quick_users = [
-                u for u in quick_profiles
-                if str(u.get("id") or "") in quick_allowed_user_ids
-            ]
-
-            # Fallback for older Student records whose students.user_id is
-            # still empty: match the Student profile to the class record by
-            # name, consistent with User Management.
-            quick_student_names = {
-                str(s.get("name") or "").strip().lower()
-                for s in quick_students
-                if str(s.get("name") or "").strip()
-            }
-            if quick_student_names:
-                for u in quick_profiles:
-                    if (
-                        u.get("role") == "Student"
-                        and str(u.get("full_name") or "").strip().lower()
-                        in quick_student_names
-                    ):
-                        quick_users.append(u)
-
-            quick_user_map = {}
-            for u in quick_users:
-                label = (
-                    f"{u.get('full_name') or 'User'}"
-                    f" — {u.get('email') or '-'}"
-                    f" — {u.get('role') or '-'}"
-                )
-                quick_user_map[label] = u
-
-            # Filter the dropdown from the text typed above.
-            dashboard_search_users = quick_users
-            if dashboard_user_search:
-                dashboard_search_users = [
-                    u for u in quick_users
-                    if dashboard_user_search in " ".join([
-                        str(u.get("full_name") or ""),
-                        str(u.get("email") or ""),
-                        str(u.get("role") or "")
-                    ]).lower()
-                ]
-
-            dashboard_user_map = {}
-            for u in dashboard_search_users:
-                label = (
-                    f"{u.get('full_name') or 'User'}"
-                    f" — {u.get('email') or '-'}"
-                    f" — {u.get('role') or '-'}"
-                )
-                dashboard_user_map[label] = u
-
-            if dashboard_user_map:
-                quick_selected = st.selectbox(
-                    "👥 Select matching user",
-                    list(dashboard_user_map.keys()),
-                    index=None,
-                    placeholder="Matching users will appear here",
-                    key="teacher_dashboard_user_dropdown"
-                )
-
-                if quick_selected:
-                    st.session_state["dashboard_selected_user_id"] = (
-                        dashboard_user_map[quick_selected].get("id")
-                    )
-                    st.caption(
-                        "Selected user. Open 👥 Users below to manage this account "
-                        "according to your Class Teacher permissions."
-                    )
-            elif dashboard_user_search:
-                st.info("No matching Student / Parent found in your assigned class.")
-            elif not quick_user_map:
-                st.info("No Student / Parent users are currently available for your assigned class.")
-
-        except Exception:
-            # Dashboard search must never stop the normal Teacher dashboard.
-            pass
+        render_teacher_dashboard_user_search(profile, "teacher")
 
         # User Management is visible in the Teacher dashboard.
         # Actual user-management permissions remain restricted inside users():
@@ -16951,4 +16793,174 @@ if st.session_state.logged_in:
     apply_role_theme()
     dashboard()
 else:
-    login()
+    login(
+
+def render_teacher_dashboard_user_search(profile, widget_prefix):
+    # -------------------------------------------------
+    # QUICK USER SEARCH ON TEACHER DASHBOARD
+    # -------------------------------------------------
+    # This input is intentionally outside the data-loading try/except so
+    # it is ALWAYS visible on the Teacher Dashboard, even if a database
+    # query temporarily fails or no users have been linked yet.
+    st.subheader("🔎 Search Class Users")
+    dashboard_user_search = st.text_input(
+        "Search Student / Parent",
+        placeholder="Type name, email, class, section, admission no. or roll no.",
+        key=f"{widget_prefix}_user_search_text"
+    ).strip().lower()
+
+    # Keep the actual searchable dropdown below the search box. Visibility
+    # and permissions are separate: only users from the Class Teacher's
+    # assigned class(es) are added to its options.
+    try:
+        quick_allowed_classes = {
+            (
+                str(x.get("class_name") or "").strip().lower(),
+                str(x.get("section") or "").strip().lower()
+            )
+            for x in teacher_class_rows
+        }
+
+        quick_students = (
+            sb.table("students")
+            .select(
+                "id,user_id,name,class_name,section,admission_no,roll_no,"
+                "school_id,active"
+            )
+            .eq("school_id", profile.get("school_id"))
+            .eq("active", True)
+            .execute()
+            .data or []
+        )
+        quick_students = [
+            s for s in quick_students
+            if (
+                str(s.get("class_name") or "").strip().lower(),
+                str(s.get("section") or "").strip().lower()
+            ) in quick_allowed_classes
+        ]
+
+        quick_student_ids = [
+            str(s.get("id"))
+            for s in quick_students
+            if s.get("id")
+        ]
+        quick_student_user_ids = {
+            str(s.get("user_id"))
+            for s in quick_students
+            if s.get("user_id")
+        }
+
+        quick_parent_ids = set()
+        if quick_student_ids:
+            quick_links = (
+                sb.table("parent_student_links")
+                .select("parent_id,student_id")
+                .in_("student_id", quick_student_ids)
+                .execute()
+                .data or []
+            )
+            quick_parent_ids = {
+                str(x.get("parent_id"))
+                for x in quick_links
+                if x.get("parent_id")
+            }
+
+        quick_profiles = (
+            sb.table("profiles")
+            .select("id,full_name,email,role,school_id,active")
+            .eq("school_id", profile.get("school_id"))
+            .eq("active", True)
+            .in_(
+                "role",
+                ["Student", "Parent"]
+            )
+            .execute()
+            .data or []
+        )
+
+        quick_allowed_user_ids = (
+            quick_student_user_ids | quick_parent_ids
+        )
+
+        quick_users = [
+            u for u in quick_profiles
+            if str(u.get("id") or "") in quick_allowed_user_ids
+        ]
+
+        # Fallback for older Student records whose students.user_id is
+        # still empty: match the Student profile to the class record by
+        # name, consistent with User Management.
+        quick_student_names = {
+            str(s.get("name") or "").strip().lower()
+            for s in quick_students
+            if str(s.get("name") or "").strip()
+        }
+        if quick_student_names:
+            for u in quick_profiles:
+                if (
+                    u.get("role") == "Student"
+                    and str(u.get("full_name") or "").strip().lower()
+                    in quick_student_names
+                ):
+                    quick_users.append(u)
+
+        quick_user_map = {}
+        for u in quick_users:
+            label = (
+                f"{u.get('full_name') or 'User'}"
+                f" — {u.get('email') or '-'}"
+                f" — {u.get('role') or '-'}"
+            )
+            quick_user_map[label] = u
+
+        # Filter the dropdown from the text typed above.
+        dashboard_search_users = quick_users
+        if dashboard_user_search:
+            dashboard_search_users = [
+                u for u in quick_users
+                if dashboard_user_search in " ".join([
+                    str(u.get("full_name") or ""),
+                    str(u.get("email") or ""),
+                    str(u.get("role") or "")
+                ]).lower()
+            ]
+
+        dashboard_user_map = {}
+        for u in dashboard_search_users:
+            label = (
+                f"{u.get('full_name') or 'User'}"
+                f" — {u.get('email') or '-'}"
+                f" — {u.get('role') or '-'}"
+            )
+            dashboard_user_map[label] = u
+
+        if dashboard_user_map:
+            quick_selected = st.selectbox(
+                "👥 Select matching user",
+                list(dashboard_user_map.keys()),
+                index=None,
+                placeholder="Matching users will appear here",
+                key=f"{widget_prefix}_user_dropdown"
+            )
+
+            if quick_selected:
+                st.session_state["dashboard_selected_user_id"] = (
+                    dashboard_user_map[quick_selected].get("id")
+                )
+                st.caption(
+                    "Selected user. Open 👥 Users below to manage this account "
+                    "according to your Class Teacher permissions."
+                )
+        elif dashboard_user_search:
+            st.info("No matching Student / Parent found in your assigned class.")
+        elif not quick_user_map:
+            st.info("No Student / Parent users are currently available for your assigned class.")
+
+    except Exception:
+        # Dashboard search must never stop the normal Teacher dashboard.
+        pass
+
+
+
+)
