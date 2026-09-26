@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import time
 import requests
 import datetime
@@ -16396,15 +16397,80 @@ def _close_dashboard_function_window():
     st.session_state.pop("_dashboard_open_function", None)
 
 
+def _enable_dashboard_long_press():
+    """Enable a lightweight long-press action for dashboard function buttons."""
+    components.html("""
+    <script>
+    (() => {
+      const KEY = "school_dashboard_longpress_v1";
+      if (window.parent[KEY]) return;
+      window.parent[KEY] = true;
+
+      let timer = null;
+      let fired = false;
+
+      const attach = () => {
+        const buttons = window.parent.document.querySelectorAll(
+          '[data-testid="stHorizontalBlock"] .stButton > button'
+        );
+        buttons.forEach((button) => {
+          if (button.dataset.longpressBound === "1") return;
+          button.dataset.longpressBound = "1";
+
+          button.addEventListener("pointerdown", () => {
+            fired = false;
+            timer = window.setTimeout(() => {
+              fired = true;
+              const url = new URL(window.parent.location.href);
+              url.searchParams.set("longpress_function", button.innerText.trim());
+              window.parent.open(url.toString(), "_blank", "noopener");
+            }, 700);
+          });
+
+          const cancel = () => {
+            if (timer) window.clearTimeout(timer);
+            timer = null;
+          };
+          button.addEventListener("pointerup", cancel);
+          button.addEventListener("pointercancel", cancel);
+          button.addEventListener("pointerleave", cancel);
+        });
+      };
+
+      attach();
+      new MutationObserver(attach).observe(
+        window.parent.document.body,
+        {childList: true, subtree: true}
+      );
+    })();
+    </script>
+    """, height=0)
+    
+
 def dashboard_menu_2col(title, options, key):
     """Simple, fast dashboard navigation."""
     if not options:
         return None
 
-    current = st.session_state.get(key)
+    # A long-press opens the selected function in a new browser tab.
+    try:
+        longpress = st.query_params.get("longpress_function")
+        if isinstance(longpress, list):
+            longpress = longpress[0] if longpress else None
+        if longpress in options:
+            st.session_state[key] = longpress
+            current = longpress
+            del st.query_params["longpress_function"]
+        else:
+            current = st.session_state.get(key)
+    except Exception:
+        current = st.session_state.get(key)
+
     if current not in options:
         current = options[0]
         st.session_state[key] = current
+
+    _enable_dashboard_long_press()
 
     st.markdown(
         f"<div class='dashboard-menu-title'>{title}</div>",
