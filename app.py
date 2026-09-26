@@ -16427,7 +16427,12 @@ def dashboard():
                 "logged_in", "user", "profile", "access_token", "refresh_token",
                 "admin_teacher_mode", "admin_teacher_admin_menu",
                 "admin_teacher_teacher_menu", "_last_dashboard_menu",
-                "_dashboard_open_function"
+                "_dashboard_open_function",
+                # IMPORTANT: preserve the active dashboard menu itself.
+                # Without this key, selecting a menu such as Users and then
+                # changing a filter/school inside that function causes the
+                # Streamlit rerun to fall back to the first menu item (Schools).
+                current_menu_key
             }
             for key in list(st.session_state.keys()):
                 if key not in keep_keys:
@@ -16606,9 +16611,6 @@ def dashboard():
 
         if menu == "🏫 Schools":
             schools()
-
-        elif menu == "👥 Users":
-            users()
 
         elif menu == "🎓 Students":
             students()
