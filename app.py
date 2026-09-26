@@ -14180,6 +14180,7 @@ def premium_feature_management():
 
         if st.button(
             ("🟢 " if new_report_card_active else "🔴 ") + "💾 Save Parent / Student Report Card Permission",
+            type="primary",
             use_container_width=True,
             key=f"save_parent_report_card_{school_id}"
         ):
