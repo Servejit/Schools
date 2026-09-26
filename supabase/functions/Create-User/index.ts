@@ -270,11 +270,7 @@ function json(data: unknown, status = 200) {
       full_name: fullName,
       role: requestedRole,
       active: true,
-      school_id: requestedSchoolId,
-      admin_teacher_created_by:
-        requestedRole === "Admin+Teacher" && callerRole === "Admin"
-          ? caller.id
-          : null,
+      school_id: requestedSchoolId
     };
 
     const { error: profileUpsertError } = await adminClient
