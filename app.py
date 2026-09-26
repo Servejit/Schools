@@ -187,7 +187,11 @@ st.markdown("""
     flex-direction: row !important;
     flex-wrap: nowrap !important;
     width: 100% !important;
-    gap: 0.5rem !important;
+    gap: 0.12rem !important;
+}
+.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) > div[data-testid="column"] {
+    padding-left: 0.02rem !important;
+    padding-right: 0.02rem !important;
 }
 .stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) > div[data-testid="column"] {
     flex: 0 0 calc(50% - 0.25rem) !important;
