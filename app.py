@@ -1777,6 +1777,81 @@ def users():
                             st.error("You cannot delete your own Admin account.")
                         else:
                             try:
+                                # A Class Teacher must never delete a shared Parent
+                                # account that is also linked to children outside the
+                                # teacher's own class. The account belongs to all of
+                                # that parent's children, so deleting it would affect
+                                # another Class Teacher's students.
+                                if role == "Teacher" and user.get("role") == "Parent":
+                                    teacher_delete_classes = (
+                                        sb.table("classes")
+                                        .select("class_name,section")
+                                        .eq(
+                                            "school_id",
+                                            st.session_state.profile.get("school_id")
+                                        )
+                                        .eq(
+                                            "class_teacher_id",
+                                            st.session_state.user.id
+                                        )
+                                        .eq("active", True)
+                                        .execute()
+                                        .data or []
+                                    )
+                                    teacher_delete_allowed_classes = {
+                                        (
+                                            str(x.get("class_name") or "").strip().lower(),
+                                            str(x.get("section") or "").strip().lower()
+                                        )
+                                        for x in teacher_delete_classes
+                                    }
+
+                                    teacher_delete_students = (
+                                        sb.table("students")
+                                        .select("id,class_name,section")
+                                        .eq(
+                                            "school_id",
+                                            st.session_state.profile.get("school_id")
+                                        )
+                                        .eq("active", True)
+                                        .execute()
+                                        .data or []
+                                    )
+                                    teacher_delete_allowed_student_ids = {
+                                        str(s.get("id"))
+                                        for s in teacher_delete_students
+                                        if s.get("id")
+                                        and (
+                                            str(s.get("class_name") or "").strip().lower(),
+                                            str(s.get("section") or "").strip().lower()
+                                        ) in teacher_delete_allowed_classes
+                                    }
+
+                                    parent_delete_links = (
+                                        sb.table("parent_student_links")
+                                        .select("student_id")
+                                        .eq("parent_id", user_id)
+                                        .execute()
+                                        .data or []
+                                    )
+                                    parent_delete_student_ids = {
+                                        str(x.get("student_id"))
+                                        for x in parent_delete_links
+                                        if x.get("student_id")
+                                    }
+                                    outside_teacher_scope = (
+                                        parent_delete_student_ids
+                                        - teacher_delete_allowed_student_ids
+                                    )
+
+                                    if outside_teacher_scope:
+                                        st.error(
+                                            "This Parent account is also linked to "
+                                            "a student in another class. You cannot "
+                                            "delete the shared Parent account."
+                                        )
+                                        continue
+
                                 # Remove dependent application records first.
                                 sb.table("parent_student_links").delete().eq(
                                     "parent_id", user_id
