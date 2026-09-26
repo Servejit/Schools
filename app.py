@@ -249,7 +249,9 @@ def apply_role_theme():
         overflow: hidden !important;
         text-overflow: clip !important;
         word-break: break-word !important;
-        border-radius: 4px !important;
+        border-radius: 999px !important;
+        border-width: 1px !important;
+        box-sizing: border-box !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"] {{
         gap: 0.05rem !important;
