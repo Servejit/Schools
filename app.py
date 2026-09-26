@@ -215,13 +215,13 @@ def apply_role_theme():
     }}
 
     /* Perfectly balanced two-column dashboard navigation */
-    .dashboard-menu-item {
+    .dashboard-menu-item {{
         width: 100%;
         min-height: 2.55rem;
-    }
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+    }}
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{
         min-width: 0 !important;
-    }
+    }}
 
     /* Navigation / radio buttons */
     div[role="radiogroup"] label {{
