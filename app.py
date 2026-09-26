@@ -245,10 +245,10 @@ def apply_role_theme():
     }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton > button {{
         width: 100% !important;
-        min-height: 1.55rem !important;
-        height: 1.55rem !important;
-        padding: 0.04rem 0.20rem !important;
-        font-size: 1.02rem !important;
+        min-height: 2.35rem !important;
+        height: 2.35rem !important;
+        padding: 0.18rem 0.35rem !important;
+        font-size: 1.12rem !important;
         line-height: 1 !important;
         white-space: nowrap !important;
         overflow: hidden !important;
@@ -262,8 +262,8 @@ def apply_role_theme():
         font-weight: 700 !important;
         box-sizing: border-box !important;
     }}
-    .stApp div[data-testid="stHorizontalBlock"] .stButton > button p {{
-        font-size: 1.02rem !important;
+     .stApp div[data-testid="stHorizontalBlock"] .stButton > button p {{
+        font-size: 1.12rem !important;
         margin: 0 !important;
         line-height: 1 !important;
         color: inherit !important;
