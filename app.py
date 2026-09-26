@@ -936,14 +936,6 @@ def users():
 
     st.header("👥 User Management")
 
-    # Keep the User Search box at the top of User Management so it is
-    # immediately visible on every Teacher/Admin User screen.
-    user_search = st.text_input(
-        "🔎 Search User",
-        placeholder="Search name, email, role, class, section, admission no. or roll no.",
-        key="users_search"
-    ).strip().lower()
-
     # Persistent confirmations remain visible after reruns.
     show_save_message("parent_student_links")
     show_save_message("user_delete")
@@ -1853,49 +1845,39 @@ def users():
         # screen if optional student/link data is unavailable.
         search_details = {}
 
-    searchable_users = filtered_users
-
-    if user_search:
-        searchable_users = [
-            u for u in filtered_users
-            if (
-                user_search in str(u.get("full_name") or "").lower()
-                or user_search in str(u.get("email") or "").lower()
-                or user_search in str(u.get("role") or "").lower()
-                or user_search in " ".join(
-                    search_details.get(str(u.get("id") or ""), [])
-                ).lower()
-            )
-        ]
-
+    # Search + selection are combined in one searchable dropdown.
+    # Streamlit's selectbox opens a dropdown while the user types, so the
+    # user can search by name, email, role, class, section, admission no.,
+    # roll no., or a linked child's details.
     search_user_labels = {}
-    for u in searchable_users:
+    for u in filtered_users:
+        extra = " ".join(search_details.get(str(u.get("id") or ""), []))
         label = (
             f"{u.get('full_name') or 'User'}"
             f" — {u.get('email') or '-'}"
             f" — {u.get('role') or '-'}"
         )
+        if extra:
+            label += f" — {extra}"
         search_user_labels[label] = u
 
     if not search_user_labels:
-        st.info("No users found for the search/filter.")
+        st.info("No users found for the selected filters.")
         return
 
     selected_user_label = st.selectbox(
-        "👥 Select User",
+        "🔎 Search / Select User",
         list(search_user_labels.keys()),
         index=None,
-        placeholder="Select a user from the dropdown",
+        placeholder="Type to search — matching users will appear in the dropdown",
         key="selected_user_dropdown"
     )
 
     if not selected_user_label:
-        st.info("Select a user from the dropdown above to modify/manage them.")
+        st.info("Type in the box to search, then select a user from the dropdown.")
         return
 
-    selected_users = [
-        search_user_labels[selected_user_label]
-    ]
+    selected_users = [search_user_labels[selected_user_label]]
     # -----------------------------------------------------
     # MODIFY USERS
     # -----------------------------------------------------
