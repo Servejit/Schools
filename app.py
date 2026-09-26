@@ -174,6 +174,34 @@ def get_active_theme_role():
 
 
 
+# --- Dashboard checkbox two-column layout ---
+st.markdown("""
+<style>
+.dashboard-menu-title {
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin: 0.35rem 0 0.55rem;
+}
+.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    width: 100% !important;
+    gap: 0.5rem !important;
+}
+.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) > div[data-testid="column"] {
+    flex: 0 0 calc(50% - 0.25rem) !important;
+    width: calc(50% - 0.25rem) !important;
+    max-width: calc(50% - 0.25rem) !important;
+    min-width: 0 !important;
+}
+.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) div[data-testid="stCheckbox"] label {
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 def apply_role_theme():
     theme_role = get_active_theme_role()
     theme = ROLE_THEMES.get(theme_role)
@@ -193,44 +221,7 @@ def apply_role_theme():
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
     /* Universal compact appearance: same sizing across every role/theme */
-    .stApp # --- Dashboard checkbox two-column layout ---
-st.markdown("""
-<style>
-.dashboard-menu-title {
-    font-weight: 700;
-    font-size: 0.95rem;
-    margin: 0.35rem 0 0.55rem;
-}
-
-/* Keep every dashboard checkbox row side-by-side at 50% / 50%. */
-.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    width: 100% !important;
-    gap: 0.5rem !important;
-}
-
-.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) > div[data-testid="column"] {
-    flex: 0 0 calc(50% - 0.25rem) !important;
-    width: calc(50% - 0.25rem) !important;
-    max-width: calc(50% - 0.25rem) !important;
-    min-width: 0 !important;
-}
-
-.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) div[data-testid="stCheckbox"] label {
-    font-size: 0.82rem !important;
-    font-weight: 600 !important;
-}
-
-.stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stCheckbox"]) div[data-testid="stCheckbox"] p {
-    font-size: 0.82rem !important;
-    margin: 0 !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-h1, .stApp h2, .stApp h3 {
+    h1, .stApp h2, .stApp h3 {
         color: {theme["accent2"]};
         font-family: inherit;
         line-height: 1.2;
