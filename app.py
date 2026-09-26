@@ -253,12 +253,25 @@ def apply_role_theme():
         border-radius: 9999px !important;
         border-width: 1px !important;
         border-style: solid !important;
+        border-color: ${theme["accent"]} !important;
+        background: ${theme["soft"]} !important;
+        color: ${theme["accent2"]} !important;
+        font-weight: 700 !important;
         box-sizing: border-box !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton > button p {{
         font-size: 1.02rem !important;
         margin: 0 !important;
         line-height: 1 !important;
+        color: inherit !important;
+    }}
+    .stApp div[data-testid="stHorizontalBlock"] .stButton > button[kind="primary"] {{
+        background: ${theme["accent"]} !important;
+        border-color: ${theme["accent"]} !important;
+        color: #FFFFFF !important;
+    }}
+    .stApp div[data-testid="stHorizontalBlock"] .stButton > button[kind="primary"] p {{
+        color: #FFFFFF !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"] {{
         gap: 0.05rem !important;
