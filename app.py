@@ -13693,6 +13693,121 @@ def premium_feature_management():
                 st.code(str(e))
 
 
+        # -------------------------------------------------
+        # SCHOOL ACADEMIC STATUS — TEACHER ACCESS
+        # -------------------------------------------------
+        # Admin's own Premium access is separate from Teacher access.
+        # An Admin can selectively allow individual active Teacher /
+        # Admin+Teacher accounts to use School Academic Status.
+        st.divider()
+        st.subheader("👨‍🏫 School Academic Status — Teacher Access")
+        st.caption(
+            "Allow School Academic Status separately for selected teachers. "
+            "Teachers do not receive access unless you explicitly permit them."
+        )
+
+        try:
+            teacher_rows = (
+                sb.table("profiles")
+                .select("id,email,full_name,role,active,school_id")
+                .eq("school_id", school_id)
+                .in_("role", ["Teacher", "Admin+Teacher"])
+                .order("full_name")
+                .execute()
+                .data or []
+            )
+        except Exception:
+            teacher_rows = []
+
+        active_teachers = [
+            x for x in teacher_rows
+            if x.get("active", True)
+        ]
+
+        if not active_teachers:
+            st.info("No active Teacher / Admin+Teacher accounts are available.")
+        else:
+            teacher_feature_key = "school_academic_status_teacher"
+
+            for teacher in active_teachers:
+                teacher_id = teacher.get("id")
+                try:
+                    teacher_access = (
+                        sb.table("premium_feature_access")
+                        .select("id,active")
+                        .eq("school_id", school_id)
+                        .eq("admin_id", teacher_id)
+                        .eq("feature_key", teacher_feature_key)
+                        .maybe_single()
+                        .execute()
+                        .data
+                    )
+                except Exception:
+                    teacher_access = None
+
+                teacher_allowed = bool(
+                    teacher_access
+                    and teacher_access.get("active") is True
+                )
+
+                teacher_label = (
+                    teacher.get("full_name")
+                    or teacher.get("email")
+                    or "Teacher"
+                )
+
+                with st.container(border=True):
+                    st.write(
+                        f"**{teacher_label}**"
+                        f" — {teacher.get('role') or 'Teacher'}"
+                    )
+                    st.caption(teacher.get("email") or "")
+
+                    new_teacher_allowed = st.toggle(
+                        "Allow School Academic Status",
+                        value=teacher_allowed,
+                        key=f"school_academic_status_teacher_{school_id}_{teacher_id}"
+                    )
+
+                    if st.button(
+                        "💾 Save Teacher Permission",
+                        use_container_width=True,
+                        key=f"save_school_academic_status_teacher_{school_id}_{teacher_id}"
+                    ):
+                        try:
+                            if teacher_access:
+                                (
+                                    sb.table("premium_feature_access")
+                                    .update({
+                                        "active": bool(new_teacher_allowed),
+                                        "updated_at": datetime.datetime.now(
+                                            datetime.timezone.utc
+                                        ).isoformat()
+                                    })
+                                    .eq("id", teacher_access["id"])
+                                    .execute()
+                                )
+                            else:
+                                (
+                                    sb.table("premium_feature_access")
+                                    .insert({
+                                        "school_id": school_id,
+                                        "admin_id": teacher_id,
+                                        "feature_key": teacher_feature_key,
+                                        "active": bool(new_teacher_allowed)
+                                    })
+                                    .execute()
+                                )
+
+                            mark_saved(
+                                f"school_academic_status_teacher_{school_id}_{teacher_id}"
+                            )
+                            st.success("✅ Teacher permission saved successfully.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error("Could not save Teacher School Academic Status permission.")
+                            st.code(str(e))
+
         feature_key = "subject_wise_premium_parent_student"
         try:
             existing = (
@@ -14270,6 +14385,30 @@ def school_academic_status(school_id):
     st.caption("Premium academic performance analysis. SuperAdmin has full access.")
 
     role = get_active_theme_role()
+
+    # SuperAdmin has unrestricted access. Admin requires its own Premium
+    # access. Teachers require an explicit permission granted by an Admin.
+    if role == "Teacher":
+        teacher_school_id = st.session_state.profile.get("school_id")
+        if not premium_feature_enabled(
+            teacher_school_id,
+            st.session_state.user.id,
+            "school_academic_status_teacher"
+        ):
+            st.error(
+                "School Academic Status has not been permitted for your Teacher account by the Admin."
+            )
+            return
+    elif role == "Admin":
+        if not premium_feature_enabled(
+            school_id,
+            st.session_state.user.id,
+            "school_academic_status"
+        ):
+            st.error(
+                "Your Admin account does not currently have Premium access to School Academic Status."
+            )
+            return
 
     # SuperAdmin can select any school.
     if role == "SuperAdmin":
@@ -16194,6 +16333,13 @@ def dashboard():
                 "📊 Reports"
             ]
 
+            if premium_feature_enabled(
+                profile.get("school_id"),
+                st.session_state.user.id,
+                "school_academic_status_teacher"
+            ):
+                teacher_menu_items.append("💎 School Academic Status")
+
             menu = st.radio(
                 "Teacher Menu",
                 teacher_menu_items,
@@ -16222,6 +16368,9 @@ def dashboard():
 
             elif menu == "📊 Reports":
                 reports()
+
+            elif menu == "💎 School Academic Status":
+                school_academic_status(profile.get("school_id"))
 
         else:
             st.title("🛠️ Admin Dashboard")
@@ -16364,6 +16513,13 @@ def dashboard():
             "📊 Reports"
         ]
 
+        if premium_feature_enabled(
+            profile.get("school_id"),
+            st.session_state.user.id,
+            "school_academic_status_teacher"
+        ):
+            teacher_menu_options.append("💎 School Academic Status")
+
         menu = st.radio(
             "Teacher Menu",
             teacher_menu_options,
@@ -16391,6 +16547,9 @@ def dashboard():
 
         elif menu == "📊 Reports":
             reports()
+
+        elif menu == "💎 School Academic Status":
+            school_academic_status(profile.get("school_id"))
 
         else:
             st.info(
