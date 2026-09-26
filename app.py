@@ -15677,6 +15677,9 @@ def dashboard():
         if menu == "🎓 Students":
             students()
 
+        elif menu == "👥 Users":
+            users()
+
         elif menu == "📝 Marks":
             bulk_marks()
 
