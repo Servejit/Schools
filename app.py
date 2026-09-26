@@ -13762,26 +13762,49 @@ def premium_feature_management():
 
         st.header("💎 Teachers/Parents/Students Access")
 
+        # Premium permission controls use the same compact horizontal-bar
+        # dimensions as the main dashboard functions. Only the permission
+        # state colour (green/red) remains different.
         st.markdown("""
         <style>
-        div.stButton:has(button[aria-label*="🔵"]) button { background-color:#2563eb !important; border-color:#2563eb !important; color:white !important; }
+        div.stButton:has(button[aria-label*="Save"]) button {
+            width: 100% !important;
+            min-height: 1.95rem !important;
+            height: 1.95rem !important;
+            padding: 0.04rem 0.30rem !important;
+            font-size: 1.04rem !important;
+            line-height: 1 !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            border-radius: 9999px !important;
+            border-width: 1px !important;
+            border-style: solid !important;
+            font-weight: 700 !important;
+            box-sizing: border-box !important;
+        }
+        div.stButton:has(button[aria-label*="🟢"]) button {
+            background-color:#16a34a !important;
+            border-color:#16a34a !important;
+            color:white !important;
+        }
+        div.stButton:has(button[aria-label*="🔴"]) button {
+            background-color:#dc2626 !important;
+            border-color:#dc2626 !important;
+            color:white !important;
+        }
+        div.stButton:has(button[aria-label*="Save"]) button p {
+            font-size: 1.04rem !important;
+            margin: 0 !important;
+            line-height: 1 !important;
+            color: inherit !important;
+        }
         </style>
         """, unsafe_allow_html=True)
 
         # -------------------------------------------------
         # SCHOOL ACADEMIC STATUS — ALL TEACHERS
         # -------------------------------------------------
-        st.markdown("""
-        <style>
-        /* Premium dashboard: one professional visual language for every permission */
-        .premium-dashboard-heading {
-            font-size: 1.15rem;
-            font-weight: 700;
-            margin: 0.15rem 0 0.55rem 0;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
         st.divider()
         st.subheader("👨‍🏫 School Academic Status — Teacher Access")
         try:
