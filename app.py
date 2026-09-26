@@ -1401,12 +1401,6 @@ def users():
                 st.error("Could not connect to Create-User.")
                 st.code(str(e))
 
-    # Teacher user management is intentionally creation-only and is available
-    # only to Class Teachers. Subject-only Teachers never reach this section.
-    # Teachers must not receive existing-user activate/deactivate/delete/modify controls.
-    if get_active_theme_role() == "Teacher":
-        return
-
     st.divider()
     st.subheader("📋 Existing Users")
 
@@ -1452,6 +1446,81 @@ def users():
             .execute()
             .data or []
         )
+
+        # Class Teachers may manage only Student and Parent accounts that
+        # belong to their own Class Teacher class(es). Subject-only Teachers
+        # never reach User Management because of the class-teacher check above.
+        if get_active_theme_role() == "Teacher":
+            teacher_school_id = st.session_state.profile.get("school_id")
+            teacher_class_rows = (
+                sb.table("classes")
+                .select("class_name,section")
+                .eq("school_id", teacher_school_id)
+                .eq("class_teacher_id", st.session_state.user.id)
+                .eq("active", True)
+                .execute()
+                .data or []
+            )
+            allowed_classes = {
+                (
+                    str(x.get("class_name") or "").strip().lower(),
+                    str(x.get("section") or "").strip().lower()
+                )
+                for x in teacher_class_rows
+            }
+
+            teacher_students = (
+                sb.table("students")
+                .select("id,user_id,class_name,section")
+                .eq("school_id", teacher_school_id)
+                .eq("active", True)
+                .execute()
+                .data or []
+            )
+            teacher_students = [
+                s for s in teacher_students
+                if (
+                    str(s.get("class_name") or "").strip().lower(),
+                    str(s.get("section") or "").strip().lower()
+                ) in allowed_classes
+            ]
+
+            allowed_student_user_ids = {
+                str(s.get("user_id"))
+                for s in teacher_students
+                if s.get("user_id")
+            }
+            allowed_student_ids = {
+                str(s.get("id"))
+                for s in teacher_students
+                if s.get("id")
+            }
+
+            allowed_parent_ids = set()
+            if allowed_student_ids:
+                parent_links = (
+                    sb.table("parent_student_links")
+                    .select("parent_id,student_id")
+                    .in_("student_id", list(allowed_student_ids))
+                    .execute()
+                    .data or []
+                )
+                allowed_parent_ids = {
+                    str(x.get("parent_id"))
+                    for x in parent_links
+                    if x.get("parent_id")
+                }
+
+            allowed_user_ids = (
+                allowed_student_user_ids
+                | allowed_parent_ids
+            )
+
+            user_data = [
+                u for u in user_data
+                if str(u.get("id") or "") in allowed_user_ids
+                and u.get("role") in ["Student", "Parent"]
+            ]
     except Exception as e:
         st.error(str(e))
         return
@@ -1519,6 +1588,14 @@ def users():
         filtered_users = [
             u for u in filtered_users
             if u.get("role") == filter_role
+        ]
+
+    # A Class Teacher can manage only Student/Parent accounts from their
+    # assigned class(es). This is applied again after all UI filters.
+    if role == "Teacher":
+        filtered_users = [
+            u for u in filtered_users
+            if u.get("role") in ["Student", "Parent"]
         ]
 
     user_labels = {}
