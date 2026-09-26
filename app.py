@@ -215,12 +215,30 @@ def apply_role_theme():
     }}
 
     /* Perfectly balanced two-column dashboard navigation */
-    .dashboard-menu-item {{
-        width: 100%;
-        min-height: 2.55rem;
+    /* Compact universal two-column dashboard menu */
+    .dashboard-menu-title {{
+        font-weight: 700;
+        font-size: 0.88rem;
+        line-height: 1.1;
+        margin: 0.20rem 0 0.30rem;
     }}
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{
+    .stApp div[data-testid="column"] {{
         min-width: 0 !important;
+    }}
+    .stApp div[data-testid="stHorizontalBlock"] {{
+        gap: 0.55rem !important;
+    }}
+    .stApp div[data-testid="stHorizontalBlock"] .stButton {{
+        margin: 0 0 0.28rem 0 !important;
+    }}
+    .stApp div[data-testid="stHorizontalBlock"] .stButton > button {{
+        width: 100% !important;
+        min-height: 2.05rem !important;
+        height: 2.05rem !important;
+        padding: 0.20rem 0.45rem !important;
+        font-size: 0.84rem !important;
+        line-height: 1.05 !important;
+        white-space: nowrap !important;
     }}
 
     /* Navigation / radio buttons */
@@ -16286,7 +16304,7 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render dashboard functions as a clean two-column menu."""
+    """Render all dashboard functions in a compact, balanced two-column grid."""
     if not options:
         return None
 
@@ -16296,20 +16314,17 @@ def dashboard_menu_2col(title, options, key):
         st.session_state[key] = current
 
     st.markdown(
-        f"<div style='font-weight:700;font-size:0.92rem;margin:0.25rem 0 0.45rem;'>"
-        f"{title}</div>",
+        f"<div class='dashboard-menu-title'>{title}</div>",
         unsafe_allow_html=True
     )
 
-    menu_cols = st.columns([1, 1], gap="small")
+    # Keep every function in exactly two equal-width columns.
+    # No extra wrapper rows are added, so the menu stays compact.
+    menu_cols = st.columns(2, gap="small")
 
     for index, option in enumerate(options):
         with menu_cols[index % 2]:
             is_selected = option == current
-            st.markdown(
-                "<div class='dashboard-menu-item'>",
-                unsafe_allow_html=True
-            )
             if st.button(
                 option,
                 key=f"{key}_button_{index}",
@@ -16318,7 +16333,6 @@ def dashboard_menu_2col(title, options, key):
             ):
                 st.session_state[key] = option
                 st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
 
     return st.session_state.get(key)
 
