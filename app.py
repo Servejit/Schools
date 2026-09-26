@@ -264,53 +264,44 @@ def apply_role_theme():
         gap: 0.05rem !important;
     }}
 
-    /* Navigation / radio buttons */
+    /* Professional horizontal dashboard navigation */
     div[role="radiogroup"] {{
-        gap: 0.20rem !important;
+        gap: 0.28rem !important;
     }}
     div[role="radiogroup"] label {{
-        border-radius: 9999px;
-        padding: 0 !important;
-        margin: 0.04rem 0 !important;
-        background: #FFFFFF;
-        border: 2px solid {theme["accent"]};
-        min-height: 1.75rem !important;
-        height: 1.75rem !important;
         width: 100% !important;
         max-width: 100% !important;
+        min-height: 2.35rem !important;
+        height: 2.35rem !important;
         box-sizing: border-box !important;
+        margin: 0.08rem 0 !important;
+        padding: 0.35rem 0.75rem !important;
+        border-radius: 8px !important;
+        background: #FFFFFF;
+        border: 1px solid {theme["soft"]};
+        color: {theme["accent2"]};
+        font-weight: 600 !important;
         display: flex !important;
         align-items: center !important;
         transition: all .15s ease;
     }}
-    div[role="radiogroup"] label p {{
-        margin: 0 !important;
-        line-height: 1 !important;
-        font-size: 0.78rem !important;
-    }}
     div[role="radiogroup"] label:hover {{
         background: {theme["soft"]};
-        border-color: {theme["accent2"]};
+        border-color: {theme["accent"]};
     }}
     div[role="radiogroup"] label:has(input:checked) {{
         background: {theme["accent"]} !important;
-        border-color: {theme["accent2"]} !important;
+        border-color: {theme["accent"]} !important;
         color: #FFFFFF !important;
+        box-shadow: 0 2px 5px rgba(0,0,0,.10);
     }}
     div[role="radiogroup"] label:has(input:checked) * {{
         color: #FFFFFF !important;
     }}
-    div[role="radiogroup"] label > div:first-child {{
-        width: 1.05rem !important;
-        height: 1.05rem !important;
-    }}
-    div[role="radiogroup"] label > div:first-child > div {{
-        border-color: {theme["accent"]} !important;
-        background: #FFFFFF !important;
-    }}
-    div[role="radiogroup"] label:has(input:checked) > div:first-child > div {{
-        border-color: #FFFFFF !important;
-        background: {theme["accent"]} !important;
+    div[role="radiogroup"] label p {{
+        margin: 0 !important;
+        line-height: 1.1 !important;
+        font-size: 0.84rem !important;
     }}
 
     /* Buttons */
@@ -16367,9 +16358,7 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render dashboard functions as two-column circular selectors.
-    Unselected selectors are white; the currently selected function is red.
-    """
+    """Render dashboard functions as professional horizontal bars."""
     if not options:
         return None
 
@@ -16383,20 +16372,13 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # Keep the original processing order, but display the functions in two
-    # balanced columns. Each column is a radio group; the shared session
-    # value keeps only one function active at a time.
+    # Keep the existing processing order while presenting the functions
+    # in two clean professional horizontal columns.
     left_options = options[::2]
     right_options = options[1::2]
 
-    left_index = (
-        left_options.index(current)
-        if current in left_options else None
-    )
-    right_index = (
-        right_options.index(current)
-        if current in right_options else None
-    )
+    left_index = left_options.index(current) if current in left_options else 0
+    right_index = right_options.index(current) if current in right_options else 0
 
     col1, col2 = st.columns(2, gap="small")
 
@@ -16407,7 +16389,7 @@ def dashboard_menu_2col(title, options, key):
             index=left_index,
             key=f"{key}_left",
             label_visibility="collapsed"
-        ) if left_options else None
+        )
 
     with col2:
         right_selected = st.radio(
@@ -16416,15 +16398,13 @@ def dashboard_menu_2col(title, options, key):
             index=right_index,
             key=f"{key}_right",
             label_visibility="collapsed"
-        ) if right_options else None
+        )
 
-    selected = (
-        left_selected
-        if left_selected != current and left_selected is not None
-        else right_selected
-        if right_selected != current and right_selected is not None
-        else current
-    )
+    selected = current
+    if left_selected != current:
+        selected = left_selected
+    elif right_selected != current:
+        selected = right_selected
 
     if selected != current:
         st.session_state[key] = selected
