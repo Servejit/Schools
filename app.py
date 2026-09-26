@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import time
 import requests
 import datetime
@@ -16396,10 +16397,88 @@ def _close_dashboard_function_window():
     st.session_state.pop("_dashboard_open_function", None)
 
 
+def _enable_dashboard_long_press():
+    """Attach a same-tab long-press handler to dashboard function buttons."""
+    components.html("""
+    <script>
+    (() => {
+      const root = window.parent.document;
+      const stateKey = "__school_dashboard_longpress_bound__";
+      if (window.parent[stateKey]) return;
+      window.parent[stateKey] = true;
+
+      let timer = null;
+      let longPressed = false;
+
+      const bind = () => {
+        root.querySelectorAll(
+          '[data-testid="stHorizontalBlock"] .stButton > button'
+        ).forEach((button) => {
+          if (button.dataset.longPressReady === "1") return;
+          button.dataset.longPressReady = "1";
+
+          const start = () => {
+            longPressed = false;
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+              longPressed = true;
+              const url = new URL(window.parent.location.href);
+              url.searchParams.set(
+                "longpress_function",
+                button.innerText.trim()
+              );
+              // Same tab/window: browser session and Streamlit session are retained.
+              window.parent.location.href = url.toString();
+            }, 650);
+          };
+
+          const cancel = () => {
+            if (timer) {
+              clearTimeout(timer);
+              timer = null;
+            }
+          };
+
+          button.addEventListener("pointerdown", start);
+          button.addEventListener("pointerup", cancel);
+          button.addEventListener("pointercancel", cancel);
+          button.addEventListener("pointerleave", cancel);
+
+          button.addEventListener("click", (event) => {
+            if (longPressed) {
+              event.preventDefault();
+              event.stopPropagation();
+              longPressed = false;
+            }
+          }, true);
+        });
+      };
+
+      bind();
+      new MutationObserver(bind).observe(root.body, {
+        childList: true,
+        subtree: true
+      });
+    })();
+    </script>
+    """, height=0)
+    
+
 def dashboard_menu_2col(title, options, key):
     """Simple, fast dashboard navigation."""
     if not options:
         return None
+
+    # A long press selects the function in the same browser tab.
+    try:
+        longpress = st.query_params.get("longpress_function")
+        if isinstance(longpress, list):
+            longpress = longpress[0] if longpress else None
+        if longpress in options:
+            st.session_state[key] = longpress
+            del st.query_params["longpress_function"]
+    except Exception:
+        pass
 
     current = st.session_state.get(key)
     if current not in options:
@@ -16441,6 +16520,8 @@ def dashboard_menu_2col(title, options, key):
                     if name != current:
                         st.session_state[key] = name
                         st.rerun()
+
+    _enable_dashboard_long_press()
 
     return st.session_state.get(key)
 
