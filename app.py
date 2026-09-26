@@ -174,7 +174,7 @@ def get_active_theme_role():
 
 
 
-# --- Fixed dashboard 2-column layout ---
+# --- Simple dashboard menu styling ---
 st.markdown("""
 <style>
 .dashboard-menu-title {
@@ -183,32 +183,7 @@ st.markdown("""
     margin: 0.25rem 0 0.45rem;
 }
 
-/* Every dashboard menu row is always two equal columns. */
-.dashboard-menu-row {
-    width: 100% !important;
-}
-
-.stApp div[data-testid="stHorizontalBlock"]:has(button) {
-    width: 100% !important;
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    gap: 0.45rem !important;
-}
-
-.stApp div[data-testid="stHorizontalBlock"]:has(button) > div[data-testid="column"] {
-    flex: 0 0 calc(50% - 0.225rem) !important;
-    width: calc(50% - 0.225rem) !important;
-    min-width: 0 !important;
-    max-width: calc(50% - 0.225rem) !important;
-}
-
-.stApp div[data-testid="stHorizontalBlock"]:has(button) .stButton,
-.stApp div[data-testid="stHorizontalBlock"]:has(button) .stButton > button {
-    width: 100% !important;
-}
-
-.stApp div[data-testid="stHorizontalBlock"]:has(button) .stButton > button {
+.stApp div[data-testid="stHorizontalBlock"] .stButton > button {
     min-height: 1.7rem !important;
     height: 1.7rem !important;
     padding: 0.05rem 0.35rem !important;
@@ -220,7 +195,7 @@ st.markdown("""
     text-overflow: ellipsis !important;
 }
 
-.stApp div[data-testid="stHorizontalBlock"]:has(button) .stButton > button p {
+.stApp div[data-testid="stHorizontalBlock"] .stButton > button p {
     font-size: 0.72rem !important;
     margin: 0 !important;
     line-height: 1 !important;
@@ -16381,7 +16356,7 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render dashboard functions as a true 2-column CSS grid."""
+    """Render dashboard functions in a simple 2-column layout."""
     if not options:
         return None
 
@@ -16395,36 +16370,32 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # Use Streamlit columns only as containers; CSS below forces exactly
-    # 50% / 50% side-by-side placement on desktop and mobile.
     for row_start in range(0, len(options), 2):
         left = options[row_start]
         right = options[row_start + 1] if row_start + 1 < len(options) else None
 
-        row = st.container()
-        with row:
-            col1, col2 = st.columns(2, gap="small")
+        col1, col2 = st.columns(2, gap="small")
 
-            with col1:
+        with col1:
+            if st.button(
+                f"🟠 {left}",
+                key=f"{key}_button_{row_start}",
+                use_container_width=True,
+                type="primary" if left == current else "secondary"
+            ):
+                st.session_state[key] = left
+                st.rerun()
+
+        with col2:
+            if right is not None:
                 if st.button(
-                    f"🟠 {left}",
-                    key=f"{key}_button_{row_start}",
+                    f"🟣 {right}",
+                    key=f"{key}_button_{row_start + 1}",
                     use_container_width=True,
-                    type="primary" if left == current else "secondary"
+                    type="primary" if right == current else "secondary"
                 ):
-                    st.session_state[key] = left
+                    st.session_state[key] = right
                     st.rerun()
-
-            with col2:
-                if right is not None:
-                    if st.button(
-                        f"🟣 {right}",
-                        key=f"{key}_button_{row_start + 1}",
-                        use_container_width=True,
-                        type="primary" if right == current else "secondary"
-                    ):
-                        st.session_state[key] = right
-                        st.rerun()
 
     return st.session_state.get(key)
 
