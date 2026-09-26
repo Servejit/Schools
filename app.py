@@ -273,17 +273,20 @@ def apply_role_theme():
         padding: 0.16rem 0.45rem !important;
         margin: 0.04rem 0 !important;
         background: #FFFFFF;
-        border: 1px solid #D9D9D9;
-        min-height: 1.75rem;
+        border: 2px solid {theme["accent"]};
+        min-height: 1.75rem !important;
+        height: 1.75rem !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
         transition: all .15s ease;
     }}
     div[role="radiogroup"] label:hover {{
-        background: #FFF5F5;
-        border-color: #FF6B6B;
+        background: {theme["soft"]};
+        border-color: {theme["accent2"]};
     }}
     div[role="radiogroup"] label:has(input:checked) {{
-        background: #FF0000 !important;
-        border-color: #CC0000 !important;
+        background: {theme["accent"]} !important;
+        border-color: {theme["accent2"]} !important;
         color: #FFFFFF !important;
     }}
     div[role="radiogroup"] label:has(input:checked) * {{
@@ -294,12 +297,12 @@ def apply_role_theme():
         height: 1.05rem !important;
     }}
     div[role="radiogroup"] label > div:first-child > div {{
-        border-color: #B8B8B8 !important;
+        border-color: {theme["accent"]} !important;
         background: #FFFFFF !important;
     }}
     div[role="radiogroup"] label:has(input:checked) > div:first-child > div {{
         border-color: #FFFFFF !important;
-        background: #FF0000 !important;
+        background: {theme["accent"]} !important;
     }}
 
     /* Buttons */
