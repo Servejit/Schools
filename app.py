@@ -245,7 +245,7 @@ def apply_role_theme():
         min-height: 1.55rem !important;
         height: 1.55rem !important;
         padding: 0.04rem 0.20rem !important;
-        font-size: 0.88rem !important;
+        font-size: 1.02rem !important;
         line-height: 1 !important;
         white-space: nowrap !important;
         overflow: hidden !important;
@@ -256,7 +256,7 @@ def apply_role_theme():
         box-sizing: border-box !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton > button p {{
-        font-size: 0.88rem !important;
+        font-size: 1.02rem !important;
         margin: 0 !important;
         line-height: 1 !important;
     }}
