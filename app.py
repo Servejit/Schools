@@ -1105,8 +1105,11 @@ def users():
                     link_students = []
 
                 # Teachers can only manage students from their assigned
-                # Class Teacher classes, and only Parent accounts already linked
-                # to at least one of those students.
+                # Class Teacher classes. They may select ANY Parent account in
+                # their own school and link it to students in those classes.
+                # This is important when the same parent has children in
+                # different classes: one Parent login/email is shared by all
+                # linked children instead of creating duplicate Parent users.
                 if management_role == "Teacher":
                     try:
                         teacher_classes = (
@@ -1143,28 +1146,12 @@ def users():
                         if s.get("id")
                     }
 
-                    allowed_parent_ids = set()
-                    if allowed_student_ids:
-                        try:
-                            teacher_parent_links = (
-                                sb.table("parent_student_links")
-                                .select("parent_id,student_id")
-                                .in_("student_id", list(allowed_student_ids))
-                                .execute()
-                                .data or []
-                            )
-                            allowed_parent_ids = {
-                                str(x.get("parent_id"))
-                                for x in teacher_parent_links
-                                if x.get("parent_id")
-                            }
-                        except Exception:
-                            allowed_parent_ids = set()
-
-                    link_parents = [
-                        p for p in link_parents
-                        if str(p.get("id") or "") in allowed_parent_ids
-                    ]
+                    # IMPORTANT: Do NOT restrict the Parent dropdown to
+                    # parents already linked to this teacher's students. A parent
+                    # may already have a child in another class and must still be
+                    # selectable so this Class Teacher can link the same Parent
+                    # account/email to the child in this teacher's class.
+                    # Student visibility remains strictly limited by allowed_classes.
                 if not link_parents:
                     st.info("No active Parent accounts found in this school.")
                 elif not link_students:
@@ -1230,21 +1217,80 @@ def users():
                             if x in student_options
                         ]
                         try:
-                            (
-                                sb.table("parent_student_links")
-                                .delete()
-                                .eq("parent_id", selected_parent_id)
-                                .execute()
-                            )
-
-                            if selected_student_ids:
-                                sb.table("parent_student_links").insert([
-                                    {
-                                        "parent_id": selected_parent_id,
-                                        "student_id": student_id
+                            if management_role == "Teacher":
+                                # A Class Teacher may only change links for students
+                                # in their own assigned class(es). NEVER delete all
+                                # links for the Parent, because the same Parent may
+                                # already be linked to children managed by other
+                                # Class Teachers.
+                                existing_teacher_scope_ids = set()
+                                if allowed_student_ids:
+                                    existing_teacher_scope_ids = {
+                                        str(x)
+                                        for x in allowed_student_ids
+                                        if x
                                     }
-                                    for student_id in selected_student_ids
-                                ]).execute()
+
+                                # Remove only this teacher's currently permitted
+                                # student links that were unchecked.
+                                current_scope_links = (
+                                    sb.table("parent_student_links")
+                                    .select("student_id")
+                                    .eq("parent_id", selected_parent_id)
+                                    .in_(
+                                        "student_id",
+                                        list(existing_teacher_scope_ids)
+                                    )
+                                    .execute()
+                                    .data or []
+                                )
+                                current_scope_ids = {
+                                    str(x.get("student_id"))
+                                    for x in current_scope_links
+                                    if x.get("student_id")
+                                }
+                                ids_to_remove = current_scope_ids - {
+                                    str(x) for x in selected_student_ids
+                                }
+                                for student_id in ids_to_remove:
+                                    sb.table("parent_student_links").delete().eq(
+                                        "parent_id", selected_parent_id
+                                    ).eq(
+                                        "student_id", student_id
+                                    ).execute()
+
+                                # Add only missing links. Existing links in other
+                                # classes are preserved.
+                                ids_to_add = {
+                                    str(x) for x in selected_student_ids
+                                } - current_scope_ids
+                                if ids_to_add:
+                                    sb.table("parent_student_links").insert([
+                                        {
+                                            "parent_id": selected_parent_id,
+                                            "student_id": student_id
+                                        }
+                                        for student_id in ids_to_add
+                                    ]).execute()
+                            else:
+                                # Admin/Admin+Teacher/SuperAdmin can replace the
+                                # complete Parent → Student linkage for the
+                                # selected school.
+                                (
+                                    sb.table("parent_student_links")
+                                    .delete()
+                                    .eq("parent_id", selected_parent_id)
+                                    .execute()
+                                )
+
+                                if selected_student_ids:
+                                    sb.table("parent_student_links").insert([
+                                        {
+                                            "parent_id": selected_parent_id,
+                                            "student_id": student_id
+                                        }
+                                        for student_id in selected_student_ids
+                                    ]).execute()
 
                             # Persist the confirmation across the rerun so the
                             # saved linkage is visibly confirmed after the database
@@ -1442,6 +1488,71 @@ def users():
                     st.error("Could not verify the Admin + Teacher limit.")
                     st.code(str(e))
                     return
+
+            # If a Class Teacher enters an email that already
+            # belongs to a Parent in this school, reuse that existing Parent
+            # account instead of creating a duplicate Auth user. Then link only
+            # the selected students from the teacher's assigned class.
+            if (
+                creator_role == "Teacher"
+                and role == "Parent"
+                and selected_parent_student_ids
+            ):
+                try:
+                    existing_parent_rows = (
+                        sb.table("profiles")
+                        .select("id,email,role,school_id,active")
+                        .eq("school_id", school_map[selected_school])
+                        .eq("role", "Parent")
+                        .ilike("email", email.strip())
+                        .limit(1)
+                        .execute()
+                        .data or []
+                    )
+                except Exception:
+                    existing_parent_rows = []
+
+                if existing_parent_rows:
+                    existing_parent = existing_parent_rows[0]
+                    existing_parent_id = str(existing_parent.get("id"))
+
+                    try:
+                        existing_parent_links = (
+                            sb.table("parent_student_links")
+                            .select("student_id")
+                            .eq("parent_id", existing_parent_id)
+                            .execute()
+                            .data or []
+                        )
+                        existing_parent_link_ids = {
+                            str(x.get("student_id"))
+                            for x in existing_parent_links
+                            if x.get("student_id")
+                        }
+
+                        new_parent_links = [
+                            {
+                                "parent_id": existing_parent_id,
+                                "student_id": student_id
+                            }
+                            for student_id in selected_parent_student_ids
+                            if str(student_id) not in existing_parent_link_ids
+                        ]
+
+                        if new_parent_links:
+                            sb.table("parent_student_links").insert(
+                                new_parent_links
+                            ).execute()
+
+                        st.success(
+                            "✅ Existing Parent account found. "
+                            "The selected student(s) were linked to the same Parent email."
+                        )
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Could not link the existing Parent account.")
+                        st.code(str(e))
+                        return
 
             try:
                 response = requests.post(
