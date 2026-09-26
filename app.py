@@ -17588,33 +17588,73 @@ def render_teacher_dashboard_user_search(profile, widget_prefix):
             )
             quick_user_map[label] = u
 
-        # Filter the dropdown from the text typed above.
+        # Live-filter suggestions as the user types. Search all fields
+        # promised by the search box, not just profile name/email/role.
+        student_by_user_id = {
+            str(s.get("user_id")): s
+            for s in quick_students
+            if s.get("user_id")
+        }
+        student_by_name = {
+            str(s.get("name") or "").strip().lower(): s
+            for s in quick_students
+            if str(s.get("name") or "").strip()
+        }
+
         dashboard_search_users = quick_users
         if dashboard_user_search:
-            dashboard_search_users = [
-                u for u in quick_users
-                if dashboard_user_search in " ".join([
+            dashboard_search_users = []
+            for u in quick_users:
+                s = student_by_user_id.get(str(u.get("id") or ""))
+                if not s:
+                    s = student_by_name.get(
+                        str(u.get("full_name") or "").strip().lower()
+                    )
+
+                searchable = " ".join([
                     str(u.get("full_name") or ""),
                     str(u.get("email") or ""),
-                    str(u.get("role") or "")
+                    str(u.get("role") or ""),
+                    str((s or {}).get("class_name") or ""),
+                    str((s or {}).get("section") or ""),
+                    str((s or {}).get("admission_no") or ""),
+                    str((s or {}).get("roll_no") or "")
                 ]).lower()
-            ]
+
+                if dashboard_user_search in searchable:
+                    dashboard_search_users.append(u)
 
         dashboard_user_map = {}
         for u in dashboard_search_users:
-            label = (
-                f"{u.get('full_name') or 'User'}"
-                f" — {u.get('email') or '-'}"
-                f" — {u.get('role') or '-'}"
-            )
-            dashboard_user_map[label] = u
+            s = student_by_user_id.get(str(u.get("id") or ""))
+            if not s:
+                s = student_by_name.get(
+                    str(u.get("full_name") or "").strip().lower()
+                )
+            label_parts = [
+                str(u.get("full_name") or "User"),
+                str(u.get("email") or "-"),
+                str(u.get("role") or "-")
+            ]
+            if s:
+                label_parts.append(
+                    f"{s.get('class_name') or '-'}-{s.get('section') or '-'}"
+                )
+                if s.get("admission_no"):
+                    label_parts.append(f"Adm {s.get('admission_no')}")
+                if s.get("roll_no"):
+                    label_parts.append(f"Roll {s.get('roll_no')}")
+            dashboard_user_map[" — ".join(label_parts)] = u
 
+        # The selectbox is the live auto-suggestion list. Streamlit reruns
+        # on each text change, so suggestions refresh immediately.
         if dashboard_user_map:
+            suggestion_options = list(dashboard_user_map.keys())
             quick_selected = st.selectbox(
-                "👥 Select matching user",
-                list(dashboard_user_map.keys()),
+                "👥 Suggestions",
+                suggestion_options,
                 index=None,
-                placeholder="Matching users will appear here",
+                placeholder="Select a matching Student / Parent",
                 key=f"{widget_prefix}_user_dropdown"
             )
 
