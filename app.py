@@ -13632,6 +13632,12 @@ def premium_feature_management():
 
         # Parent/Student Report Card permission is a separate Admin-controlled
         # school feature. Parents see linked children; Students see only their own record.
+        st.markdown("""
+        <style>
+        div.stButton:has(button[aria-label*="🔵"]) button { background-color:#2563eb !important; border-color:#2563eb !important; color:white !important; }
+        </style>
+        """, unsafe_allow_html=True)
+
         st.subheader("📄 Parent / Student Report Card Access")
         report_card_feature_key = "parent_report_card"
         try:
@@ -13658,7 +13664,7 @@ def premium_feature_management():
         )
 
         if st.button(
-            ("🟢 " if new_report_card_active else "🔴 ") + "💾 Save Parent / Student Report Card Permission",
+            "🔵 💾 Save Parent / Student Report Card Permission",
             use_container_width=True,
             key=f"save_parent_report_card_{school_id}"
         ):
