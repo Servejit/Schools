@@ -16125,28 +16125,14 @@ def dashboard():
                 "No class has been assigned to you as Class Teacher yet."
             )
 
-        # Only Class Teachers receive User Management.
-        teacher_is_class_teacher = False
-        try:
-            teacher_is_class_teacher = bool(
-                sb.table("classes")
-                .select("id")
-                .eq("school_id", profile.get("school_id"))
-                .eq("class_teacher_id", st.session_state.user.id)
-                .eq("active", True)
-                .limit(1)
-                .execute()
-                .data
-            )
-        except Exception:
-            teacher_is_class_teacher = False
-
+        # User Management is visible in the Teacher dashboard.
+        # Actual user-management permissions remain restricted inside users():
+        # only an active Class Teacher can manage Student/Parent users for
+        # their own assigned class(es). A normal subject-only Teacher cannot
+        # create, modify, activate, deactivate or delete users.
         teacher_menu_options = [
             "🎓 Students",
-        ]
-        if teacher_is_class_teacher:
-            teacher_menu_options.append("👥 Users")
-        teacher_menu_options.extend([
+            "👥 Users",
             "📝 Marks",
             "📅 Attendance",
             "📢 Notices",
