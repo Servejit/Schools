@@ -13656,6 +13656,17 @@ def premium_feature_management():
         # -------------------------------------------------
         # SCHOOL ACADEMIC STATUS — ALL TEACHERS
         # -------------------------------------------------
+        st.markdown("""
+        <style>
+        /* Premium dashboard: one professional visual language for every permission */
+        .premium-dashboard-heading {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin: 0.15rem 0 0.55rem 0;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
         st.divider()
         st.subheader("👨‍🏫 School Academic Status — Teacher Access")
         try:
@@ -13792,9 +13803,8 @@ def premium_feature_management():
                 st.code(str(e))
 
         # -------------------------------------------------
-        # SUBJECT-WISE PREMIUM — SEPARATE ACCESS BY AUDIENCE
+        # SUBJECT-WISE PREMIUM — SHARED PERMISSION BUTTON STYLE
         # -------------------------------------------------
-        st.divider()
         st.markdown("""
         <style>
         div.stButton:has(button[aria-label*="🟢"]) button { background-color:#16a34a !important; border-color:#16a34a !important; color:white !important; }
@@ -13802,10 +13812,10 @@ def premium_feature_management():
         </style>
         """, unsafe_allow_html=True)
 
-        st.subheader("📚 Subject-wise Premium Access")
         # -------------------------------------------------
-        # TEACHER ACCESS — ONE SETTING FOR ALL TEACHERS
+        # SUBJECT-WISE PREMIUM — TEACHER ACCESS
         # -------------------------------------------------
+        st.divider()
         st.subheader("👨‍🏫 Subject-wise Premium — Teacher Access")
         try:
             teacher_rows = (
@@ -14031,7 +14041,7 @@ def premium_feature_management():
         )
 
         if st.button(
-            "🔵 💾 Save Parent / Student Report Card Permission",
+            ("🟢 " if new_report_card_active else "🔴 ") + "💾 Save Parent / Student Report Card Permission",
             use_container_width=True,
             key=f"save_parent_report_card_{school_id}"
         ):
