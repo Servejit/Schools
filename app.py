@@ -13867,7 +13867,6 @@ def premium_feature_management():
 
         if new_all_teacher_academic != teacher_master_current:
             try:
-            try:
                 # Keep one Admin/master setting and synchronize the same
                 # permission to every active Teacher/Admin+Teacher account.
                 if teacher_master_existing:
