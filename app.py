@@ -16275,6 +16275,39 @@ def class_teacher_notices(profile):
                         except Exception as e:
                             st.error("Could not delete the notice.")
                             st.code(str(e))
+
+def dashboard_menu_2col(title, options, key):
+    """Render dashboard functions as a clean two-column menu."""
+    if not options:
+        return None
+
+    current = st.session_state.get(key)
+    if current not in options:
+        current = options[0]
+        st.session_state[key] = current
+
+    st.markdown(
+        f"<div style='font-weight:700;font-size:0.92rem;margin:0.25rem 0 0.45rem;'>"
+        f"{title}</div>",
+        unsafe_allow_html=True
+    )
+
+    menu_cols = st.columns(2, gap="small")
+
+    for index, option in enumerate(options):
+        with menu_cols[index % 2]:
+            is_selected = option == current
+            if st.button(
+                option,
+                key=f"{key}_button_{index}",
+                use_container_width=True,
+                type="primary" if is_selected else "secondary"
+            ):
+                st.session_state[key] = option
+                st.rerun()
+
+    return st.session_state.get(key)
+
 def dashboard():
 
     # Reset dashboard-specific selections whenever the user changes dashboard.
@@ -16430,7 +16463,7 @@ def dashboard():
         b.metric("👥 Users", user_count)
         c.metric("🎓 Students", student_count)
 
-        menu = st.radio(
+        menu = dashboard_menu_2col(
             "Management",
             [
                 "🏫 Schools",
@@ -16440,14 +16473,14 @@ def dashboard():
                 "📝 Exam / Assessment",
                 "📝 Marks",
                 "📅 Attendance",
-                "📢 Notices",
-                "🖨️ Print Templates",
                 "📄 Report Cards",
                 "📊 Reports",
+                "📢 Notices",
+                "🖨️ Print Templates",
                 "💎 Premium Features",
                 "💎 School Academic Status"
             ],
-            horizontal=True
+            "_superadmin_menu"
         )
         reset_dashboard_working_state("_superadmin_menu", menu)
 
@@ -16575,11 +16608,10 @@ def dashboard():
             ):
                 teacher_menu_items.append("💎 School Academic Status")
 
-            menu = st.radio(
+            menu = dashboard_menu_2col(
                 "Teacher Menu",
                 teacher_menu_items,
-                horizontal=True,
-                key="admin_teacher_teacher_menu"
+                "admin_teacher_teacher_menu"
             )
             reset_dashboard_working_state("admin_teacher_teacher_menu", menu)
 
@@ -16641,11 +16673,10 @@ def dashboard():
                 admin_menu_items.append("💎 Premium Features")
                 admin_menu_items.append("💎 School Academic Status")
 
-            menu = st.radio(
+            menu = dashboard_menu_2col(
                 "Admin Menu",
                 admin_menu_items,
-                horizontal=True,
-                key="admin_teacher_admin_menu"
+                "admin_teacher_admin_menu"
             )
             reset_dashboard_working_state("admin_teacher_admin_menu", menu)
 
@@ -16768,11 +16799,10 @@ def dashboard():
         ):
             teacher_menu_options.append("💎 School Academic Status")
 
-        menu = st.radio(
+        menu = dashboard_menu_2col(
             "Teacher Menu",
             teacher_menu_options,
-            horizontal=True,
-            key="teacher_dashboard_menu"
+            "teacher_dashboard_menu"
         )
 
         if menu == "🎓 Students":
