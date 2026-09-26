@@ -226,19 +226,24 @@ def apply_role_theme():
         min-width: 0 !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] {{
-        gap: 0.55rem !important;
+        gap: 0.30rem !important;
+        margin-bottom: 0 !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton {{
-        margin: 0 0 0.28rem 0 !important;
+        margin: 0 0 0.08rem 0 !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton > button {{
         width: 100% !important;
-        min-height: 2.05rem !important;
-        height: 2.05rem !important;
-        padding: 0.20rem 0.45rem !important;
-        font-size: 0.84rem !important;
-        line-height: 1.05 !important;
+        min-height: 1.72rem !important;
+        height: 1.72rem !important;
+        padding: 0.08rem 0.30rem !important;
+        font-size: 0.78rem !important;
+        line-height: 1 !important;
         white-space: nowrap !important;
+        border-radius: 5px !important;
+    }}
+    .stApp div[data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"] {{
+        gap: 0.05rem !important;
     }}
 
     /* Navigation / radio buttons */
