@@ -16407,8 +16407,9 @@ def dashboard_menu_2col(title, options, key):
         selected = right_selected
 
     if selected != current:
+        # st.radio already reruns the script when its value changes.
+        # Avoid a second rerun so dashboard navigation responds faster.
         st.session_state[key] = selected
-        st.rerun()
 
     return selected
 
