@@ -16138,7 +16138,7 @@ def dashboard():
             "📢 Notices",
             "📄 Report Cards",
             "📊 Reports"
-        ])
+        ]
 
         menu = st.radio(
             "Teacher Menu",
