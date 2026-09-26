@@ -13555,7 +13555,7 @@ def premium_feature_enabled(school_id, admin_id, feature_key):
     cache = st.session_state.setdefault("_premium_permission_cache", {})
     cache_key = (str(school_id), str(admin_id), str(feature_key))
     cached = cache.get(cache_key)
-    if cached and (time.time() - cached[0]) < 10:
+    if cached and (time.time() - cached[0]) < 60:
         return cached[1]
 
     try:
@@ -16551,17 +16551,27 @@ def dashboard():
     # are rendered from this dashboard.
     if role == "Teacher":
         try:
-            teacher_working_classes = (
-                sb.table("classes")
-                .select("class_name,section,academic_year")
-                .eq("school_id", profile.get("school_id"))
-                .eq("class_teacher_id", st.session_state.user.id)
-                .eq("active", True)
-                .order("class_name")
-                .order("section")
-                .execute()
-                .data or []
+            class_cache = st.session_state.setdefault("_teacher_class_context_cache", {})
+            class_cache_key = (
+                str(profile.get("school_id") or ""),
+                str(st.session_state.user.id or "")
             )
+            class_cached = class_cache.get(class_cache_key)
+            if class_cached and (time.time() - class_cached[0]) < 30:
+                teacher_working_classes = class_cached[1]
+            else:
+                teacher_working_classes = (
+                    sb.table("classes")
+                    .select("class_name,section,academic_year")
+                    .eq("school_id", profile.get("school_id"))
+                    .eq("class_teacher_id", st.session_state.user.id)
+                    .eq("active", True)
+                    .order("class_name")
+                    .order("section")
+                    .execute()
+                    .data or []
+                )
+                class_cache[class_cache_key] = (time.time(), teacher_working_classes)
         except Exception:
             teacher_working_classes = []
 
@@ -16609,58 +16619,59 @@ def dashboard():
         st.title("👑 SuperAdmin Dashboard")
 
         try:
+            metrics_cache = st.session_state.get("_superadmin_dashboard_metrics")
+            if metrics_cache and (time.time() - metrics_cache[0]) < 30:
+                school_count, user_count, student_count = metrics_cache[1]
+            else:
+                school_count = (
+                    sb.table("schools")
+                    .select("id", count="exact")
+                    .execute()
+                    .count
+                    or 0
+                )
 
-            school_count = (
-                sb.table("schools")
-                .select("id", count="exact")
-                .execute()
-                .count
-                or 0
-            )
+                active_school_rows = (
+                    sb.table("schools")
+                    .select("id")
+                    .execute()
+                    .data or []
+                )
+                active_school_ids = [
+                    str(x.get("id"))
+                    for x in active_school_rows
+                    if x.get("id")
+                ]
 
-            # Count only real school users. SuperAdmin is a system-level
-            # account and must not be included in the school-user dashboard count.
-            active_school_rows = (
-                sb.table("schools")
-                .select("id")
-                .execute()
-                .data or []
-            )
-            active_school_ids = [
-                str(x.get("id"))
-                for x in active_school_rows
-                if x.get("id")
-            ]
+                profile_rows = (
+                    sb.table("profiles")
+                    .select("id,role,school_id")
+                    .neq("role", "SuperAdmin")
+                    .execute()
+                    .data or []
+                )
 
-            # Count users only when their school currently exists.
-            # Fetch the profile rows and filter in Python so the dashboard
-            # can never show orphaned users from a deleted school.
-            profile_rows = (
-                sb.table("profiles")
-                .select("id,role,school_id")
-                .neq("role", "SuperAdmin")
-                .execute()
-                .data or []
-            )
+                active_school_id_set = set(active_school_ids)
+                user_count = sum(
+                    1
+                    for row in profile_rows
+                    if str(row.get("school_id") or "") in active_school_id_set
+                )
 
-            active_school_id_set = set(active_school_ids)
+                student_count = (
+                    sb.table("students")
+                    .select("id", count="exact")
+                    .execute()
+                    .count
+                    or 0
+                )
 
-            user_count = sum(
-                1
-                for row in profile_rows
-                if str(row.get("school_id") or "") in active_school_id_set
-            )
-
-            student_count = (
-                sb.table("students")
-                .select("id", count="exact")
-                .execute()
-                .count
-                or 0
-            )
+                st.session_state["_superadmin_dashboard_metrics"] = (
+                    time.time(),
+                    (school_count, user_count, student_count)
+                )
 
         except Exception:
-
             school_count = 0
             user_count = 0
             student_count = 0
