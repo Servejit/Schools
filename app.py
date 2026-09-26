@@ -16490,17 +16490,33 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    left_options = options[::2]
-    right_options = options[1::2]
-    col1, col2 = st.columns(2, gap="small")
+    # Keep the menu sequence visually left-to-right, row-by-row.
+    # If there is an odd number of functions, keep the final two functions
+    # together so related Premium functions remain next to each other.
+    pair_start = len(options) - 2 if len(options) >= 2 and len(options) % 2 == 1 else len(options)
 
-    for i in range(max(len(left_options), len(right_options))):
-        if i < len(left_options):
-            with col1:
-                name = left_options[i]
+    row_options = options[:pair_start]
+    for row_index in range(0, len(row_options), 2):
+        col1, col2 = st.columns(2, gap="small")
+
+        with col1:
+            name = row_options[row_index]
+            if st.button(
+                name,
+                key=f"{key}_function_{row_index}",
+                type="primary" if name == current else "secondary",
+                use_container_width=True
+            ):
+                if name != current:
+                    st.session_state[key] = name
+                    st.rerun()
+
+        if row_index + 1 < len(row_options):
+            with col2:
+                name = row_options[row_index + 1]
                 if st.button(
                     name,
-                    key=f"{key}_function_L{i}",
+                    key=f"{key}_function_{row_index + 1}",
                     type="primary" if name == current else "secondary",
                     use_container_width=True
                 ):
@@ -16508,12 +16524,15 @@ def dashboard_menu_2col(title, options, key):
                         st.session_state[key] = name
                         st.rerun()
 
-        if i < len(right_options):
-            with col2:
-                name = right_options[i]
+    # Final pair stays together on the same row.
+    if pair_start < len(options):
+        col1, col2 = st.columns(2, gap="small")
+        for col, index in ((col1, pair_start), (col2, pair_start + 1)):
+            with col:
+                name = options[index]
                 if st.button(
                     name,
-                    key=f"{key}_function_R{i}",
+                    key=f"{key}_function_{index}",
                     type="primary" if name == current else "secondary",
                     use_container_width=True
                 ):
