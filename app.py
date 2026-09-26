@@ -1939,7 +1939,12 @@ def users():
 
                     st.info(
                         f"🏫 School: **{current_school_label}** "
-                        "(Admin can manage users only in this school.)"
+                        + (
+                            "(Class Teacher can manage only Student/Parent users "
+                            "from the assigned class.)"
+                            if role == "Teacher"
+                            else "(Admin can manage users only in this school.)"
+                        )
                     )
                     edit_school_label = current_school_label
                 else:
