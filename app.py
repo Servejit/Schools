@@ -14003,27 +14003,6 @@ def premium_feature_management():
                 )
                 st.code(str(e))
 
-        # -------------------------------------------------
-        feature_key = "subject_wise_premium_parent_student"
-        try:
-            existing = (
-                sb.table("premium_feature_access")
-                .select("id,active")
-                .eq("school_id", school_id)
-                .eq("admin_id", st.session_state.user.id)
-                .eq("feature_key", feature_key)
-                .maybe_single()
-                .execute()
-                .data
-            )
-        except Exception:
-            existing = None
-
-        current_active = bool(existing and existing.get("active") is True)
-
-        return
-
-
         st.subheader("📄 Parent / Student Report Card Access")
         report_card_feature_key = "parent_report_card"
         try:
