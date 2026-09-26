@@ -16783,18 +16783,6 @@ def dashboard():
         )
 
 
-# =========================================================
-# START
-# =========================================================
-
-if st.session_state.logged_in:
-
-    # Admin+Teacher theme follows the explicitly selected working mode.
-    apply_role_theme()
-    dashboard()
-else:
-    login(
-
 def render_teacher_dashboard_user_search(profile, widget_prefix):
     # -------------------------------------------------
     # QUICK USER SEARCH ON TEACHER DASHBOARD
@@ -16813,12 +16801,21 @@ def render_teacher_dashboard_user_search(profile, widget_prefix):
     # and permissions are separate: only users from the Class Teacher's
     # assigned class(es) are added to its options.
     try:
+        quick_teacher_classes = (
+            sb.table("classes")
+            .select("id,class_name,section,class_teacher_id,school_id,active")
+            .eq("school_id", profile.get("school_id"))
+            .eq("class_teacher_id", profile.get("id"))
+            .eq("active", True)
+            .execute()
+            .data or []
+        )
         quick_allowed_classes = {
             (
                 str(x.get("class_name") or "").strip().lower(),
                 str(x.get("section") or "").strip().lower()
             )
-            for x in teacher_class_rows
+            for x in quick_teacher_classes
         }
 
         quick_students = (
@@ -16870,7 +16867,6 @@ def render_teacher_dashboard_user_search(profile, widget_prefix):
             sb.table("profiles")
             .select("id,full_name,email,role,school_id,active")
             .eq("school_id", profile.get("school_id"))
-            .eq("active", True)
             .in_(
                 "role",
                 ["Student", "Parent"]
@@ -16964,3 +16960,17 @@ def render_teacher_dashboard_user_search(profile, widget_prefix):
 
 
 )
+
+
+# =========================================================
+# START
+# =========================================================
+
+if st.session_state.logged_in:
+
+    # Admin+Teacher theme follows the explicitly selected working mode.
+    apply_role_theme()
+    dashboard()
+else:
+    login()
+
