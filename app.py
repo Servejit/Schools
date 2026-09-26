@@ -16506,6 +16506,8 @@ def dashboard_menu_2col(title, options, key):
 
     # Full-width horizontal bars for every dashboard function.
     for index, name in enumerate(options):
+        if not name or not str(name).strip():
+            continue
         if st.button(
             name,
             key=f"{key}_function_{index}",
