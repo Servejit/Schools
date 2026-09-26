@@ -13943,6 +13943,39 @@ def premium_feature_management():
                 st.code(str(e))
 
         # -------------------------------------------------
+        # PREMIUM PERMISSION STATUS STYLE
+        # -------------------------------------------------
+        st.markdown("""
+        <style>
+        .premium-permission-status {
+            width: 100%;
+            min-height: 1.95rem;
+            height: 1.95rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            border-radius: 9999px;
+            border: 1px solid;
+            font-size: 1.04rem;
+            line-height: 1;
+            font-weight: 700;
+            margin: 0.15rem 0 0.45rem 0;
+        }
+        .premium-permission-status.on {
+            background-color: #16a34a;
+            border-color: #16a34a;
+            color: white;
+        }
+        .premium-permission-status.off {
+            background-color: #dc2626;
+            border-color: #dc2626;
+            color: white;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        # -------------------------------------------------
         # SUBJECT-WISE PREMIUM — SHARED PERMISSION BUTTON STYLE
         # -------------------------------------------------
         st.markdown("""
@@ -14002,12 +14035,17 @@ def premium_feature_management():
             key=f"allow_all_teachers_subjectwise_{school_id}"
         )
 
-        if st.button(
-            ("🟢 " if subject_teacher_new else "🔴 ") + "💾 Save Subject-wise Premium — Teacher",
-            type="primary",
-            use_container_width=True,
-            key=f"save_all_teachers_subjectwise_{school_id}"
-        ):
+        # Auto-save immediately when the toggle changes. The status indicator
+        # always uses the same green/red state as the permission itself.
+        st.markdown(
+            f"<div class='premium-permission-status "
+            f"{'on' if subject_teacher_new else 'off'}'>"
+            f"{'🟢 ON — Saved' if subject_teacher_new else '🔴 OFF — Saved'}"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+        if subject_teacher_new != subject_teacher_current:
             try:
                 # Store one Admin/master permission and synchronize it to
                 # each active Teacher/Admin+Teacher account. The UI remains
@@ -14120,12 +14158,15 @@ def premium_feature_management():
             key=f"allow_parent_student_subjectwise_{school_id}"
         )
 
-        if st.button(
-            ("🟢 " if new_active else "🔴 ") + "💾 Save Subject-wise Premium — Parent & Student",
-            type="primary",
-            use_container_width=True,
-            key=f"save_parent_student_premium_{school_id}"
-        ):
+        st.markdown(
+            f"<div class='premium-permission-status "
+            f"{'on' if new_active else 'off'}'>"
+            f"{'🟢 ON — Saved' if new_active else '🔴 OFF — Saved'}"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+        if new_active != current_active:
             try:
                 if existing:
                     (
@@ -14188,12 +14229,15 @@ def premium_feature_management():
             key=f"allow_parent_report_cards_{school_id}"
         )
 
-        if st.button(
-            ("🟢 " if new_report_card_active else "🔴 ") + "💾 Save Parent / Student Report Card Permission",
-            type="primary",
-            use_container_width=True,
-            key=f"save_parent_report_card_{school_id}"
-        ):
+        st.markdown(
+            f"<div class='premium-permission-status "
+            f"{'on' if new_report_card_active else 'off'}'>"
+            f"{'🟢 ON — Saved' if new_report_card_active else '🔴 OFF — Saved'}"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+        if new_report_card_active != report_card_active:
             try:
                 if report_existing:
                     (
