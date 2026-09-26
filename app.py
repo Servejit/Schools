@@ -16465,7 +16465,7 @@ def _enable_dashboard_long_press():
     
 
 def dashboard_menu_2col(title, options, key):
-    """Simple, fast dashboard navigation."""
+    """Fast three-column dashboard navigation with stable function ordering."""
     if not options:
         return None
 
@@ -16490,44 +16490,14 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # Keep the menu sequence visually left-to-right, row-by-row.
-    # If there is an odd number of functions, keep the final two functions
-    # together so related Premium functions remain next to each other.
-    pair_start = len(options) - 2 if len(options) >= 2 and len(options) % 2 == 1 else len(options)
-
-    row_options = options[:pair_start]
-    for row_index in range(0, len(row_options), 2):
-        col1, col2 = st.columns(2, gap="small")
-
-        with col1:
-            name = row_options[row_index]
-            if st.button(
-                name,
-                key=f"{key}_function_{row_index}",
-                type="primary" if name == current else "secondary",
-                use_container_width=True
-            ):
-                if name != current:
-                    st.session_state[key] = name
-                    st.rerun()
-
-        if row_index + 1 < len(row_options):
-            with col2:
-                name = row_options[row_index + 1]
-                if st.button(
-                    name,
-                    key=f"{key}_function_{row_index + 1}",
-                    type="primary" if name == current else "secondary",
-                    use_container_width=True
-                ):
-                    if name != current:
-                        st.session_state[key] = name
-                        st.rerun()
-
-    # Final pair stays together on the same row.
-    if pair_start < len(options):
-        col1, col2 = st.columns(2, gap="small")
-        for col, index in ((col1, pair_start), (col2, pair_start + 1)):
+    # Three equal columns. Functions are placed left-to-right, row-by-row,
+    # so related functions remain adjacent in the displayed sequence.
+    for row_start in range(0, len(options), 3):
+        cols = st.columns(3, gap="small")
+        for offset, col in enumerate(cols):
+            index = row_start + offset
+            if index >= len(options):
+                break
             with col:
                 name = options[index]
                 if st.button(
