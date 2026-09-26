@@ -243,6 +243,13 @@ def apply_role_theme():
     .stApp div[data-testid="stHorizontalBlock"] .stButton {{
         margin: 0 0 0.03rem 0 !important;
     }}
+    .dashboard-functions-box {{
+        border: 1px solid {theme["accent"]} !important;
+        border-radius: 12px !important;
+        padding: 0.35rem !important;
+        margin: 0 0 0.45rem 0 !important;
+        background: #FFFFFF !important;
+    }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton > button {{
         width: 100% !important;
         min-height: 1.95rem !important;
@@ -16490,6 +16497,13 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
+    st.markdown(
+        """
+        <div class="dashboard-functions-box">
+        """,
+        unsafe_allow_html=True
+    )
+
     # Two equal columns. Functions stay in the exact list order,
     # left-to-right and then top-to-bottom.
     for row_start in range(0, len(options), 2):
@@ -16509,6 +16523,8 @@ def dashboard_menu_2col(title, options, key):
                     if name != current:
                         st.session_state[key] = name
                         st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
     _enable_dashboard_long_press()
 
