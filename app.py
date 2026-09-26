@@ -232,12 +232,16 @@ def apply_role_theme():
         gap: 0.16rem !important;
         margin-bottom: 0 !important;
         width: 100% !important;
-        overflow: visible !important;
+        max-width: 100% !important;
+        overflow: hidden !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"]) > div[data-testid="column"] {{
         flex: 1 1 0 !important;
-        width: 0 !important;
+        width: 50% !important;
+        max-width: 50% !important;
         min-width: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton {{
         margin: 0 0 0.03rem 0 !important;
