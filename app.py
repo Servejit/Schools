@@ -936,6 +936,14 @@ def users():
 
     st.header("👥 User Management")
 
+    # Keep the User Search box at the top of User Management so it is
+    # immediately visible on every Teacher/Admin User screen.
+    user_search = st.text_input(
+        "🔎 Search User",
+        placeholder="Search name, email, role, class, section, admission no. or roll no.",
+        key="users_search"
+    ).strip().lower()
+
     # Persistent confirmations remain visible after reruns.
     show_save_message("parent_student_links")
     show_save_message("user_delete")
@@ -1726,12 +1734,6 @@ def users():
         # Search enhancement must never block the existing User Management
         # screen if optional student/link data is unavailable.
         search_details = {}
-
-    user_search = st.text_input(
-        "🔎 Search User",
-        placeholder="Search name, email, role, class, section, admission no. or roll no.",
-        key="users_search"
-    ).strip().lower()
 
     searchable_users = filtered_users
 
