@@ -1626,6 +1626,30 @@ def users():
                 if s.get("id")
             }
 
+            # Some older Student records may not yet have students.user_id
+            # populated. Match those Student accounts by the student's full
+            # name as a safe fallback within this teacher's own school.
+            # This makes existing Class Teacher students discoverable in
+            # User Management without exposing users from other classes.
+            student_names = {
+                str(s.get("name") or "").strip().lower()
+                for s in teacher_students
+                if str(s.get("name") or "").strip()
+            }
+            fallback_student_user_ids = set()
+            if student_names:
+                school_student_profiles = [
+                    u for u in user_data
+                    if u.get("role") == "Student"
+                    and str(u.get("school_id") or "") == str(teacher_school_id)
+                    and str(u.get("full_name") or "").strip().lower() in student_names
+                ]
+                fallback_student_user_ids = {
+                    str(u.get("id"))
+                    for u in school_student_profiles
+                    if u.get("id")
+                }
+
             allowed_parent_ids = set()
             if allowed_student_ids:
                 parent_links = (
@@ -1643,6 +1667,7 @@ def users():
 
             allowed_user_ids = (
                 allowed_student_user_ids
+                | fallback_student_user_ids
                 | allowed_parent_ids
             )
 
@@ -1764,6 +1789,7 @@ def users():
                     "class_name,section,school_id,active"
                 )
                 .in_("school_id", search_school_ids)
+                .eq("active", True)
                 .execute()
                 .data or []
             )
