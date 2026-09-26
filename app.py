@@ -13696,14 +13696,13 @@ def premium_feature_management():
         # -------------------------------------------------
         # SCHOOL ACADEMIC STATUS — TEACHER ACCESS
         # -------------------------------------------------
-        # Admin's own Premium access is separate from Teacher access.
-        # An Admin can selectively allow individual active Teacher /
-        # Admin+Teacher accounts to use School Academic Status.
+        # This remains teacher-wise because the Admin requested separate
+        # permission for School Academic Status.
         st.divider()
         st.subheader("👨‍🏫 School Academic Status — Teacher Access")
         st.caption(
-            "Allow School Academic Status separately for selected teachers. "
-            "Teachers do not receive access unless you explicitly permit them."
+            "This permission is separate from Subject-wise Premium and can "
+            "still be controlled teacher-by-teacher."
         )
 
         try:
@@ -13719,16 +13718,12 @@ def premium_feature_management():
         except Exception:
             teacher_rows = []
 
-        active_teachers = [
-            x for x in teacher_rows
-            if x.get("active", True)
-        ]
+        active_teachers = [x for x in teacher_rows if x.get("active", True)]
 
         if not active_teachers:
             st.info("No active Teacher / Admin+Teacher accounts are available.")
         else:
             teacher_feature_key = "school_academic_status_teacher"
-
             for teacher in active_teachers:
                 teacher_id = teacher.get("id")
                 try:
@@ -13738,37 +13733,24 @@ def premium_feature_management():
                         .eq("school_id", school_id)
                         .eq("admin_id", teacher_id)
                         .eq("feature_key", teacher_feature_key)
-                        .maybe_single()
-                        .execute()
-                        .data
+                        .maybe_single().execute().data
                     )
                 except Exception:
                     teacher_access = None
 
                 teacher_allowed = bool(
-                    teacher_access
-                    and teacher_access.get("active") is True
+                    teacher_access and teacher_access.get("active") is True
                 )
-
-                teacher_label = (
-                    teacher.get("full_name")
-                    or teacher.get("email")
-                    or "Teacher"
-                )
+                teacher_label = teacher.get("full_name") or teacher.get("email") or "Teacher"
 
                 with st.container(border=True):
-                    st.write(
-                        f"**{teacher_label}**"
-                        f" — {teacher.get('role') or 'Teacher'}"
-                    )
+                    st.write(f"**{teacher_label}** — {teacher.get('role') or 'Teacher'}")
                     st.caption(teacher.get("email") or "")
-
                     new_teacher_allowed = st.toggle(
                         "Allow School Academic Status",
                         value=teacher_allowed,
                         key=f"school_academic_status_teacher_{school_id}_{teacher_id}"
                     )
-
                     if st.button(
                         "💾 Save Teacher Permission",
                         use_container_width=True,
@@ -13780,12 +13762,9 @@ def premium_feature_management():
                                     sb.table("premium_feature_access")
                                     .update({
                                         "active": bool(new_teacher_allowed),
-                                        "updated_at": datetime.datetime.now(
-                                            datetime.timezone.utc
-                                        ).isoformat()
+                                        "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
                                     })
-                                    .eq("id", teacher_access["id"])
-                                    .execute()
+                                    .eq("id", teacher_access["id"]).execute()
                                 )
                             else:
                                 (
@@ -13795,18 +13774,113 @@ def premium_feature_management():
                                         "admin_id": teacher_id,
                                         "feature_key": teacher_feature_key,
                                         "active": bool(new_teacher_allowed)
-                                    })
-                                    .execute()
-                                )
-
-                            mark_saved(
-                                f"school_academic_status_teacher_{school_id}_{teacher_id}"
-                            )
+                                    }).execute()
+                            mark_saved(f"school_academic_status_teacher_{school_id}_{teacher_id}")
                             st.success("✅ Teacher permission saved successfully.")
                             st.rerun()
                         except Exception as e:
                             st.error("Could not save Teacher School Academic Status permission.")
                             st.code(str(e))
+
+        # -------------------------------------------------
+        # SUBJECT-WISE PREMIUM — ALL TEACHERS
+        # -------------------------------------------------
+        st.divider()
+        st.subheader("📚 Subject-wise Premium — Teacher Access")
+        st.caption(
+            "One setting applies to ALL active Teachers and Admin+Teacher accounts "
+            "in this school. No teacher-by-teacher selection is required."
+        )
+
+        subject_teacher_key = "subject_wise_premium_teacher"
+        try:
+            subject_teacher_existing = (
+                sb.table("premium_feature_access")
+                .select("id,active")
+                .eq("school_id", school_id)
+                .eq("admin_id", st.session_state.user.id)
+                .eq("feature_key", subject_teacher_key)
+                .maybe_single().execute().data
+            )
+        except Exception:
+            subject_teacher_existing = None
+
+        subject_teacher_current = bool(
+            subject_teacher_existing and subject_teacher_existing.get("active") is True
+        )
+        subject_teacher_new = st.toggle(
+            "Allow ALL Teachers to view Subject-wise Premium",
+            value=subject_teacher_current,
+            key=f"allow_all_teachers_subjectwise_{school_id}"
+        )
+
+        if st.button(
+            "💾 Save Subject-wise Premium for ALL Teachers",
+            type="primary",
+            use_container_width=True,
+            key=f"save_all_teachers_subjectwise_{school_id}"
+        ):
+            try:
+                # Store one school/admin master permission and also materialize
+                # the same permission for every active teacher. This lets each
+                # teacher check only their own row without needing broad SELECT
+                # access to premium_feature_access.
+                if subject_teacher_existing:
+                    (
+                        sb.table("premium_feature_access")
+                        .update({"active": bool(subject_teacher_new)})
+                        .eq("id", subject_teacher_existing["id"])
+                        .execute()
+                    )
+                else:
+                    (
+                        sb.table("premium_feature_access")
+                        .insert({
+                            "school_id": school_id,
+                            "admin_id": st.session_state.user.id,
+                            "feature_key": subject_teacher_key,
+                            "active": bool(subject_teacher_new)
+                        }).execute()
+                    )
+
+                for teacher in active_teachers:
+                    teacher_id = teacher.get("id")
+                    if not teacher_id:
+                        continue
+                    existing_teacher = (
+                        sb.table("premium_feature_access")
+                        .select("id")
+                        .eq("school_id", school_id)
+                        .eq("admin_id", teacher_id)
+                        .eq("feature_key", subject_teacher_key)
+                        .maybe_single().execute().data
+                    )
+                    if existing_teacher:
+                        (
+                            sb.table("premium_feature_access")
+                            .update({"active": bool(subject_teacher_new)})
+                            .eq("id", existing_teacher["id"])
+                            .execute()
+                        )
+                    else:
+                        (
+                            sb.table("premium_feature_access")
+                            .insert({
+                                "school_id": school_id,
+                                "admin_id": teacher_id,
+                                "feature_key": subject_teacher_key,
+                                "active": bool(subject_teacher_new)
+                            }).execute()
+                        )
+
+                mark_saved(f"save_all_teachers_subjectwise_{school_id}")
+                st.success(
+                    "✅ Subject-wise Premium permission updated for all active Teachers."
+                )
+                st.rerun()
+            except Exception as e:
+                st.error("Could not save Subject-wise Premium Teacher permission.")
+                st.code(str(e))
 
         feature_key = "subject_wise_premium_parent_student"
         try:
@@ -13871,6 +13945,24 @@ def premium_feature_management():
         return
 
     st.error("Only SuperAdmin or Admin can manage Premium permissions.")
+
+
+def subject_wise_teacher_premium_enabled(school_id, teacher_id):
+    """Check the school-wide Subject-wise Premium permission for a Teacher."""
+    if not school_id or not teacher_id:
+        return False
+    try:
+        row = (
+            sb.table("premium_feature_access")
+            .select("active")
+            .eq("school_id", school_id)
+            .eq("admin_id", teacher_id)
+            .eq("feature_key", "subject_wise_premium_teacher")
+            .maybe_single().execute().data
+        )
+        return bool(row and row.get("active") is True)
+    except Exception:
+        return False
 
 
 def subject_wise_parent_student_premium_enabled(school_id):
@@ -16333,6 +16425,12 @@ def dashboard():
                 "📊 Reports"
             ]
 
+            if subject_wise_teacher_premium_enabled(
+                profile.get("school_id"),
+                st.session_state.user.id
+            ):
+                teacher_menu_items.append("💎 Subject-wise Premium")
+
             if premium_feature_enabled(
                 profile.get("school_id"),
                 st.session_state.user.id,
@@ -16368,6 +16466,13 @@ def dashboard():
 
             elif menu == "📊 Reports":
                 reports()
+
+            elif menu == "💎 Subject-wise Premium":
+                subject_wise_premium_view(
+                    profile.get("school_id"),
+                    [],
+                    "Teacher"
+                )
 
             elif menu == "💎 School Academic Status":
                 school_academic_status(profile.get("school_id"))
@@ -16513,6 +16618,12 @@ def dashboard():
             "📊 Reports"
         ]
 
+        if subject_wise_teacher_premium_enabled(
+            profile.get("school_id"),
+            st.session_state.user.id
+        ):
+            teacher_menu_options.append("💎 Subject-wise Premium")
+
         if premium_feature_enabled(
             profile.get("school_id"),
             st.session_state.user.id,
@@ -16547,6 +16658,13 @@ def dashboard():
 
         elif menu == "📊 Reports":
             reports()
+
+        elif menu == "💎 Subject-wise Premium":
+            subject_wise_premium_view(
+                profile.get("school_id"),
+                [],
+                "Teacher"
+            )
 
         elif menu == "💎 School Academic Status":
             school_academic_status(profile.get("school_id"))
