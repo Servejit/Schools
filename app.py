@@ -16542,7 +16542,8 @@ def dashboard():
             keep_keys = {
                 "logged_in", "user", "profile", "access_token", "refresh_token",
                 "admin_teacher_mode", "admin_teacher_admin_menu",
-                "admin_teacher_teacher_menu", "_last_dashboard_menu"
+                "admin_teacher_teacher_menu", "_last_dashboard_menu",
+                "_dashboard_open_function"
             }
             for key in list(st.session_state.keys()):
                 if key not in keep_keys:
