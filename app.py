@@ -1328,6 +1328,64 @@ def users():
             key="create_user_role"
         )
 
+        # When a Class Teacher creates a Parent, explicitly link that Parent
+        # to the child/student in the selected Class Teacher class. This is
+        # what makes the Parent discoverable by that class teacher later.
+        selected_parent_student_ids = []
+        if creator_role == "Teacher" and role == "Parent" and selected_teacher_class:
+            try:
+                create_parent_students = (
+                    sb.table("students")
+                    .select("id,name,admission_no,roll_no,class_name,section,active")
+                    .eq("school_id", school_map[selected_school])
+                    .eq("active", True)
+                    .order("name")
+                    .execute()
+                    .data or []
+                )
+            except Exception:
+                create_parent_students = []
+
+            selected_class_key = (
+                str(selected_teacher_class.get("class_name") or "").strip().lower(),
+                str(selected_teacher_class.get("section") or "").strip().lower()
+            )
+            create_parent_students = [
+                s for s in create_parent_students
+                if (
+                    str(s.get("class_name") or "").strip().lower(),
+                    str(s.get("section") or "").strip().lower()
+                ) == selected_class_key
+            ]
+
+            parent_student_options = {
+                (
+                    f"{s.get('name') or 'Student'}"
+                    f" — Admission: {s.get('admission_no') or '-'}"
+                    f" — Roll: {s.get('roll_no') or '-'}"
+                ): s["id"]
+                for s in create_parent_students
+                if s.get("id")
+            }
+
+            if parent_student_options:
+                selected_parent_student_labels = st.multiselect(
+                    "🎓 Link Parent to Student(s)",
+                    list(parent_student_options.keys()),
+                    key="create_parent_student_links",
+                    help="Select the student(s) of this parent in your assigned class."
+                )
+                selected_parent_student_ids = [
+                    parent_student_options[label]
+                    for label in selected_parent_student_labels
+                    if label in parent_student_options
+                ]
+            else:
+                st.info(
+                    "No active students are currently available in this class. "
+                    "Create the student first, then link the Parent from Parent → Student Linking."
+                )
+
         if st.button(
             "👤 Create User",
             use_container_width=True,
@@ -1427,6 +1485,40 @@ def users():
                 )
 
                 if 200 <= response.status_code < 300:
+                    # For a Class Teacher-created Parent, save the selected
+                    # Parent → Student links immediately. The links are scoped
+                    # to the teacher's assigned class, while the same Parent
+                    # may still be linked to children in other classes later.
+                    if (
+                        creator_role == "Teacher"
+                        and role == "Parent"
+                        and selected_parent_student_ids
+                    ):
+                        try:
+                            created_payload = response.json()
+                            created_user_id = (
+                                (created_payload.get("user") or {}).get("id")
+                            )
+                            if created_user_id:
+                                sb.table("parent_student_links").insert([
+                                    {
+                                        "parent_id": created_user_id,
+                                        "student_id": student_id
+                                    }
+                                    for student_id in selected_parent_student_ids
+                                ]).execute()
+                            else:
+                                st.warning(
+                                    "Parent was created, but its Student link could not be saved. "
+                                    "Use Parent → Student Linking to connect it."
+                                )
+                        except Exception as link_error:
+                            st.warning(
+                                "Parent was created, but the Student link could not be saved. "
+                                "Use Parent → Student Linking to connect it."
+                            )
+                            st.code(str(link_error))
+
                     st.success("✅ User created successfully.")
                     st.rerun()
                 else:
