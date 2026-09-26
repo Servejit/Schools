@@ -16497,13 +16497,6 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    st.markdown(
-        """
-        <div class="dashboard-functions-box">
-        """,
-        unsafe_allow_html=True
-    )
-
     # Full-width horizontal bars for every dashboard function.
     for index, name in enumerate(options):
         if not name or not str(name).strip():
