@@ -13775,6 +13775,7 @@ def premium_feature_management():
                                         "feature_key": teacher_feature_key,
                                         "active": bool(new_teacher_allowed)
                                     }).execute()
+                                )
                             mark_saved(f"school_academic_status_teacher_{school_id}_{teacher_id}")
                             st.success("✅ Teacher permission saved successfully.")
                             st.rerun()
