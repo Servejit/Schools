@@ -225,9 +225,17 @@ def apply_role_theme():
     .stApp div[data-testid="column"] {{
         min-width: 0 !important;
     }}
-    .stApp div[data-testid="stHorizontalBlock"] {{
+    /* Keep dashboard button columns side-by-side even on narrow screens */
+    .stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"]) {{
+        display: flex !important;
+        flex-wrap: nowrap !important;
         gap: 0.30rem !important;
         margin-bottom: 0 !important;
+    }}
+    .stApp div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"]) > div[data-testid="column"] {{
+        flex: 1 1 0 !important;
+        width: 0 !important;
+        min-width: 0 !important;
     }}
     .stApp div[data-testid="stHorizontalBlock"] .stButton {{
         margin: 0 0 0.08rem 0 !important;
