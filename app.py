@@ -1032,6 +1032,36 @@ def users():
     # this teacher as Class Teacher.
     management_role = get_active_theme_role()
 
+    # A Teacher may use User Management only when they are actually a
+    # Class Teacher. Subject-only Teachers must not get user creation.
+    teacher_class_options = {}
+    if management_role == "Teacher":
+        try:
+            teacher_class_rows_for_users = (
+                sb.table("classes")
+                .select("id,class_name,section,active")
+                .eq("school_id", st.session_state.profile.get("school_id"))
+                .eq("class_teacher_id", st.session_state.user.id)
+                .eq("active", True)
+                .order("class_name")
+                .order("section")
+                .execute()
+                .data or []
+            )
+        except Exception:
+            teacher_class_rows_for_users = []
+
+        teacher_class_options = {
+            (
+                f"{row.get('class_name') or '-'}"
+                f" — Section {row.get('section') or '-'}"
+            ): row
+            for row in teacher_class_rows_for_users
+        }
+
+        if not teacher_class_options:
+            return
+
     if management_role in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
         with st.expander("👨‍👩‍👧 Parent → Student Linking", expanded=False):
             manager_school_id = st.session_state.profile.get("school_id")
@@ -1225,6 +1255,15 @@ def users():
                 key="create_user_school"
             )
 
+        selected_teacher_class = None
+        if get_active_theme_role() == "Teacher":
+            selected_teacher_class_label = st.selectbox(
+                "🏫 Your Class",
+                list(teacher_class_options.keys()),
+                key="teacher_create_user_class"
+            )
+            selected_teacher_class = teacher_class_options[selected_teacher_class_label]
+
         name = st.text_input("Full Name", key="create_user_name")
         email = st.text_input("Email", key="create_user_email")
         password = st.text_input(
@@ -1285,6 +1324,10 @@ def users():
                 st.error("Teacher can create only Student or Parent users.")
                 return
 
+            if creator_role == "Teacher" and not selected_teacher_class:
+                st.error("Select your assigned Class Teacher class.")
+                return
+
             # SuperAdmin, Admin and Admin+Teacher can assign the Admin+Teacher role.
             if role == "Admin+Teacher" and creator_role not in ["SuperAdmin", "Admin", "Admin+Teacher"]:
                 st.error("Only SuperAdmin, Admin or Admin+Teacher can create an Admin+Teacher user.")
@@ -1321,6 +1364,21 @@ def users():
                         "full_name": name.strip(),
                         "role": role,
                         "school_id": school_map[selected_school],
+                        "class_id": (
+                            selected_teacher_class.get("id")
+                            if selected_teacher_class
+                            else None
+                        ),
+                        "class_name": (
+                            selected_teacher_class.get("class_name")
+                            if selected_teacher_class
+                            else None
+                        ),
+                        "section": (
+                            selected_teacher_class.get("section")
+                            if selected_teacher_class
+                            else None
+                        ),
                     },
                     headers={
                         "Authorization": f"Bearer {token}",
@@ -1343,7 +1401,8 @@ def users():
                 st.error("Could not connect to Create-User.")
                 st.code(str(e))
 
-    # Teacher user management is intentionally creation-only.
+    # Teacher user management is intentionally creation-only and is available
+    # only to Class Teachers. Subject-only Teachers never reach this section.
     # Teachers must not receive existing-user activate/deactivate/delete/modify controls.
     if get_active_theme_role() == "Teacher":
         return
@@ -15660,17 +15719,38 @@ def dashboard():
                 "No class has been assigned to you as Class Teacher yet."
             )
 
+        # Only Class Teachers receive User Management.
+        teacher_is_class_teacher = False
+        try:
+            teacher_is_class_teacher = bool(
+                sb.table("classes")
+                .select("id")
+                .eq("school_id", profile.get("school_id"))
+                .eq("class_teacher_id", st.session_state.user.id)
+                .eq("active", True)
+                .limit(1)
+                .execute()
+                .data
+            )
+        except Exception:
+            teacher_is_class_teacher = False
+
+        teacher_menu_options = [
+            "🎓 Students",
+        ]
+        if teacher_is_class_teacher:
+            teacher_menu_options.append("👥 Users")
+        teacher_menu_options.extend([
+            "📝 Marks",
+            "📅 Attendance",
+            "📢 Notices",
+            "📄 Report Cards",
+            "📊 Reports"
+        ])
+
         menu = st.radio(
             "Teacher Menu",
-            [
-                "🎓 Students",
-                "👥 Users",
-                "📝 Marks",
-                "📅 Attendance",
-                "📢 Notices",
-                "📄 Report Cards",
-                "📊 Reports"
-            ],
+            teacher_menu_options,
             horizontal=True
         )
 
