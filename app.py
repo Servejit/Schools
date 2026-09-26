@@ -13658,7 +13658,7 @@ def premium_feature_management():
         )
 
         if st.button(
-            "💾 Save Parent / Student Report Card Permission",
+            ("🟢 " if new_report_card_active else "🔴 ") + "💾 Save Parent / Student Report Card Permission",
             use_container_width=True,
             key=f"save_parent_report_card_{school_id}"
         ):
@@ -13751,7 +13751,7 @@ def premium_feature_management():
         )
 
         if st.button(
-            "💾 Save School Academic Status for ALL Teachers",
+            ("🟢 " if new_all_teacher_academic else "🔴 ") + "💾 Save School Academic Status for ALL Teachers",
             type="primary",
             use_container_width=True,
             key=f"save_all_teachers_academic_status_{school_id}"
