@@ -270,15 +270,23 @@ def apply_role_theme():
     }}
     div[role="radiogroup"] label {{
         border-radius: 9999px;
-        padding: 0.16rem 0.45rem !important;
+        padding: 0 !important;
         margin: 0.04rem 0 !important;
         background: #FFFFFF;
         border: 2px solid {theme["accent"]};
         min-height: 1.75rem !important;
         height: 1.75rem !important;
         width: 100% !important;
+        max-width: 100% !important;
         box-sizing: border-box !important;
+        display: flex !important;
+        align-items: center !important;
         transition: all .15s ease;
+    }}
+    div[role="radiogroup"] label p {{
+        margin: 0 !important;
+        line-height: 1 !important;
+        font-size: 0.78rem !important;
     }}
     div[role="radiogroup"] label:hover {{
         background: {theme["soft"]};
