@@ -174,45 +174,28 @@ def get_active_theme_role():
 
 
 
-# --- Professional dashboard menu styling ---
+# --- Simple dashboard checkbox styling ---
 st.markdown("""
 <style>
 .dashboard-menu-title {
     font-weight: 700;
     font-size: 0.95rem;
     margin: 0.35rem 0 0.55rem;
-    letter-spacing: 0.01em;
 }
 
-/* Clean professional navigation buttons */
-.stApp div[data-testid="stHorizontalBlock"] .stButton > button {
-    min-height: 2.05rem !important;
-    height: 2.05rem !important;
-    padding: 0.20rem 0.65rem !important;
-    border-radius: 0.65rem !important;
-    border-width: 1px !important;
-    font-size: 0.78rem !important;
+/* Simple, clean two-column checkbox menu */
+.stApp div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] {
+    margin-bottom: 0.15rem !important;
+}
+
+.stApp div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] label {
+    font-size: 0.82rem !important;
     font-weight: 600 !important;
-    line-height: 1.1 !important;
-    text-align: left !important;
-    justify-content: flex-start !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
-    transition: all 0.15s ease-in-out !important;
 }
 
-.stApp div[data-testid="stHorizontalBlock"] .stButton > button:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.10) !important;
-}
-
-.stApp div[data-testid="stHorizontalBlock"] .stButton > button p {
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
+.stApp div[data-testid="stHorizontalBlock"] div[data-testid="stCheckbox"] p {
+    font-size: 0.82rem !important;
     margin: 0 !important;
-    line-height: 1.1 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -16370,7 +16353,7 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render a professional, compact two-column dashboard menu."""
+    """Render dashboard functions as simple two-column checkboxes."""
     if not options:
         return None
 
@@ -16384,13 +16367,6 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # Professional two-column menu: clean cards, subtle border,
-    # compact height and a small colored status dot.
-    dot_colors = [
-        "#f59e0b", "#8b5cf6", "#ef4444", "#22c55e",
-        "#3b82f6", "#eab308", "#06b6d4", "#ec4899"
-    ]
-
     for row_start in range(0, len(options), 2):
         col1, col2 = st.columns(2, gap="small")
 
@@ -16400,28 +16376,16 @@ def dashboard_menu_2col(title, options, key):
                 continue
 
             option = options[option_index]
-            selected = option == current
-            dot = dot_colors[option_index % len(dot_colors)]
-
-            # Use a unique lightweight marker so CSS can target the
-            # dashboard button without changing the actual menu value.
-            label = f"●  {option}"
 
             with col:
-                if st.button(
-                    label,
-                    key=f"{key}_button_{option_index}",
-                    use_container_width=True,
-                    type="primary" if selected else "secondary"
-                ):
+                checked = st.checkbox(
+                    option,
+                    value=(option == current),
+                    key=f"{key}_checkbox_{option_index}"
+                )
+                if checked and current != option:
                     st.session_state[key] = option
                     st.rerun()
-
-                st.markdown(
-                    f"<style>div[data-testid='stButton']:has(button[key='{key}_button_{option_index}'])"
-                    f"{{border-left:3px solid {dot};}}</style>",
-                    unsafe_allow_html=True
-                )
 
     return st.session_state.get(key)
 
