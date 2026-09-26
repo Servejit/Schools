@@ -16322,7 +16322,7 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render all dashboard functions in a compact, balanced two-column grid."""
+    """Render every dashboard function as a compact two-column tab grid."""
     if not options:
         return None
 
@@ -16336,12 +16336,13 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # Keep every function in exactly two equal-width columns.
-    # No extra wrapper rows are added, so the menu stays compact.
-    menu_cols = st.columns(2, gap="small")
+    # Two equal columns. Each button is deliberately compact so the
+    # complete dashboard menu occupies minimum vertical space on mobile.
+    left_col, right_col = st.columns(2, gap="small")
 
     for index, option in enumerate(options):
-        with menu_cols[index % 2]:
+        target_col = left_col if index % 2 == 0 else right_col
+        with target_col:
             is_selected = option == current
             if st.button(
                 option,
@@ -16353,7 +16354,6 @@ def dashboard_menu_2col(title, options, key):
                 st.rerun()
 
     return st.session_state.get(key)
-
 def dashboard():
 
     # Reset dashboard-specific selections whenever the user changes dashboard.
