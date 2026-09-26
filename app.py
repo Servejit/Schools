@@ -265,12 +265,41 @@ def apply_role_theme():
     }}
 
     /* Navigation / radio buttons */
+    div[role="radiogroup"] {{
+        gap: 0.20rem !important;
+    }}
     div[role="radiogroup"] label {{
-        border-radius: 10px;
-        padding: 5px 9px;
+        border-radius: 9999px;
+        padding: 0.16rem 0.45rem !important;
+        margin: 0.04rem 0 !important;
+        background: #FFFFFF;
+        border: 1px solid #D9D9D9;
+        min-height: 1.75rem;
+        transition: all .15s ease;
     }}
     div[role="radiogroup"] label:hover {{
-        background: {theme["soft"]};
+        background: #FFF5F5;
+        border-color: #FF6B6B;
+    }}
+    div[role="radiogroup"] label:has(input:checked) {{
+        background: #FF0000 !important;
+        border-color: #CC0000 !important;
+        color: #FFFFFF !important;
+    }}
+    div[role="radiogroup"] label:has(input:checked) * {{
+        color: #FFFFFF !important;
+    }}
+    div[role="radiogroup"] label > div:first-child {{
+        width: 1.05rem !important;
+        height: 1.05rem !important;
+    }}
+    div[role="radiogroup"] label > div:first-child > div {{
+        border-color: #B8B8B8 !important;
+        background: #FFFFFF !important;
+    }}
+    div[role="radiogroup"] label:has(input:checked) > div:first-child > div {{
+        border-color: #FFFFFF !important;
+        background: #FF0000 !important;
     }}
 
     /* Buttons */
@@ -16327,7 +16356,9 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render dashboard functions using the default Streamlit selectbox style."""
+    """Render dashboard functions as two-column circular selectors.
+    Unselected selectors are white; the currently selected function is red.
+    """
     if not options:
         return None
 
@@ -16341,15 +16372,53 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    selected = st.selectbox(
-        "",
-        options,
-        index=options.index(current),
-        key=f"{key}_select",
-        label_visibility="collapsed"
+    # Keep the original processing order, but display the functions in two
+    # balanced columns. Each column is a radio group; the shared session
+    # value keeps only one function active at a time.
+    left_options = options[::2]
+    right_options = options[1::2]
+
+    left_index = (
+        left_options.index(current)
+        if current in left_options else None
+    )
+    right_index = (
+        right_options.index(current)
+        if current in right_options else None
     )
 
-    st.session_state[key] = selected
+    col1, col2 = st.columns(2, gap="small")
+
+    with col1:
+        left_selected = st.radio(
+            "",
+            left_options,
+            index=left_index,
+            key=f"{key}_left",
+            label_visibility="collapsed"
+        ) if left_options else None
+
+    with col2:
+        right_selected = st.radio(
+            "",
+            right_options,
+            index=right_index,
+            key=f"{key}_right",
+            label_visibility="collapsed"
+        ) if right_options else None
+
+    selected = (
+        left_selected
+        if left_selected != current and left_selected is not None
+        else right_selected
+        if right_selected != current and right_selected is not None
+        else current
+    )
+
+    if selected != current:
+        st.session_state[key] = selected
+        st.rerun()
+
     return selected
 
 def dashboard():
