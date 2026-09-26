@@ -13428,14 +13428,16 @@ def premium_feature_enabled(school_id, admin_id, feature_key):
     if not school_id or not admin_id:
         return False
     try:
-        row = (
+        query_result = (
             sb.table("premium_feature_access")
             .select("active")
             .eq("school_id", school_id)
             .eq("admin_id", admin_id)
             .eq("feature_key", feature_key)
-            .maybe_single().execute().data
+            .maybe_single()
+            .execute()
         )
+        row = getattr(query_result, "data", None) if query_result is not None else None
         return bool(row and row.get("active") is True)
     except Exception:
         return False
@@ -13720,13 +13722,19 @@ def premium_feature_management():
 
         teacher_feature_key = "school_academic_status_teacher"
         try:
-            teacher_master_existing = (
+            teacher_master_result = (
                 sb.table("premium_feature_access")
                 .select("id,active")
                 .eq("school_id", school_id)
                 .eq("admin_id", st.session_state.user.id)
                 .eq("feature_key", teacher_feature_key)
-                .maybe_single().execute().data
+                .maybe_single()
+                .execute()
+            )
+            teacher_master_existing = (
+                getattr(teacher_master_result, "data", None)
+                if teacher_master_result is not None
+                else None
             )
         except Exception:
             teacher_master_existing = None
@@ -13780,13 +13788,19 @@ def premium_feature_management():
                     if not teacher_id:
                         continue
 
-                    existing_teacher = (
+                    existing_teacher_result = (
                         sb.table("premium_feature_access")
                         .select("id")
                         .eq("school_id", school_id)
                         .eq("admin_id", teacher_id)
                         .eq("feature_key", teacher_feature_key)
-                        .maybe_single().execute().data
+                        .maybe_single()
+                        .execute()
+                    )
+                    existing_teacher = (
+                        getattr(existing_teacher_result, "data", None)
+                        if existing_teacher_result is not None
+                        else None
                     )
 
                     if existing_teacher:
@@ -14066,14 +14080,16 @@ def subject_wise_teacher_premium_enabled(school_id, teacher_id):
     if not school_id or not teacher_id:
         return False
     try:
-        row = (
+        query_result = (
             sb.table("premium_feature_access")
             .select("active")
             .eq("school_id", school_id)
             .eq("admin_id", teacher_id)
             .eq("feature_key", "subject_wise_premium_teacher")
-            .maybe_single().execute().data
+            .maybe_single()
+            .execute()
         )
+        row = getattr(query_result, "data", None) if query_result is not None else None
         return bool(row and row.get("active") is True)
     except Exception:
         return False
