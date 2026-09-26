@@ -13981,162 +13981,6 @@ def premium_feature_management():
         </style>
         """, unsafe_allow_html=True)
 
-        # -------------------------------------------------
-        # SUBJECT-WISE PREMIUM — SHARED PERMISSION BUTTON STYLE
-        # -------------------------------------------------
-        st.markdown("""
-        <style>
-        div.stButton:has(button[aria-label*="🟢"]) button { background-color:#16a34a !important; border-color:#16a34a !important; color:white !important; }
-        div.stButton:has(button[aria-label*="🔴"]) button { background-color:#dc2626 !important; border-color:#dc2626 !important; color:white !important; }
-        </style>
-        """, unsafe_allow_html=True)
-
-        # -------------------------------------------------
-        # SUBJECT-WISE PREMIUM — TEACHER ACCESS
-        # -------------------------------------------------
-        st.divider()
-        st.subheader("👨‍🏫 Subject-wise Premium — Teacher Access")
-        try:
-            teacher_rows = (
-                sb.table("profiles")
-                .select("id,email,full_name,role,active,school_id")
-                .eq("school_id", school_id)
-                .in_("role", ["Teacher", "Admin+Teacher"])
-                .order("full_name")
-                .execute()
-                .data or []
-            )
-        except Exception:
-            teacher_rows = []
-
-        active_teachers = [x for x in teacher_rows if x.get("active", True)]
-
-        subject_teacher_key = "subject_wise_premium_teacher"
-        try:
-            _subject_teacher_result = (
-                sb.table("premium_feature_access")
-                .select("id,active")
-                .eq("school_id", school_id)
-                .eq("admin_id", st.session_state.user.id)
-                .eq("feature_key", subject_teacher_key)
-                .maybe_single()
-                .execute()
-            )
-            subject_teacher_existing = (
-                getattr(_subject_teacher_result, "data", None)
-                if _subject_teacher_result is not None
-                else None
-            )
-        except Exception:
-            subject_teacher_existing = None
-
-        subject_teacher_current = bool(
-            subject_teacher_existing
-            and subject_teacher_existing.get("active") is True
-        )
-
-        subject_teacher_new = st.toggle(
-            "Allow ALL Teachers to view Subject-wise Premium",
-            value=subject_teacher_current,
-            key=f"allow_all_teachers_subjectwise_{school_id}"
-        )
-
-        # Auto-save immediately when the toggle changes. The status indicator
-        # always uses the same green/red state as the permission itself.
-        st.markdown(
-            f"<div class='premium-permission-status "
-            f"{'on' if subject_teacher_new else 'off'}'>"
-            f"{'🟢 ON — Saved' if subject_teacher_new else '🔴 OFF — Saved'}"
-            f"</div>",
-            unsafe_allow_html=True
-        )
-
-        if subject_teacher_new != subject_teacher_current:
-            try:
-                # Store one Admin/master permission and synchronize it to
-                # each active Teacher/Admin+Teacher account. The UI remains
-                # a single Teacher permission, while the per-user rows allow
-                # secure teacher-side permission checks.
-                if subject_teacher_existing:
-                    (
-                        sb.table("premium_feature_access")
-                        .update({
-                            "active": bool(subject_teacher_new),
-                            "updated_at": datetime.datetime.now(
-                                datetime.timezone.utc
-                            ).isoformat()
-                        })
-                        .eq("id", subject_teacher_existing["id"])
-                        .execute()
-                    )
-                else:
-                    (
-                        sb.table("premium_feature_access")
-                        .insert({
-                            "school_id": school_id,
-                            "admin_id": st.session_state.user.id,
-                            "feature_key": subject_teacher_key,
-                            "active": bool(subject_teacher_new)
-                        })
-                        .execute()
-                    )
-
-                for teacher in active_teachers:
-                    teacher_id = teacher.get("id")
-                    if not teacher_id:
-                        continue
-
-                    _existing_teacher_result = (
-                        sb.table("premium_feature_access")
-                        .select("id")
-                        .eq("school_id", school_id)
-                        .eq("admin_id", teacher_id)
-                        .eq("feature_key", subject_teacher_key)
-                        .maybe_single()
-                        .execute()
-                    )
-                    existing_teacher = (
-                        getattr(_existing_teacher_result, "data", None)
-                        if _existing_teacher_result is not None
-                        else None
-                    )
-
-                    if existing_teacher:
-                        (
-                            sb.table("premium_feature_access")
-                            .update({
-                                "active": bool(subject_teacher_new),
-                                "updated_at": datetime.datetime.now(
-                                    datetime.timezone.utc
-                                ).isoformat()
-                            })
-                            .eq("id", existing_teacher["id"])
-                            .execute()
-                        )
-                    else:
-                        (
-                            sb.table("premium_feature_access")
-                            .insert({
-                                "school_id": school_id,
-                                "admin_id": teacher_id,
-                                "feature_key": subject_teacher_key,
-                                "active": bool(subject_teacher_new)
-                            })
-                            .execute()
-                        )
-
-                mark_saved(f"save_all_teachers_subjectwise_{school_id}")
-                st.success(
-                    "✅ Subject-wise Premium Teacher permission saved for all active Teachers."
-                )
-                st.rerun()
-            except Exception as e:
-                st.error(
-                    "Could not save Subject-wise Premium Teacher permission."
-                )
-                st.code(str(e))
-
-
         # PARENT / STUDENT ACCESS
         # -------------------------------------------------
         st.divider()
@@ -14279,41 +14123,6 @@ def premium_feature_management():
 
 
     st.error("Only SuperAdmin or Admin can manage Premium permissions.")
-
-
-def subject_wise_teacher_premium_enabled(school_id, teacher_id):
-    """Check Teacher Subject-wise Premium through a secure Supabase RPC."""
-    if not school_id or not teacher_id:
-        return False
-
-    cache = st.session_state.setdefault("_premium_permission_cache", {})
-    cache_key = (str(school_id), str(teacher_id), "subject_wise_premium_teacher")
-    cached = cache.get(cache_key)
-    if cached and (time.time() - cached[0]) < 10:
-        return cached[1]
-
-    try:
-        result = (
-            sb.rpc(
-                "teacher_premium_feature_enabled",
-                {
-                    "p_school_id": school_id,
-                    "p_feature_key": "subject_wise_premium_teacher"
-                }
-            )
-            .execute()
-        )
-        data = getattr(result, "data", None) if result is not None else None
-        value = bool(data) if isinstance(data, bool) else bool(
-            data and (
-                data.get("enabled") if isinstance(data, dict)
-                else data[0] if isinstance(data, list) else False
-            )
-        )
-        cache[cache_key] = (time.time(), value)
-        return value
-    except Exception:
-        return False
 
 
 def subject_wise_parent_student_premium_enabled(school_id):
@@ -17105,12 +16914,6 @@ def dashboard():
             "📊 Reports"
         ]
 
-        if subject_wise_teacher_premium_enabled(
-            profile.get("school_id"),
-            st.session_state.user.id
-        ):
-            teacher_menu_options.append("💎 Subject-wise Premium")
-
         if premium_feature_enabled(
             profile.get("school_id"),
             st.session_state.user.id,
@@ -17152,13 +16955,6 @@ def dashboard():
 
         elif menu == "📊 Reports":
             reports()
-
-        elif menu == "💎 Subject-wise Premium":
-            subject_wise_premium_view(
-                profile.get("school_id"),
-                [],
-                "Teacher"
-            )
 
         elif menu == "💎 School Academic Status":
             school_academic_status(profile.get("school_id"))
