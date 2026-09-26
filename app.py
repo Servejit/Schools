@@ -1105,7 +1105,8 @@ def users():
                     link_students = []
 
                 # Teachers can only manage students from their assigned
-                # Class Teacher classes.
+                # Class Teacher classes, and only Parent accounts already linked
+                # to at least one of those students.
                 if management_role == "Teacher":
                     try:
                         teacher_classes = (
@@ -1130,11 +1131,40 @@ def users():
 
                     link_students = [
                         s for s in link_students
-                        if (                            str(s.get("class_name") or "").strip().lower(),
+                        if (
+                            str(s.get("class_name") or "").strip().lower(),
                             str(s.get("section") or "").strip().lower()
                         ) in allowed_classes
                     ]
 
+                    allowed_student_ids = {
+                        str(s.get("id"))
+                        for s in link_students
+                        if s.get("id")
+                    }
+
+                    allowed_parent_ids = set()
+                    if allowed_student_ids:
+                        try:
+                            teacher_parent_links = (
+                                sb.table("parent_student_links")
+                                .select("parent_id,student_id")
+                                .in_("student_id", list(allowed_student_ids))
+                                .execute()
+                                .data or []
+                            )
+                            allowed_parent_ids = {
+                                str(x.get("parent_id"))
+                                for x in teacher_parent_links
+                                if x.get("parent_id")
+                            }
+                        except Exception:
+                            allowed_parent_ids = set()
+
+                    link_parents = [
+                        p for p in link_parents
+                        if str(p.get("id") or "") in allowed_parent_ids
+                    ]
                 if not link_parents:
                     st.info("No active Parent accounts found in this school.")
                 elif not link_students:
@@ -2310,27 +2340,131 @@ def users():
                         if edit_role == "Parent":
                             edit_school_id = school_map[edit_school_label]
 
-                            (
-                                sb.table("parent_student_links")
-                                .delete()
-                                .eq("parent_id", user_id)
-                                .execute()
-                            )
+                            if role == "Teacher":
+                                # Change only links for students in this
+                                # Class Teacher's classes. Preserve links to
+                                # the same parent’s children in other classes.
+                                try:
+                                    teacher_save_classes = (
+                                        sb.table("classes")
+                                        .select("class_name,section")
+                                        .eq("school_id", edit_school_id)
+                                        .eq(
+                                            "class_teacher_id",
+                                            st.session_state.user.id
+                                        )
+                                        .eq("active", True)
+                                        .execute()
+                                        .data or []
+                                    )
+                                except Exception:
+                                    teacher_save_classes = []
 
-                            new_parent_links = [
-                                {
-                                    "parent_id": user_id,
-                                    "student_id": student_id_value
+                                teacher_save_allowed_classes = {
+                                    (
+                                        str(x.get("class_name") or "").strip().lower(),
+                                        str(x.get("section") or "").strip().lower()
+                                    )
+                                    for x in teacher_save_classes
                                 }
-                                for student_id_value in selected_parent_student_ids
-                            ]
 
-                            if new_parent_links:
+                                try:
+                                    teacher_save_students = (
+                                        sb.table("students")
+                                        .select("id,class_name,section")
+                                        .eq("school_id", edit_school_id)
+                                        .eq("active", True)
+                                        .execute()
+                                        .data or []
+                                    )
+                                except Exception:
+                                    teacher_save_students = []
+
+                                teacher_save_allowed_student_ids = {
+                                    str(s.get("id"))
+                                    for s in teacher_save_students
+                                    if s.get("id")
+                                    and (
+                                        str(s.get("class_name") or "").strip().lower(),
+                                        str(s.get("section") or "").strip().lower()
+                                    ) in teacher_save_allowed_classes
+                                }
+
+                                try:
+                                    existing_parent_links = (
+                                        sb.table("parent_student_links")
+                                        .select("student_id")
+                                        .eq("parent_id", user_id)
+                                        .execute()
+                                        .data or []
+                                    )
+                                except Exception:
+                                    existing_parent_links = []
+
+                                existing_link_ids = {
+                                    str(x.get("student_id"))
+                                    for x in existing_parent_links
+                                    if x.get("student_id")
+                                }
+
+                                selected_scoped_ids = {
+                                    str(x)
+                                    for x in selected_parent_student_ids
+                                    if str(x) in teacher_save_allowed_student_ids
+                                }
+
+                                links_to_delete = (
+                                    existing_link_ids
+                                    & teacher_save_allowed_student_ids
+                                )
+                                if links_to_delete:
+                                    (
+                                        sb.table("parent_student_links")
+                                        .delete()
+                                        .eq("parent_id", user_id)
+                                        .in_(
+                                            "student_id",
+                                            list(links_to_delete)
+                                        )
+                                        .execute()
+                                    )
+
+                                if selected_scoped_ids:
+                                    (
+                                        sb.table("parent_student_links")
+                                        .insert([
+                                            {
+                                                "parent_id": user_id,
+                                                "student_id": student_id_value
+                                            }
+                                            for student_id_value in selected_scoped_ids
+                                        ])
+                                        .execute()
+                                    )
+                            else:
+                                # Admin-level users can replace the complete
+                                # parent-to-student link set.
                                 (
                                     sb.table("parent_student_links")
-                                    .insert(new_parent_links)
+                                    .delete()
+                                    .eq("parent_id", user_id)
                                     .execute()
                                 )
+
+                                new_parent_links = [
+                                    {
+                                        "parent_id": user_id,
+                                        "student_id": student_id_value
+                                    }
+                                    for student_id_value in selected_parent_student_ids
+                                ]
+
+                                if new_parent_links:
+                                    (
+                                        sb.table("parent_student_links")
+                                        .insert(new_parent_links)
+                                        .execute()
+                                    )
 
                         # Save teacher assignments only when the user is a Teacher.
                         if edit_role in ["Teacher", "Admin+Teacher"]:
