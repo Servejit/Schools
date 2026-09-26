@@ -214,6 +214,15 @@ def apply_role_theme():
         font-size: 0.92rem !important;
     }}
 
+    /* Perfectly balanced two-column dashboard navigation */
+    .dashboard-menu-item {
+        width: 100%;
+        min-height: 2.55rem;
+    }
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        min-width: 0 !important;
+    }
+
     /* Navigation / radio buttons */
     div[role="radiogroup"] label {{
         border-radius: 10px;
@@ -16292,11 +16301,15 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    menu_cols = st.columns(2, gap="small")
+    menu_cols = st.columns([1, 1], gap="small")
 
     for index, option in enumerate(options):
         with menu_cols[index % 2]:
             is_selected = option == current
+            st.markdown(
+                "<div class='dashboard-menu-item'>",
+                unsafe_allow_html=True
+            )
             if st.button(
                 option,
                 key=f"{key}_button_{index}",
@@ -16305,6 +16318,7 @@ def dashboard_menu_2col(title, options, key):
             ):
                 st.session_state[key] = option
                 st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
     return st.session_state.get(key)
 
