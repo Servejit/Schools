@@ -14056,49 +14056,6 @@ def premium_feature_management():
 
         current_active = bool(existing and existing.get("active") is True)
 
-        st.write(
-            "### 📚 Subject-wise Premium"
-        )
-
-        new_active = st.toggle(
-            "Allow Parents and Students to view Subject-wise Premium",
-            value=current_active,
-            key=f"allow_parent_student_subjectwise_{school_id}"
-        )
-
-        if st.button(
-            "💾 Save Parent/Student Premium Permission",
-            type="primary",
-            use_container_width=True,
-            key=f"save_parent_student_premium_{school_id}"
-        ):
-            try:
-                if existing:
-                    (
-                        sb.table("premium_feature_access")
-                        .update({"active": bool(new_active)})
-                        .eq("id", existing["id"])
-                        .execute()
-                    )
-                else:
-                    (
-                        sb.table("premium_feature_access")
-                        .insert({
-                            "school_id": school_id,
-                            "admin_id": st.session_state.user.id,
-                            "feature_key": feature_key,
-                            "active": bool(new_active)
-                        })
-                        .execute()
-                    )
-
-                mark_saved(f"save_parent_student_premium_{school_id}")
-                st.rerun()
-            except Exception as e:
-                st.error(
-                    "Could not save Parent/Student Premium permission."
-                )
-                st.code(str(e))
         return
 
     st.error("Only SuperAdmin or Admin can manage Premium permissions.")
