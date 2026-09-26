@@ -13842,6 +13842,13 @@ def premium_feature_management():
         # SUBJECT-WISE PREMIUM — SEPARATE ACCESS BY AUDIENCE
         # -------------------------------------------------
         st.divider()
+        st.markdown("""
+        <style>
+        div.stButton:has(button[aria-label*="🟢"]) button { background-color:#16a34a !important; border-color:#16a34a !important; color:white !important; }
+        div.stButton:has(button[aria-label*="🔴"]) button { background-color:#dc2626 !important; border-color:#dc2626 !important; color:white !important; }
+        </style>
+        """, unsafe_allow_html=True)
+
         st.subheader("📚 Subject-wise Premium Access")
         st.caption(
             "Parent/Student access and Teacher access are separate permissions. "
@@ -13876,7 +13883,7 @@ def premium_feature_management():
         )
 
         if st.button(
-            "💾 Save Subject-wise Premium — Parent & Student",
+            ("🟢 " if new_active else "🔴 ") + "💾 Save Subject-wise Premium — Parent & Student",
             type="primary",
             use_container_width=True,
             key=f"save_parent_student_premium_{school_id}"
@@ -13968,7 +13975,7 @@ def premium_feature_management():
         )
 
         if st.button(
-            "💾 Save Subject-wise Premium — Teacher",
+            ("🟢 " if subject_teacher_new else "🔴 ") + "💾 Save Subject-wise Premium — Teacher",
             type="primary",
             use_container_width=True,
             key=f"save_all_teachers_subjectwise_{school_id}"
