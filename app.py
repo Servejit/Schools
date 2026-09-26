@@ -174,31 +174,45 @@ def get_active_theme_role():
 
 
 
-# --- Simple dashboard menu styling ---
+# --- Professional dashboard menu styling ---
 st.markdown("""
 <style>
 .dashboard-menu-title {
     font-weight: 700;
     font-size: 0.95rem;
-    margin: 0.25rem 0 0.45rem;
+    margin: 0.35rem 0 0.55rem;
+    letter-spacing: 0.01em;
 }
 
+/* Clean professional navigation buttons */
 .stApp div[data-testid="stHorizontalBlock"] .stButton > button {
-    min-height: 1.7rem !important;
-    height: 1.7rem !important;
-    padding: 0.05rem 0.35rem !important;
-    font-size: 0.72rem !important;
-    line-height: 1 !important;
-    border-radius: 9999px !important;
+    min-height: 2.05rem !important;
+    height: 2.05rem !important;
+    padding: 0.20rem 0.65rem !important;
+    border-radius: 0.65rem !important;
+    border-width: 1px !important;
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    line-height: 1.1 !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
+    transition: all 0.15s ease-in-out !important;
+}
+
+.stApp div[data-testid="stHorizontalBlock"] .stButton > button:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.10) !important;
 }
 
 .stApp div[data-testid="stHorizontalBlock"] .stButton > button p {
-    font-size: 0.72rem !important;
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
     margin: 0 !important;
-    line-height: 1 !important;
+    line-height: 1.1 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -16356,7 +16370,7 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render dashboard functions in a simple 2-column layout."""
+    """Render a professional, compact two-column dashboard menu."""
     if not options:
         return None
 
@@ -16370,32 +16384,44 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    for row_start in range(0, len(options), 2):
-        left = options[row_start]
-        right = options[row_start + 1] if row_start + 1 < len(options) else None
+    # Professional two-column menu: clean cards, subtle border,
+    # compact height and a small colored status dot.
+    dot_colors = [
+        "#f59e0b", "#8b5cf6", "#ef4444", "#22c55e",
+        "#3b82f6", "#eab308", "#06b6d4", "#ec4899"
+    ]
 
+    for row_start in range(0, len(options), 2):
         col1, col2 = st.columns(2, gap="small")
 
-        with col1:
-            if st.button(
-                f"🟠 {left}",
-                key=f"{key}_button_{row_start}",
-                use_container_width=True,
-                type="primary" if left == current else "secondary"
-            ):
-                st.session_state[key] = left
-                st.rerun()
+        for col_index, col in enumerate((col1, col2)):
+            option_index = row_start + col_index
+            if option_index >= len(options):
+                continue
 
-        with col2:
-            if right is not None:
+            option = options[option_index]
+            selected = option == current
+            dot = dot_colors[option_index % len(dot_colors)]
+
+            # Use a unique lightweight marker so CSS can target the
+            # dashboard button without changing the actual menu value.
+            label = f"●  {option}"
+
+            with col:
                 if st.button(
-                    f"🟣 {right}",
-                    key=f"{key}_button_{row_start + 1}",
+                    label,
+                    key=f"{key}_button_{option_index}",
                     use_container_width=True,
-                    type="primary" if right == current else "secondary"
+                    type="primary" if selected else "secondary"
                 ):
-                    st.session_state[key] = right
+                    st.session_state[key] = option
                     st.rerun()
+
+                st.markdown(
+                    f"<style>div[data-testid='stButton']:has(button[key='{key}_button_{option_index}'])"
+                    f"{{border-left:3px solid {dot};}}</style>",
+                    unsafe_allow_html=True
+                )
 
     return st.session_state.get(key)
 
