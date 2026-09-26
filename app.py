@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 import requests
 import datetime
 import pandas as pd
@@ -13540,6 +13541,15 @@ def premium_feature_enabled(school_id, admin_id, feature_key):
 
     if not school_id or not admin_id:
         return False
+
+    # Short session cache keeps dashboard navigation responsive without
+    # making permission changes permanently stale.
+    cache = st.session_state.setdefault("_premium_permission_cache", {})
+    cache_key = (str(school_id), str(admin_id), str(feature_key))
+    cached = cache.get(cache_key)
+    if cached and (time.time() - cached[0]) < 10:
+        return cached[1]
+
     try:
         query_result = (
             sb.table("premium_feature_access")
@@ -13551,7 +13561,9 @@ def premium_feature_enabled(school_id, admin_id, feature_key):
             .execute()
         )
         row = getattr(query_result, "data", None) if query_result is not None else None
-        return bool(row and row.get("active") is True)
+        value = bool(row and row.get("active") is True)
+        cache[cache_key] = (time.time(), value)
+        return value
     except Exception:
         return False
 
@@ -14181,6 +14193,13 @@ def subject_wise_teacher_premium_enabled(school_id, teacher_id):
     """Check the school-wide Subject-wise Premium permission for a Teacher."""
     if not school_id or not teacher_id:
         return False
+
+    cache = st.session_state.setdefault("_premium_permission_cache", {})
+    cache_key = (str(school_id), str(teacher_id), "subject_wise_premium_teacher")
+    cached = cache.get(cache_key)
+    if cached and (time.time() - cached[0]) < 10:
+        return cached[1]
+
     try:
         query_result = (
             sb.table("premium_feature_access")
@@ -14192,7 +14211,9 @@ def subject_wise_teacher_premium_enabled(school_id, teacher_id):
             .execute()
         )
         row = getattr(query_result, "data", None) if query_result is not None else None
-        return bool(row and row.get("active") is True)
+        value = bool(row and row.get("active") is True)
+        cache[cache_key] = (time.time(), value)
+        return value
     except Exception:
         return False
 
