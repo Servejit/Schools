@@ -136,6 +136,45 @@ using (
     )
 );
 
+-- Teacher Premium visibility is checked through a SECURITY DEFINER RPC.
+-- The function only exposes the authenticated Teacher/Admin+Teacher's own
+-- active permission row and does not grant permission to modify Premium.
+create or replace function public.teacher_premium_feature_enabled(
+    p_school_id uuid,
+    p_feature_key text
+)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $
+    select exists (
+        select 1
+        from public.profiles p
+        join public.premium_feature_access f
+          on f.school_id = p.school_id
+         and f.admin_id = p.id
+         and f.feature_key = p_feature_key
+         and f.active = true
+        where p.id = auth.uid()
+          and p.school_id = p_school_id
+          and p.active = true
+          and p.role in ('Teacher', 'Admin+Teacher')
+          and p_feature_key in (
+              'subject_wise_premium_teacher',
+              'school_academic_status_teacher'
+          )
+    );
+$;
+
+revoke all on function public.teacher_premium_feature_enabled(uuid, text)
+from public;
+
+grant execute on function public.teacher_premium_feature_enabled(uuid, text)
+to authenticated;
+
+
 create or replace function public.parent_student_subject_wise_premium_enabled(
     p_school_id uuid
 )
