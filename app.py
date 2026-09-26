@@ -13627,11 +13627,8 @@ def premium_feature_management():
             )
             return
 
-        st.header("💎 Premium Features")
-        st.subheader("👨‍👩‍👧 Parent / Student Access")
+        st.header("💎 Teachers/Parents/Students Access")
 
-        # Parent/Student Report Card permission is a separate Admin-controlled
-        # school feature. Parents see linked children; Students see only their own record.
         st.markdown("""
         <style>
         div.stButton:has(button[aria-label*="🔵"]) button { background-color:#2563eb !important; border-color:#2563eb !important; color:white !important; }
@@ -13643,11 +13640,6 @@ def premium_feature_management():
         # -------------------------------------------------
         st.divider()
         st.subheader("👨‍🏫 School Academic Status — Teacher Access")
-        st.caption(
-            "One setting applies to ALL active Teachers and Admin+Teacher accounts "
-            "in this school. No teacher-by-teacher selection is required."
-        )
-
         try:
             teacher_rows = (
                 sb.table("profiles")
@@ -13793,20 +13785,10 @@ def premium_feature_management():
         """, unsafe_allow_html=True)
 
         st.subheader("📚 Subject-wise Premium Access")
-        st.caption(
-            "Parent/Student access and Teacher access are separate permissions. "
-            "Changing one does not change the other."
-        )
-
         # -------------------------------------------------
         # TEACHER ACCESS — ONE SETTING FOR ALL TEACHERS
         # -------------------------------------------------
         st.markdown("#### 👨‍🏫 Teacher Access")
-        st.caption(
-            "One setting applies to ALL active Teachers and Admin+Teacher accounts "
-            "in this school. No teacher-by-teacher selection is required."
-        )
-
         try:
             teacher_rows = (
                 sb.table("profiles")
@@ -13937,7 +13919,7 @@ def premium_feature_management():
 
         # PARENT / STUDENT ACCESS
         # -------------------------------------------------
-        st.markdown("#### 👨‍👩‍👧 Parent & Student Access")
+        st.markdown("#### 👨‍👩‍👧 Subject-wise Premium — Parents & Students")
         feature_key = "subject_wise_premium_parent_student"
         try:
             existing = (
@@ -14003,7 +13985,7 @@ def premium_feature_management():
                 )
                 st.code(str(e))
 
-        st.subheader("📄 Parent / Student Report Card Access")
+        st.subheader("📄 Report Card — Parents & Students")
         report_card_feature_key = "parent_report_card"
         try:
             report_existing = (
