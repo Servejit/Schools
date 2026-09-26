@@ -95,14 +95,20 @@ function json(data: unknown, status = 200) {
 
     const callerRole = String(callerProfile.role ?? "").trim();
 
-    // Only SuperAdmin and Admin may use Create-User.
+    // User creation permissions:
+    // - SuperAdmin: all allowed roles, any active school.
+    // - Admin: all allowed roles, own school.
+    // - Admin+Teacher: all allowed roles, own school.
+    // - Teacher: NO user creation unless the Teacher is an active Class Teacher
+    //   for the exact class being supplied below; then Student/Parent only.
     if (
       callerRole !== "SuperAdmin" &&
       callerRole !== "Admin" &&
-      callerRole !== "Admin+Teacher"
+      callerRole !== "Admin+Teacher" &&
+      callerRole !== "Teacher"
     ) {
       return json(
-        { error: "Only an active SuperAdmin or Admin can create users." },
+        { error: "You do not have permission to create users." },
         403,
       );
     }
@@ -114,6 +120,7 @@ function json(data: unknown, status = 200) {
     const fullName = String(body?.full_name ?? "").trim();
     const requestedRole = String(body?.role ?? "").trim();
     const requestedSchoolId = String(body?.school_id ?? "").trim();
+    const requestedClassId = String(body?.class_id ?? "").trim();
 
     if (!email || !password || !fullName || !requestedRole || !requestedSchoolId) {
       return json(
@@ -156,41 +163,53 @@ function json(data: unknown, status = 200) {
       );
     }
 
-    // Only SuperAdmin/Admin may assign the Admin+Teacher role.
-    // Admin+Teacher users may still create other normal users, but they
-    // cannot create or promote another user to Admin+Teacher.
-    if (requestedRole === "Admin+Teacher" &&
-        callerRole !== "SuperAdmin" &&
-        callerRole !== "Admin") {
-      return json(
-        { error: "Only an active SuperAdmin or Admin can assign the Admin+Teacher role." },
-        403,
-      );
-    }
-
-    // SuperAdmin can create unlimited Admin+Teacher users.
-    // Each Admin can create/own at most 2 ACTIVE Admin+Teacher users
-    // in that Admin's own school.
-    if (requestedRole === "Admin+Teacher" && callerRole === "Admin") {
-      const { count: hybridCount, error: hybridCountError } = await adminClient
-        .from("profiles")
-        .select("id", { count: "exact", head: true })
-        .eq("school_id", requestedSchoolId)
-        .eq("role", "Admin+Teacher")
-        .eq("active", true)
-        .eq("admin_teacher_created_by", caller.id);
-
-      if (hybridCountError) {
+    // A normal Teacher cannot create users.
+    // Only a Teacher who is currently assigned as Class Teacher to the
+    // exact selected class may create Student/Parent users for that class.
+    if (callerRole === "Teacher") {
+      if (requestedRole !== "Student" && requestedRole !== "Parent") {
         return json(
-          { error: "Could not verify your Admin + Teacher limit.", details: hybridCountError.message },
+          { error: "A Teacher can create users only when they are the Class Teacher, and only for Student or Parent roles." },
+          403,
+        );
+      }
+
+      if (
+        String(callerProfile.school_id ?? "") !== requestedSchoolId
+      ) {
+        return json(
+          { error: "Class Teacher can create users only in their own school." },
+          403,
+        );
+      }
+
+      if (!requestedClassId) {
+        return json(
+          { error: "Select your assigned Class Teacher class." },
+          403,
+        );
+      }
+
+      const { data: assignedClass, error: classError } = await adminClient
+        .from("classes")
+        .select("id,school_id,class_name,section,active,class_teacher_id")
+        .eq("id", requestedClassId)
+        .eq("school_id", requestedSchoolId)
+        .eq("class_teacher_id", caller.id)
+        .eq("active", true)
+        .maybeSingle();
+
+      if (classError) {
+        return json(
+          { error: "Could not verify your Class Teacher assignment.", details: classError.message },
           500,
         );
       }
 
-      if ((hybridCount ?? 0) >= 2) {
+      if (!assignedClass) {
         return json(
-          { error: "This Admin can have only 2 active Admin+Teacher users in this school." },
-          400,
+          { error: "Only the Class Teacher can create Student or Parent users for this class." },
+          403,
         );
       }
     }
