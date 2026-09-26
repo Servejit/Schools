@@ -16504,13 +16504,7 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # One outer box containing all functions; each function remains a
-    # compact selectable area inside the same box.
-    st.markdown(
-        '<div class="dashboard-functions-box">',
-        unsafe_allow_html=True
-    )
-
+    # Two equal columns with each function shown as its own bar.
     for row_start in range(0, len(options), 2):
         cols = st.columns(2, gap="small")
         for offset, col in enumerate(cols):
@@ -16529,7 +16523,6 @@ def dashboard_menu_2col(title, options, key):
                         st.session_state[key] = name
                         st.rerun()
 
-    st.markdown("</div>", unsafe_allow_html=True)
 
     _enable_dashboard_long_press()
 
