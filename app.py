@@ -16458,13 +16458,7 @@ def open_dashboard_function_window(function_name, profile):
 
 
 def dashboard_menu_2col(title, options, key):
-    """Render dashboard functions as professional horizontal bars.
-
-    Only one function is active at a time. When a different function is
-    selected, it becomes the active function and opens in the single
-    professional function window. This avoids multiple functions being
-    active at once while preserving the existing horizontal-bar layout.
-    """
+    """Render one-active-function dashboard navigation as professional bars."""
     if not options:
         return None
 
@@ -16473,9 +16467,7 @@ def dashboard_menu_2col(title, options, key):
         current = options[0]
         st.session_state[key] = current
 
-    # If a function window is already requested for this menu, do not render
-    # another dashboard function underneath it. The caller will open the
-    # window immediately after the menu returns.
+    # If another function is already open, keep exactly that one active.
     pending_window = st.session_state.get("_dashboard_open_function")
     if (
         isinstance(pending_window, dict)
@@ -16489,49 +16481,42 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
+    # Two balanced columns, but only ONE function can be visually active.
     left_options = options[::2]
     right_options = options[1::2]
-
-    left_index = left_options.index(current) if current in left_options else 0
-    right_index = right_options.index(current) if current in right_options else 0
-
     col1, col2 = st.columns(2, gap="small")
 
-    with col1:
-        left_selected = st.radio(
-            "",
-            left_options,
-            index=left_index,
-            key=f"{key}_left",
-            label_visibility="collapsed"
+    def render_function_button(container, function_name, position):
+        with container:
+            if st.button(
+                function_name,
+                key=f"{key}_function_{position}",
+                type="primary" if function_name == current else "secondary",
+                use_container_width=True
+            ):
+                if function_name != current:
+                    st.session_state[key] = function_name
+                    st.session_state["_dashboard_open_function"] = {
+                        "key": key,
+                        "function": function_name
+                    }
+                    return "__DASHBOARD_FUNCTION_WINDOW__"
+        return None
+
+    for i in range(max(len(left_options), len(right_options))):
+        left_result = (
+            render_function_button(col1, left_options[i], f"L{i}")
+            if i < len(left_options) else None
+        )
+        right_result = (
+            render_function_button(col2, right_options[i], f"R{i}")
+            if i < len(right_options) else None
         )
 
-    with col2:
-        right_selected = st.radio(
-            "",
-            right_options,
-            index=right_index,
-            key=f"{key}_right",
-            label_visibility="collapsed"
-        )
+        if left_result or right_result:
+            return "__DASHBOARD_FUNCTION_WINDOW__"
 
-    selected = current
-    if left_selected != current:
-        selected = left_selected
-    elif right_selected != current:
-        selected = right_selected
-
-    if selected != current:
-        st.session_state[key] = selected
-        st.session_state["_dashboard_open_function"] = {
-            "key": key,
-            "function": selected
-        }
-        return "__DASHBOARD_FUNCTION_WINDOW__"
-
-    return selected
-
-
+    return current
 def dashboard():
 
     # Reset dashboard-specific selections whenever the user changes dashboard.
