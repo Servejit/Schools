@@ -45,6 +45,15 @@ using (
                   and p.id = premium_feature_access.admin_id
                   and p.school_id = premium_feature_access.school_id
               )
+              or (
+                  p.role in ('Teacher', 'Admin+Teacher')
+                  and p.id = premium_feature_access.admin_id
+                  and p.school_id = premium_feature_access.school_id
+                  and premium_feature_access.feature_key in (
+                      'subject_wise_premium_teacher',
+                      'school_academic_status_teacher'
+                  )
+              )
           )
     )
 );
