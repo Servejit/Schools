@@ -16325,7 +16325,7 @@ def class_teacher_notices(profile):
                             st.code(str(e))
 
 def dashboard_menu_2col(title, options, key):
-    """Render dashboard functions as compact circular-icon tabs in two columns."""
+    """Render dashboard functions in a fixed 2-column compact grid."""
     if not options:
         return None
 
@@ -16339,43 +16339,35 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # Clean circular icon sequence. The actual option value is kept unchanged
-    # so all existing dashboard logic continues to work.
-    circle_colors = [
-        "🟠", "🟣", "🔴", "🟢", "🔵", "🟡",
-        "🟠", "🟣", "🔴", "🟢", "🔵", "🟡",
-        "🟠", "🟣", "🔴", "🟢"
-    ]
-
+    # IMPORTANT: create one explicit row for every pair.
+    # This guarantees left/right placement instead of a single vertical list.
     for row_start in range(0, len(options), 2):
-        row_cols = st.columns([1, 1], gap="small")
+        left = options[row_start]
+        right = options[row_start + 1] if row_start + 1 < len(options) else None
 
-        for col_index in range(2):
-            option_index = row_start + col_index
-            if option_index >= len(options):
-                continue
+        col1, col2 = st.columns([1, 1], gap="small")
 
-            option = options[option_index]
+        with col1:
+            left_selected = left == current
+            if st.button(
+                f"🟠 {left}",
+                key=f"{key}_button_{row_start}",
+                use_container_width=True,
+                type="primary" if left_selected else "secondary"
+            ):
+                st.session_state[key] = left
+                st.rerun()
 
-            # Remove the old navigation emoji from the display only.
-            # Existing option strings remain unchanged for menu processing.
-            display_name = option
-            if " " in option:
-                first, rest = option.split(" ", 1)
-                if any(ord(ch) > 0x1F000 for ch in first):
-                    display_name = rest
-
-            label = f"{circle_colors[option_index]} {display_name}"
-
-            with row_cols[col_index]:
-                is_selected = option == current
+        with col2:
+            if right is not None:
+                right_selected = right == current
                 if st.button(
-                    label,
-                    key=f"{key}_button_{option_index}",
+                    f"🟣 {right}",
+                    key=f"{key}_button_{row_start + 1}",
                     use_container_width=True,
-                    type="primary" if is_selected else "secondary"
+                    type="primary" if right_selected else "secondary"
                 ):
-                    st.session_state[key] = option
+                    st.session_state[key] = right
                     st.rerun()
 
     return st.session_state.get(key)
