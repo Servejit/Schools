@@ -16504,8 +16504,13 @@ def dashboard_menu_2col(title, options, key):
         unsafe_allow_html=True
     )
 
-    # Two equal columns. Functions stay in the exact list order,
-    # left-to-right and then top-to-bottom.
+    # One outer box containing all functions; each function remains a
+    # compact selectable area inside the same box.
+    st.markdown(
+        '<div class="dashboard-functions-box">',
+        unsafe_allow_html=True
+    )
+
     for row_start in range(0, len(options), 2):
         cols = st.columns(2, gap="small")
         for offset, col in enumerate(cols):
