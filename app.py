@@ -1201,23 +1201,23 @@ def users():
     with st.expander("➕ Create User", expanded=True):
 
         # SuperAdmin can create users in any active school.
-        # Admin can create users only inside their own school.
-        if get_active_theme_role() in ["Admin", "Admin+Teacher"]:
-            admin_school_id = str(st.session_state.profile.get("school_id") or "")
-            admin_school_label = next(
+        # Admin/Admin+Teacher/Teacher can create users only inside their own school.
+        if get_active_theme_role() in ["Admin", "Admin+Teacher", "Teacher"]:
+            creator_school_id = str(st.session_state.profile.get("school_id") or "")
+            creator_school_label = next(
                 (
                     label for label, sid in school_map.items()
-                    if str(sid) == admin_school_id
+                    if str(sid) == creator_school_id
                 ),
                 None
             )
 
-            if not admin_school_label:
-                st.error("Your Admin account is not linked to an active school.")
+            if not creator_school_label:
+                st.error("Your account is not linked to an active school.")
                 return
 
-            st.info(f"🏫 School: **{admin_school_label}**")
-            selected_school = admin_school_label
+            st.info(f"🏫 School: **{creator_school_label}**")
+            selected_school = creator_school_label
         else:
             selected_school = st.selectbox(
                 "School",
@@ -1234,11 +1234,16 @@ def users():
         )
 
         creator_role = get_active_theme_role()
-        create_role_options = ["Admin", "Teacher", "Student", "Parent"]
 
-        # SuperAdmin, Admin and Admin+Teacher have full user-management authority.
-        if creator_role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
-            create_role_options.insert(1, "Admin+Teacher")
+        # Teacher can create only Parent and Student accounts.
+        # SuperAdmin, Admin and Admin+Teacher can create all non-SuperAdmin roles.
+        if creator_role == "Teacher":
+            create_role_options = ["Student", "Parent"]
+        else:
+            create_role_options = ["Admin", "Teacher", "Student", "Parent"]
+
+            if creator_role in ["SuperAdmin", "Admin", "Admin+Teacher"]:
+                create_role_options.insert(1, "Admin+Teacher")
 
         role = st.selectbox(
             "Role",
@@ -1272,6 +1277,12 @@ def users():
 
             if not token:
                 st.error("Session expired. Logout and login again.")
+                return
+
+            # Teacher is restricted to creating Parent and Student accounts.
+            # This is enforced again at submission time, not only in the dropdown.
+            if creator_role == "Teacher" and role not in ["Student", "Parent"]:
+                st.error("Teacher can create only Student or Parent users.")
                 return
 
             # SuperAdmin, Admin and Admin+Teacher can assign the Admin+Teacher role.
@@ -1332,6 +1343,11 @@ def users():
                 st.error("Could not connect to Create-User.")
                 st.code(str(e))
 
+    # Teacher user management is intentionally creation-only.
+    # Teachers must not receive existing-user activate/deactivate/delete/modify controls.
+    if get_active_theme_role() == "Teacher":
+        return
+
     st.divider()
     st.subheader("📋 Existing Users")
 
@@ -1364,8 +1380,8 @@ def users():
         else:
             user_query = user_query.eq("school_id", "__NO_EXISTING_SCHOOL__")
 
-        # Admin must only load users belonging to their own school.
-        if get_active_theme_role() in ["Admin", "Admin+Teacher"]:
+        # Admin/Admin+Teacher/Teacher must only load users belonging to their own school.
+        if get_active_theme_role() in ["Admin", "Admin+Teacher", "Teacher"]:
             user_query = user_query.eq(
                 "school_id",
                 st.session_state.profile.get("school_id")
@@ -15404,6 +15420,9 @@ def dashboard():
         elif menu == "📝 Exam / Assessment":
             exam_assessment_settings()
 
+        elif menu == "👥 Users":
+            users()
+
         elif menu == "📝 Marks":
             bulk_marks()
 
@@ -15645,6 +15664,7 @@ def dashboard():
             "Teacher Menu",
             [
                 "🎓 Students",
+                "👥 Users",
                 "📝 Marks",
                 "📅 Attendance",
                 "📢 Notices",
