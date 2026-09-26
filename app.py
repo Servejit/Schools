@@ -16234,9 +16234,19 @@ def dashboard():
         # -------------------------------------------------
         # QUICK USER SEARCH ON TEACHER DASHBOARD
         # -------------------------------------------------
-        # Keep a searchable dropdown directly on the dashboard so a Class
-        # Teacher can find their class students/parents without first opening
-        # the Users menu.  The actual permission checks remain inside users().
+        # This input is intentionally outside the data-loading try/except so
+        # it is ALWAYS visible on the Teacher Dashboard, even if a database
+        # query temporarily fails or no users have been linked yet.
+        st.subheader("🔎 Search Class Users")
+        dashboard_user_search = st.text_input(
+            "Search Student / Parent",
+            placeholder="Type name, email, class, section, admission no. or roll no.",
+            key="teacher_dashboard_user_search_text"
+        ).strip().lower()
+
+        # Keep the actual searchable dropdown below the search box. Visibility
+        # and permissions are separate: only users from the Class Teacher's
+        # assigned class(es) are added to its options.
         try:
             quick_allowed_classes = {
                 (
@@ -16339,27 +16349,49 @@ def dashboard():
                 )
                 quick_user_map[label] = u
 
-            if quick_user_map:
-                st.subheader("🔎 Search Class Users")
+            # Filter the dropdown from the text typed above.
+            dashboard_search_users = quick_users
+            if dashboard_user_search:
+                dashboard_search_users = [
+                    u for u in quick_users
+                    if dashboard_user_search in " ".join([
+                        str(u.get("full_name") or ""),
+                        str(u.get("email") or ""),
+                        str(u.get("role") or "")
+                    ]).lower()
+                ]
+
+            dashboard_user_map = {}
+            for u in dashboard_search_users:
+                label = (
+                    f"{u.get('full_name') or 'User'}"
+                    f" — {u.get('email') or '-'}"
+                    f" — {u.get('role') or '-'}"
+                )
+                dashboard_user_map[label] = u
+
+            if dashboard_user_map:
                 quick_selected = st.selectbox(
-                    "Search / Select Student or Parent",
-                    list(quick_user_map.keys()),
+                    "👥 Select matching user",
+                    list(dashboard_user_map.keys()),
                     index=None,
-                    placeholder=(
-                        "Type a name, email or role — matching users "
-                        "will appear in the dropdown"
-                    ),
-                    key="teacher_dashboard_user_search"
+                    placeholder="Matching users will appear here",
+                    key="teacher_dashboard_user_dropdown"
                 )
 
                 if quick_selected:
                     st.session_state["dashboard_selected_user_id"] = (
-                        quick_user_map[quick_selected].get("id")
+                        dashboard_user_map[quick_selected].get("id")
                     )
                     st.caption(
                         "Selected user. Open 👥 Users below to manage this account "
                         "according to your Class Teacher permissions."
                     )
+            elif dashboard_user_search:
+                st.info("No matching Student / Parent found in your assigned class.")
+            elif not quick_user_map:
+                st.info("No Student / Parent users are currently available for your assigned class.")
+
         except Exception:
             # Dashboard search must never stop the normal Teacher dashboard.
             pass
