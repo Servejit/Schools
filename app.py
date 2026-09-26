@@ -16231,6 +16231,139 @@ def dashboard():
                 "No class has been assigned to you as Class Teacher yet."
             )
 
+        # -------------------------------------------------
+        # QUICK USER SEARCH ON TEACHER DASHBOARD
+        # -------------------------------------------------
+        # Keep a searchable dropdown directly on the dashboard so a Class
+        # Teacher can find their class students/parents without first opening
+        # the Users menu.  The actual permission checks remain inside users().
+        try:
+            quick_allowed_classes = {
+                (
+                    str(x.get("class_name") or "").strip().lower(),
+                    str(x.get("section") or "").strip().lower()
+                )
+                for x in teacher_class_rows
+            }
+
+            quick_students = (
+                sb.table("students")
+                .select(
+                    "id,user_id,name,class_name,section,admission_no,roll_no,"
+                    "school_id,active"
+                )
+                .eq("school_id", profile.get("school_id"))
+                .eq("active", True)
+                .execute()
+                .data or []
+            )
+            quick_students = [
+                s for s in quick_students
+                if (
+                    str(s.get("class_name") or "").strip().lower(),
+                    str(s.get("section") or "").strip().lower()
+                ) in quick_allowed_classes
+            ]
+
+            quick_student_ids = [
+                str(s.get("id"))
+                for s in quick_students
+                if s.get("id")
+            ]
+            quick_student_user_ids = {
+                str(s.get("user_id"))
+                for s in quick_students
+                if s.get("user_id")
+            }
+
+            quick_parent_ids = set()
+            if quick_student_ids:
+                quick_links = (
+                    sb.table("parent_student_links")
+                    .select("parent_id,student_id")
+                    .in_("student_id", quick_student_ids)
+                    .execute()
+                    .data or []
+                )
+                quick_parent_ids = {
+                    str(x.get("parent_id"))
+                    for x in quick_links
+                    if x.get("parent_id")
+                }
+
+            quick_profiles = (
+                sb.table("profiles")
+                .select("id,full_name,email,role,school_id,active")
+                .eq("school_id", profile.get("school_id"))
+                .eq("active", True)
+                .in_(
+                    "role",
+                    ["Student", "Parent"]
+                )
+                .execute()
+                .data or []
+            )
+
+            quick_allowed_user_ids = (
+                quick_student_user_ids | quick_parent_ids
+            )
+
+            quick_users = [
+                u for u in quick_profiles
+                if str(u.get("id") or "") in quick_allowed_user_ids
+            ]
+
+            # Fallback for older Student records whose students.user_id is
+            # still empty: match the Student profile to the class record by
+            # name, consistent with User Management.
+            quick_student_names = {
+                str(s.get("name") or "").strip().lower()
+                for s in quick_students
+                if str(s.get("name") or "").strip()
+            }
+            if quick_student_names:
+                for u in quick_profiles:
+                    if (
+                        u.get("role") == "Student"
+                        and str(u.get("full_name") or "").strip().lower()
+                        in quick_student_names
+                    ):
+                        quick_users.append(u)
+
+            quick_user_map = {}
+            for u in quick_users:
+                label = (
+                    f"{u.get('full_name') or 'User'}"
+                    f" — {u.get('email') or '-'}"
+                    f" — {u.get('role') or '-'}"
+                )
+                quick_user_map[label] = u
+
+            if quick_user_map:
+                st.subheader("🔎 Search Class Users")
+                quick_selected = st.selectbox(
+                    "Search / Select Student or Parent",
+                    list(quick_user_map.keys()),
+                    index=None,
+                    placeholder=(
+                        "Type a name, email or role — matching users "
+                        "will appear in the dropdown"
+                    ),
+                    key="teacher_dashboard_user_search"
+                )
+
+                if quick_selected:
+                    st.session_state["dashboard_selected_user_id"] = (
+                        quick_user_map[quick_selected].get("id")
+                    )
+                    st.caption(
+                        "Selected user. Open 👥 Users below to manage this account "
+                        "according to your Class Teacher permissions."
+                    )
+        except Exception:
+            # Dashboard search must never stop the normal Teacher dashboard.
+            pass
+
         # User Management is visible in the Teacher dashboard.
         # Actual user-management permissions remain restricted inside users():
         # only an active Class Teacher can manage Student/Parent users for
@@ -16249,7 +16382,8 @@ def dashboard():
         menu = st.radio(
             "Teacher Menu",
             teacher_menu_options,
-            horizontal=True
+            horizontal=True,
+            key="teacher_dashboard_menu"
         )
 
         if menu == "🎓 Students":
