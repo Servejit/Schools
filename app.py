@@ -13788,7 +13788,7 @@ def premium_feature_management():
         # -------------------------------------------------
         # TEACHER ACCESS — ONE SETTING FOR ALL TEACHERS
         # -------------------------------------------------
-        st.markdown("#### 👨‍🏫 Teacher Access")
+        st.subheader("👨‍🏫 Subject-wise Premium — Teacher Access")
         try:
             teacher_rows = (
                 sb.table("profiles")
@@ -13919,7 +13919,8 @@ def premium_feature_management():
 
         # PARENT / STUDENT ACCESS
         # -------------------------------------------------
-        st.markdown("#### 👨‍👩‍👧 Subject-wise Premium — Parents & Students")
+        st.divider()
+        st.subheader("👨‍👩‍👧 Subject-wise Premium — Parents & Students")
         feature_key = "subject_wise_premium_parent_student"
         try:
             existing = (
@@ -13985,6 +13986,7 @@ def premium_feature_management():
                 )
                 st.code(str(e))
 
+        st.divider()
         st.subheader("📄 Report Card — Parents & Students")
         report_card_feature_key = "parent_report_card"
         try:
