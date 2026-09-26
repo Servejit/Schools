@@ -1644,9 +1644,92 @@ def users():
     # Show users only through a dropdown for every management role,
     # including SuperAdmin. A search box helps find a user without
     # displaying the complete list on the page.
+    # Build extra search information without changing the visibility
+    # permissions already applied above.  Class Teachers still search only
+    # inside their own permitted Student/Parent users.
+    search_details = {}
+
+    try:
+        search_school_ids = sorted({
+            str(u.get("school_id"))
+            for u in filtered_users
+            if u.get("school_id")
+        })
+
+        if search_school_ids:
+            search_students = (
+                sb.table("students")
+                .select(
+                    "id,user_id,name,admission_no,roll_no,"
+                    "class_name,section,school_id,active"
+                )
+                .in_("school_id", search_school_ids)
+                .execute()
+                .data or []
+            )
+
+            for s in search_students:
+                uid = str(s.get("user_id") or "")
+                if not uid:
+                    continue
+
+                details = search_details.setdefault(uid, [])
+                details.append(
+                    " ".join([
+                        str(s.get("name") or ""),
+                        str(s.get("admission_no") or ""),
+                        str(s.get("roll_no") or ""),
+                        str(s.get("class_name") or ""),
+                        str(s.get("section") or ""),
+                    ])
+                )
+
+            # A Parent may be linked to one or more students.  Include the
+            # linked children's class/section/admission/roll in the parent's
+            # searchable text as well.
+            student_by_id = {
+                str(s.get("id")): s
+                for s in search_students
+                if s.get("id")
+            }
+
+            parent_links = (
+                sb.table("parent_student_links")
+                .select("parent_id,student_id")
+                .in_(
+                    "student_id",
+                    list(student_by_id.keys())
+                )
+                .execute()
+                .data or []
+            )
+
+            for link in parent_links:
+                parent_id = str(link.get("parent_id") or "")
+                student = student_by_id.get(
+                    str(link.get("student_id") or "")
+                )
+                if not parent_id or not student:
+                    continue
+
+                details = search_details.setdefault(parent_id, [])
+                details.append(
+                    " ".join([
+                        str(student.get("name") or ""),
+                        str(student.get("admission_no") or ""),
+                        str(student.get("roll_no") or ""),
+                        str(student.get("class_name") or ""),
+                        str(student.get("section") or ""),
+                    ])
+                )
+    except Exception:
+        # Search enhancement must never block the existing User Management
+        # screen if optional student/link data is unavailable.
+        search_details = {}
+
     user_search = st.text_input(
         "🔎 Search User",
-        placeholder="Search by name, email or role",
+        placeholder="Search name, email, role, class, section, admission no. or roll no.",
         key="users_search"
     ).strip().lower()
 
@@ -1655,9 +1738,14 @@ def users():
     if user_search:
         searchable_users = [
             u for u in filtered_users
-            if user_search in str(u.get("full_name") or "").lower()
-            or user_search in str(u.get("email") or "").lower()
-            or user_search in str(u.get("role") or "").lower()
+            if (
+                user_search in str(u.get("full_name") or "").lower()
+                or user_search in str(u.get("email") or "").lower()
+                or user_search in str(u.get("role") or "").lower()
+                or user_search in " ".join(
+                    search_details.get(str(u.get("id") or ""), [])
+                ).lower()
+            )
         ]
 
     search_user_labels = {}
