@@ -6529,17 +6529,43 @@ def attendance():
             )
             class_id_by_pair[pair] = row.get("id")
 
+    # Total Days is common for the selected exam/class. Enter it once.
+    existing_totals = [
+        int(x.get("total_days") or 0)
+        for x in existing_by_student.values()
+        if x.get("total_days") is not None
+    ]
+    default_total_days = existing_totals[0] if existing_totals else 0
+    if existing_totals:
+        # If older data contains different totals, use the most common value
+        # as the starting value; saving will normalize all selected students.
+        counts = {}
+        for value in existing_totals:
+            counts[value] = counts.get(value, 0) + 1
+        default_total_days = max(counts, key=counts.get)
+
     st.caption(
-        "Enter Total Days and Present Days for this exam. "
+        "Total Days is common for this exam. Enter it once; only Present Days is entered separately for each student. "
         "Attendance % is calculated automatically."
     )
+    total_days = st.number_input(
+        "Total Days for this Exam",
+        min_value=0,
+        max_value=366,
+        value=min(max(int(default_total_days), 0), 366),
+        step=1,
+        key=f"attendance_total_exam_{exam_name}"
+    )
+
+    if len(set(existing_totals)) > 1:
+        st.info("Existing records had different Total Days. The value above will be applied uniformly when you save.")
 
     entries = []
     for student in students_data:
         sid = str(student["id"])
         old = existing_by_student.get(sid, {})
-        old_total = int(old.get("total_days") or 0)
         old_present = int(old.get("present_days") or 0)
+        safe_present = min(old_present, int(total_days))
 
         c1, c2, c3 = st.columns([2.2, 1, 1])
         with c1:
@@ -6548,20 +6574,13 @@ def attendance():
                 f" | Adm: {student.get('admission_no') or '-'}"
             )
         with c2:
-            total_days = st.number_input(
-                "Total Days",
-                min_value=0,
-                max_value=366,
-                value=old_total,
-                step=1,
-                key=f"attendance_total_{exam_name}_{sid}"
-            )
+            st.write(f"**Total Days:** {int(total_days)}")
         with c3:
             present_days = st.number_input(
                 "Present Days",
                 min_value=0,
-                max_value=366,
-                value=min(old_present, int(total_days)),
+                max_value=int(total_days) if int(total_days) > 0 else 0,
+                value=safe_present,
                 step=1,
                 key=f"attendance_present_{exam_name}_{sid}"
             )
@@ -6582,7 +6601,7 @@ def attendance():
             "total_days": int(total_days),
             "present_days": int(present_days),
             "old_id": old.get("id"),
-            "old_total": old_total,
+            "old_total": int(old.get("total_days") or 0),
             "old_present": old_present
         })
 
