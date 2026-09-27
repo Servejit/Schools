@@ -12322,105 +12322,65 @@ def report_cards():
     # -----------------------------------------------------
 
     def get_student_marks(student):
-
         try:
-
             rows = (
                 sb.table("marks")
                 .select(
-                    "id,student_id,subject_id,"
-                    "exam_name,marks,max_marks,class_id"
+                    "id,student_id,subject_id,exam_name,marks,max_marks,class_id"
                 )
-                .eq(
-                    "school_id",
-                    school_id
-                )
-                .eq(
-                    "student_id",
-                    student["id"]
-                )
-                .in_(
-                    "exam_name",
-                    exam_name
-                )
+                .eq("school_id", school_id)
+                .eq("student_id", student["id"])
+                .in_("exam_name", exam_name)
                 .execute()
                 .data or []
             )
-
         except Exception:
-
             rows = []
 
-        marks_by_subject = {}
-
-        for row in rows:
-            subject_id = row.get("subject_id")
-            if subject_id is not None:
-                marks_by_subject[str(subject_id)] = row
-
-        # Determine the student's class from the class_id used in their marks.
         marked_class_ids = {
             str(row.get("class_id"))
             for row in rows
             if row.get("class_id") is not None
         }
 
+        # Return every selected exam mark. The PDF generator groups them
+        # by Subject + Exam so no exam's marks overwrite another exam.
         result = []
-
-        for subject in subject_data:
-
-            subject_id = str(subject.get("id"))
-
-            # If marks contain a class_id, show all active subjects
-            # belonging to that class. Otherwise use only subjects
-            # that actually have a mark for this student.
-            if marked_class_ids:
-                if str(subject.get("class_id")) not in marked_class_ids:
-                    continue
-            elif subject_id not in marks_by_subject:
+        for row in rows:
+            subject = subject_by_id.get(str(row.get("subject_id")))
+            if not subject:
                 continue
 
-            row = marks_by_subject.get(subject_id)
+            if marked_class_ids and str(subject.get("class_id")) not in marked_class_ids:
+                continue
 
-            if row:
-                combined = dict(row)
-            else:
-                combined = {
-                    "id": None,
-                    "student_id": student["id"],
-                    "subject_id": subject.get("id"),
-                    "exam_name": row.get("exam_name") or (exam_name[0] if exam_name else ""),
-                    "marks": None,
-                    "max_marks": subject.get("max_marks"),
-                    "class_id": subject.get("class_id")
-                }
-
+            combined = dict(row)
             combined["subject_name"] = (
                 subject.get("subject_name")
                 or subject.get("name")
                 or "Subject"
             )
-
             combined["passing_marks"] = (
                 subject.get("passing_marks")
                 if subject.get("passing_marks") is not None
                 else 33
             )
-
             if combined.get("max_marks") is None:
                 combined["max_marks"] = (
                     subject.get("max_marks")
                     if subject.get("max_marks") is not None
                     else 100
                 )
-
             result.append(combined)
-        result.sort(
-            key=lambda x: str(
-                x.get("subject_name") or ""
-            ).lower()
-        )
 
+        result.sort(
+            key=lambda x: (
+                str(x.get("subject_name") or "").lower(),
+                exam_name.index(str(x.get("exam_name") or ""))
+                if str(x.get("exam_name") or "") in exam_name
+                else 999
+            )
+        )
         return result
 
     # -----------------------------------------------------
@@ -12438,7 +12398,7 @@ def report_cards():
             st.warning(
                 f"No marks found for "
                 f"{selected_student.get('name')} "
-                f"for {exam_name}."
+                f"for the selected exam(s)."
             )
 
         else:
@@ -12766,8 +12726,7 @@ def report_cards():
         return False
     return False
 
-
-def parent_report_cards_view(school_id, parent_user_id):
+nt_report_cards_view(school_id, parent_user_id):
     """Show report cards only for students linked to this Parent."""
     st.header("📄 My Child's Report Cards")
 
