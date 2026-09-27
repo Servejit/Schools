@@ -3213,6 +3213,7 @@ def exam_assessment_settings():
                             .execute()
                         )
                         st.success("Exam / Assessment deleted successfully.")
+                        _clear_session_cache("exam_assessments|")
                         st.rerun()
                     except Exception as e:
                         st.error("Could not delete Exam / Assessment.")
@@ -6338,7 +6339,7 @@ def bulk_marks():
         f"| Passing Marks: **{passing_marks:.2f}**"
     )
 
-    exam_options = get_exam_assessments(school_id)
+    exam_options = get_exam_assessments_cached(school_id)
     if not exam_options:
         st.warning("No Exam / Assessment has been created by Admin yet.")
         return
@@ -6642,7 +6643,7 @@ def attendance():
     if not school_id:
         return
 
-    exam_options = get_exam_assessments(school_id)
+    exam_options = get_exam_assessments_cached(school_id)
     exam_names = [
         str(x.get("name") or "").strip()
         for x in exam_options
@@ -6857,8 +6858,7 @@ def attendance():
         key=save_key,
     ):
         try:
-            conflicts = []
-            changed = 0
+            changed_rows = []
 
             for entry in entries:
                 total_days = entry["total_days"]
@@ -6868,71 +6868,42 @@ def attendance():
                     st.error("Present Days cannot be greater than Total Days.")
                     return
 
-                old_id = entry["old_id"]
-                if old_id:
-                    if (
-                        entry["old_total"] == total_days
-                        and entry["old_present"] == present_days
-                    ):
-                        continue
+                if (
+                    entry["old_id"]
+                    and entry["old_total"] == total_days
+                    and entry["old_present"] == present_days
+                ):
+                    continue
 
-                    result = (
-                        sb.table("exam_attendance")
-                        .update({
-                            "total_days": total_days,
-                            "present_days": present_days,
-                            "class_id": entry["class_id"]
-                        })
-                        .eq("id", old_id)
-                        .eq("school_id", school_id)
-                        .eq("student_id", entry["student_id"])
-                        .eq("exam_name", exam_name)
-                        .eq("total_days", entry["old_total"])
-                        .eq("present_days", entry["old_present"])
-                        .select("id")
-                        .execute()
-                    )
-                    if not result.data:
-                        conflicts.append(
-                            f"Student ID {entry['student_id']}: "
-                            "attendance was changed by another user."
-                        )
-                    else:
-                        changed += 1
-                else:
-                    (
-                        sb.table("exam_attendance")
-                        .upsert(
-                            {
-                                "school_id": school_id,
-                                "student_id": entry["student_id"],
-                                "class_id": entry["class_id"],
-                                "exam_name": exam_name,
-                                "total_days": total_days,
-                                "present_days": present_days
-                            },
-                            on_conflict="school_id,student_id,exam_name"
-                        )
-                        .execute()
-                    )
-                    changed += 1
+                changed_rows.append({
+                    "school_id": school_id,
+                    "student_id": entry["student_id"],
+                    "class_id": entry["class_id"],
+                    "exam_name": exam_name,
+                    "total_days": total_days,
+                    "present_days": present_days
+                })
+
+            if not changed_rows:
+                st.info("No attendance changes to save.")
+                return
+
+            # One bulk upsert replaces hundreds of individual INSERT/UPDATE
+            # requests when a class or school has many students.
+            sb.table("exam_attendance").upsert(
+                changed_rows,
+                on_conflict="school_id,student_id,exam_name"
+            ).execute()
 
             cache = st.session_state.get("_exam_attendance_cache", {})
             cache.pop(f"{school_id}|{exam_name}", None)
             st.session_state["_exam_attendance_cache"] = cache
-
-            if conflicts:
-                st.warning(
-                    "Some attendance records were not changed because another "
-                    "user updated them at the same time."
-                )
-                for conflict in conflicts:
-                    st.warning(conflict)
-                return
+            _clear_session_cache()
 
             mark_saved(save_key)
             st.success(
-                f"✅ Attendance saved successfully. {changed} changed record(s)."
+                f"✅ Attendance saved successfully. "
+                f"{len(changed_rows)} record(s) updated."
             )
             st.rerun()
 
@@ -8152,6 +8123,78 @@ def download_storage_file(path):
 
 
 
+def _session_cached(key, loader, ttl_seconds=20):
+    """Small per-user cache for safe, read-mostly Supabase lookups."""
+    now = time.time()
+    cache = st.session_state.setdefault("_supabase_read_cache", {})
+    item = cache.get(key)
+    if item and now - float(item.get("time", 0)) < ttl_seconds:
+        return item.get("value")
+    value = loader()
+    cache[key] = {"time": now, "value": value}
+    return value
+
+
+def _clear_session_cache(prefix=None):
+    cache = st.session_state.get("_supabase_read_cache", {})
+    if prefix is None:
+        cache.clear()
+    else:
+        for key in list(cache):
+            if str(key).startswith(str(prefix)):
+                cache.pop(key, None)
+    st.session_state["_supabase_read_cache"] = cache
+
+
+def get_default_report_card_config(school_id):
+    if not school_id:
+        return {}
+
+    def load():
+        try:
+            rows = (
+                sb.table("print_templates")
+                .select("config_json")
+                .eq("school_id", school_id)
+                .eq("active", True)
+                .execute()
+                .data or []
+            )
+            for row in rows:
+                config = get_template_config(row)
+                if config.get("is_default_report_card"):
+                    return config
+        except Exception:
+            pass
+        return {}
+
+    return _session_cached(
+        f"default_report_card_config|{school_id}",
+        load,
+        ttl_seconds=20
+    )
+
+
+def get_exam_assessments_cached(school_id, active_only=True):
+    if not school_id:
+        return []
+
+    key = f"exam_assessments|{school_id}|{bool(active_only)}"
+
+    def load():
+        try:
+            query = sb.table("exam_assessments").select(
+                "id,school_id,name,active,created_at"
+            ).eq("school_id", school_id).order("name")
+            if active_only:
+                query = query.eq("active", True)
+            return query.execute().data or []
+        except Exception:
+            return []
+
+    return _session_cached(key, load, ttl_seconds=20)
+
+
 def attendance_summary(student_id, school_id, exam_name=None):
     """Return exam-specific attendance with one cached bulk Supabase read."""
     if not student_id or not school_id or not exam_name:
@@ -8203,32 +8246,20 @@ def school_logo_from_template(template):
         or config.get("school_id")
         or (st.session_state.get("profile") or {}).get("school_id")
     )
-    if school_id:
-        try:
-            rows = (
-                sb.table("print_templates")
-                .select("config_json")
-                .eq("school_id", school_id)
-                .eq("active", True)
-                .execute()
-                .data or []
-            )
-            for row in rows:
-                default_config = get_template_config(row)
-                if default_config.get("is_default_report_card"):
-                    value = (
-                        default_config.get("school_logo_data")
-                        or default_config.get("school_logo_path")
-                        or default_config.get("logo_path")
-                        or default_config.get("school_logo")
-                        or default_config.get("logo")
-                    )
-                    if value:
-                        return str(value).strip()
-        except Exception:
-            pass
+    default_config = get_default_report_card_config(school_id)
+    for key in [
+        "school_logo_data",
+        "school_logo_path",
+        "logo_path",
+        "school_logo",
+        "logo"
+    ]:
+        value = default_config.get(key)
+        if value:
+            return str(value).strip()
 
     return None
+
 
 def school_logo_size_from_template(template):
     config = get_template_config(template)
@@ -9105,35 +9136,26 @@ def make_report_card_pdf(
                 school_info.get("id") if school_info else None
             )
             if fallback_school_id:
-                default_rows = (
-                    sb.table("print_templates")
-                    .select("config_json")
-                    .eq("school_id", fallback_school_id)
-                    .eq("active", True)
-                    .execute()
-                    .data or []
+                default_config = get_default_report_card_config(
+                    fallback_school_id
                 )
-                for default_row in default_rows:
-                    default_config = get_template_config(default_row)
-                    if default_config.get("is_default_report_card"):
-                        school_logo_path = (
-                            default_config.get("school_logo_data")
-                            or default_config.get("school_logo_path")
-                            or default_config.get("logo_path")
-                            or default_config.get("school_logo")
-                            or default_config.get("logo")
+                school_logo_path = (
+                    default_config.get("school_logo_data")
+                    or default_config.get("school_logo_path")
+                    or default_config.get("logo_path")
+                    or default_config.get("school_logo")
+                    or default_config.get("logo")
+                )
+                if school_logo_path:
+                    try:
+                        school_logo_size = int(
+                            default_config.get(
+                                "school_logo_size",
+                                school_logo_size
+                            )
                         )
-                        if school_logo_path:
-                            try:
-                                school_logo_size = int(
-                                    default_config.get(
-                                        "school_logo_size",
-                                        school_logo_size
-                                    )
-                                )
-                            except Exception:
-                                pass
-                            break
+                    except Exception:
+                        pass
         except Exception:
             pass
 
