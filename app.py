@@ -610,7 +610,6 @@ def delete_school_all_data(school_id):
         "school_notices",
         "print_templates",
         "exam_result_weights",
-        "exam_result_weight_profiles",
         "exam_assessments",
         "marks",
         "exam_attendance",
@@ -621,6 +620,18 @@ def delete_school_all_data(school_id):
         sb.table(table_name).delete().eq(
             "school_id", school_id
         ).execute()
+
+    # Class-pattern report-card weights were added later, so keep this
+    # cleanup backward-compatible when an older database has not run the SQL yet.
+    try:
+        (
+            sb.table("exam_result_weight_profiles")
+            .delete()
+            .eq("school_id", school_id)
+            .execute()
+        )
+    except Exception:
+        pass
 
     # Remove all student records belonging to this school.
     sb.table("students").delete().eq(
