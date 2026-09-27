@@ -610,6 +610,7 @@ def delete_school_all_data(school_id):
         "school_notices",
         "print_templates",
         "exam_result_weights",
+        "exam_result_weight_profiles",
         "exam_assessments",
         "marks",
         "exam_attendance",
@@ -8496,29 +8497,43 @@ def create_report_overlay(
     elif exam_name:
         selected_exam_names = [str(exam_name).strip()]
     selected_exam_names = list(dict.fromkeys(selected_exam_names))
+    selected_exam_names.sort(key=report_card_exam_sort_key)
 
     school_id_for_weights = str((school_info or {}).get("id") or "").strip()
     exam_weight_by_name = {}
+    exam_term_by_name = {}
     if school_id_for_weights:
         try:
             academic_year_for_weights = get_school_academic_year(
                 school_id_for_weights
             )
-            weight_by_id = get_exam_result_weights(
-                school_id_for_weights,
-                academic_year_for_weights
+            class_group_for_weights = get_report_card_class_group(
+                student.get("class_name")
             )
-            for exam in get_exam_assessments(
+            all_exam_rows = get_exam_assessments(
                 school_id_for_weights,
                 active_only=False
-            ):
+            )
+            weight_by_id = get_exam_result_weights(
+                school_id_for_weights,
+                academic_year_for_weights,
+                class_group=class_group_for_weights
+            )
+            if not weight_by_id:
+                weight_by_id = default_report_card_weights(
+                    all_exam_rows,
+                    class_group_for_weights
+                )
+            for exam in all_exam_rows:
                 name = str(exam.get("name") or "").strip()
                 if name:
                     exam_weight_by_name[name] = float(
                         weight_by_id.get(str(exam.get("id")), 0) or 0
                     )
+                    exam_term_by_name[name] = report_card_exam_term(name)
         except Exception:
             exam_weight_by_name = {}
+            exam_term_by_name = {}
 
     selected_weight_total = sum(
         max(0.0, exam_weight_by_name.get(name, 0.0))
@@ -8650,17 +8665,18 @@ def create_report_overlay(
                     except Exception:
                         pass
             exam_max = max(exam_max_values) if exam_max_values else 0.0
-        heading = (
+        term_label = exam_term_by_name.get(exam, "")
+        exam_text = (
             f"{exam} ({report_display_mark(exam_max)})"
             if exam_max else exam
         )
-        if len(heading) > 22:
-            heading = heading[:21] + "…"
-        pdf.drawCentredString(
-            center,
-            table_top - header_h1 / 2 - 3,
-            heading
-        )
+        if len(exam_text) > 20:
+            exam_text = exam_text[:19] + "…"
+        pdf.setFont("Helvetica-Bold", max(5.4, header_font - 1.0))
+        if term_label:
+            pdf.drawCentredString(center, table_top - 7, term_label)
+        pdf.setFont("Helvetica-Bold", header_font)
+        pdf.drawCentredString(center, table_top - 15, exam_text)
 
         pdf.line(
             cursor + per_exam_width / 2,
@@ -10700,7 +10716,98 @@ def get_school_academic_year(school_id):
     return ""
 
 
-def get_exam_result_weights(school_id, academic_year):
+def get_report_card_class_group(class_name):
+    text_value = str(class_name or "").strip().lower()
+    match = re.search(r"(\\d+)", text_value)
+    if not match:
+        return "1-8"
+    try:
+        grade_number = int(match.group(1))
+    except Exception:
+        return "1-8"
+    return "9-12" if grade_number >= 9 else "1-8"
+
+
+def report_card_exam_term(exam_name):
+    name = str(exam_name or "").strip().lower()
+    if any(token in name for token in ["pt1", "pt-1", "periodic test 1", "unit test 1", "ut1"]):
+        return "Term 1"
+    if any(token in name for token in ["half", "mid term", "mid-term", "midterm", "half yearly"]):
+        return "Term 1"
+    if any(token in name for token in ["pt2", "pt-2", "periodic test 2", "unit test 2", "ut2"]):
+        return "Term 2"
+    if any(token in name for token in ["annual", "yearly", "final exam", "final examination"]):
+        return "Term 2"
+    if any(token in name for token in ["internal", "ia", "assessment"]):
+        return "Internal"
+    return ""
+
+
+def report_card_exam_sort_key(exam_name):
+    name = str(exam_name or "").strip().lower()
+    patterns = [
+        (0, ["pt1", "pt-1", "periodic test 1", "unit test 1", "ut1"]),
+        (1, ["half", "mid term", "mid-term", "midterm", "half yearly"]),
+        (2, ["pt2", "pt-2", "periodic test 2", "unit test 2", "ut2"]),
+        (3, ["annual", "yearly", "final exam", "final examination"]),
+        (4, ["internal", "ia", "assessment"]),
+    ]
+    for order, tokens in patterns:
+        if any(token in name for token in tokens):
+            return (order, name)
+    return (5, name)
+
+
+def default_report_card_weights(exams, class_group):
+    result = {}
+    for exam in exams or []:
+        exam_id = str(exam.get("id") or "")
+        name = str(exam.get("name") or "").strip().lower()
+        weight = 0.0
+        if class_group == "1-8":
+            if any(x in name for x in ["pt1", "pt-1", "periodic test 1", "unit test 1", "ut1"]):
+                weight = 10.0
+            elif any(x in name for x in ["half", "mid term", "mid-term", "midterm", "half yearly"]):
+                weight = 40.0
+            elif any(x in name for x in ["pt2", "pt-2", "periodic test 2", "unit test 2", "ut2"]):
+                weight = 10.0
+            elif any(x in name for x in ["annual", "yearly", "final exam", "final examination"]):
+                weight = 40.0
+        else:
+            if any(x in name for x in ["pt1", "pt-1", "periodic test 1", "unit test 1", "ut1"]):
+                weight = 5.0
+            elif any(x in name for x in ["half", "mid term", "mid-term", "midterm", "half yearly"]):
+                weight = 30.0
+            elif any(x in name for x in ["pt2", "pt-2", "periodic test 2", "unit test 2", "ut2"]):
+                weight = 5.0
+            elif any(x in name for x in ["annual", "yearly", "final exam", "final examination"]):
+                weight = 50.0
+            elif any(x in name for x in ["internal", "ia", "internal assessment"]):
+                weight = 10.0
+        if exam_id:
+            result[exam_id] = weight
+    return result
+
+
+def get_exam_result_weights(school_id, academic_year, class_group=None):
+    try:
+        if class_group:
+            rows = (
+                sb.table("exam_result_weight_profiles")
+                .select("exam_id,weight_percent")
+                .eq("school_id", school_id)
+                .eq("academic_year", academic_year)
+                .eq("class_group", class_group)
+                .execute()
+                .data or []
+            )
+            if rows:
+                return {
+                    str(x.get("exam_id")): float(x.get("weight_percent") or 0)
+                    for x in rows
+                }
+    except Exception:
+        pass
     try:
         rows = (
             sb.table("exam_result_weights")
@@ -11487,13 +11594,35 @@ def marks_backup_and_result_tools(school_id):
         elif not academic_year:
             st.warning("Academic Session is not available in the school's active classes.")
         else:
-            current_weights = get_exam_result_weights(school_id, academic_year)
+            st.caption(
+                "Maximum Marks and Weightage are independent. PT1 can be 20, "
+                "Half Yearly 80, PT2 20 and Annual 100; each is converted to "
+                "its saved share of the final 100-point result."
+            )
+            pattern = st.selectbox(
+                "📚 Report Card Pattern",
+                ["Classes 1-8", "Classes 9-12"],
+                key=f"report_weight_pattern_{school_id}_{academic_year}"
+            )
+            class_group = "1-8" if pattern == "Classes 1-8" else "9-12"
+            saved_weights = get_exam_result_weights(
+                school_id, academic_year, class_group=class_group
+            )
+            preset_weights = default_report_card_weights(exams, class_group)
+
             weight_table = []
-            for exam in exams:
+            for exam in sorted(exams, key=lambda x: report_card_exam_sort_key(x.get("name"))):
+                exam_id = str(exam.get("id"))
+                weight_value = (
+                    saved_weights.get(exam_id)
+                    if exam_id in saved_weights
+                    else preset_weights.get(exam_id, 0.0)
+                )
                 weight_table.append({
                     "Exam": exam.get("name") or "",
-                    "Exam ID": str(exam.get("id")),
-                    "Weight %": current_weights.get(str(exam.get("id")), 0.0)
+                    "Maximum Marks": float(exam.get("max_marks") or 0),
+                    "Exam ID": exam_id,
+                    "Weight %": float(weight_value or 0)
                 })
 
             weight_df = pd.DataFrame(weight_table)
@@ -11501,7 +11630,7 @@ def marks_backup_and_result_tools(school_id):
                 weight_df,
                 hide_index=True,
                 use_container_width=True,
-                disabled=["Exam", "Exam ID"],
+                disabled=["Exam", "Maximum Marks", "Exam ID"],
                 column_config={
                     "Weight %": st.column_config.NumberColumn(
                         "Weight %",
@@ -11511,63 +11640,58 @@ def marks_backup_and_result_tools(school_id):
                         format="%.2f"
                     )
                 },
-                key=f"exam_weight_editor_{school_id}_{academic_year}"
+                key=f"exam_weight_editor_{school_id}_{academic_year}_{class_group}"
             )
-
             total_weight = float(
-                pd.to_numeric(
-                    edited_weights["Weight %"],
-                    errors="coerce"
-                ).fillna(0).sum()
+                pd.to_numeric(edited_weights["Weight %"], errors="coerce")
+                .fillna(0).sum()
             )
             if abs(total_weight - 100.0) > 0.01:
                 st.warning(
-                    f"Current weight total is {total_weight:g}%. "
-                    "Use 100% when these exams together make the final result."
+                    f"{pattern} weight total is {total_weight:g}%. Set it to exactly 100%."
                 )
             else:
-                st.success("✅ Weight total is 100%.")
+                st.success(f"✅ {pattern} weight total is 100%.")
 
             if st.button(
                 "💾 Save Exam Weightage",
                 type="primary",
                 use_container_width=True,
-                key=f"save_exam_weights_{school_id}"
+                key=f"save_exam_weights_{school_id}_{academic_year}_{class_group}"
             ):
                 try:
                     if abs(total_weight - 100.0) > 0.01:
                         raise ValueError(
                             f"Exam weightage must total exactly 100%. Current total is {total_weight:g}%."
                         )
-
                     for _, row in edited_weights.iterrows():
-                        exam_id = str(row["Exam ID"])
-                        weight = float(row["Weight %"] or 0)
-                        sb.table("exam_result_weights").upsert({
+                        sb.table("exam_result_weight_profiles").upsert({
                             "school_id": school_id,
                             "academic_year": academic_year,
-                            "exam_id": exam_id,
-                            "weight_percent": weight,
+                            "class_group": class_group,
+                            "exam_id": str(row["Exam ID"]),
+                            "weight_percent": float(row["Weight %"] or 0),
                             "updated_at": datetime.datetime.now(
                                 datetime.timezone.utc
                             ).isoformat()
                         }).execute()
-
-                    mark_saved(f"save_exam_weights_{school_id}")
-                    st.success("✅ Exam weightage saved successfully.")
+                    mark_saved(
+                        f"save_exam_weights_{school_id}_{academic_year}_{class_group}"
+                    )
+                    st.success(f"✅ {pattern} exam weightage saved successfully.")
                     st.rerun()
                 except Exception as e:
                     st.error(
-                        "Could not save exam weightage. "
-                        "Run the exam_result_weights SQL setup first if this is the first time."
+                        "Could not save exam weightage. Run the new "
+                        "exam_result_weight_profiles SQL setup first."
                     )
                     st.code(str(e))
 
             st.caption(
-                "Set each exam's own Maximum Marks in Exam / Assessment Settings. "
-                "Then set the final-result weightage here. Example: PT-1 20 marks = 20%, "
-                "Half Yearly 80 marks = 30%, PT-3 20 marks = 20%, Annual 100 marks = 30%. "
-                "The four weights must total 100%."
+                "Suggested preset: Classes 1-8 = PT1 10% + Half Yearly 40% + "
+                "PT2 10% + Annual 40%. Classes 9-12 = PT1 5% + Half Yearly "
+                "30% + PT2 5% + Annual 50% + Internal Assessment 10%. "
+                "These are editable school presets and must total 100%."
             )
 
 
@@ -12335,40 +12459,47 @@ def report_cards():
 
     # Show the real maximum and final-result weight for every selected exam.
     academic_year = get_school_academic_year(school_id)
-    saved_weight_by_id = (
-        get_exam_result_weights(school_id, academic_year)
-        if academic_year else {}
-    )
-    selected_exam_rows = []
-    for exam in exam_options:
+    weight_preview_rows = []
+    for exam in sorted(
+        exam_options,
+        key=lambda x: report_card_exam_sort_key(x.get("name"))
+    ):
         exam_label = str(exam.get("name") or "").strip()
         if exam_label in exam_name:
-            selected_exam_rows.append({
+            row = {
                 "Exam": exam_label,
-                "Maximum Marks": float(exam.get("max_marks") or 100),
-                "Weight %": float(
-                    saved_weight_by_id.get(str(exam.get("id")), 0) or 0
+                "Maximum Marks": float(exam.get("max_marks") or 0)
+            }
+            for group_label, group_key in [
+                ("Classes 1-8 Weight %", "1-8"),
+                ("Classes 9-12 Weight %", "9-12")
+            ]:
+                saved = (
+                    get_exam_result_weights(
+                        school_id,
+                        academic_year,
+                        class_group=group_key
+                    )
+                    if academic_year else {}
                 )
-            })
+                preset = default_report_card_weights(exam_options, group_key)
+                row[group_label] = float(
+                    saved.get(
+                        str(exam.get("id")),
+                        preset.get(str(exam.get("id")), 0)
+                    ) or 0
+                )
+            weight_preview_rows.append(row)
 
-    if selected_exam_rows:
+    if weight_preview_rows:
         st.dataframe(
-            pd.DataFrame(selected_exam_rows),
+            pd.DataFrame(weight_preview_rows),
             hide_index=True,
             use_container_width=True
         )
-
-    selected_weight_total = sum(
-        float(x.get("Weight %") or 0)
-        for x in selected_exam_rows
-    )
-    if abs(selected_weight_total - 100.0) > 0.01:
-        st.warning(
-            f"Selected exams currently total {selected_weight_total:g}% weight. "
-            "Save weights totaling exactly 100% before generating the final weighted result."
+        st.caption(
+            "The final result uses the weight pattern belonging to the student's class."
         )
-    else:
-        st.success("✅ Selected exams total 100% weight. Final percentage and grade will use all these weights.")
 
     # -----------------------------------------------------
     # STUDENT SELECTION
