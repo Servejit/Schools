@@ -6316,7 +6316,14 @@ def bulk_marks():
 
                 # Do not write unchanged rows. This reduces database traffic
                 # and avoids unnecessary row/version churn for concurrent users.
-                if old_num is None or abs(old_num - mark_value) > 1e-9:
+                old_max_num = None
+                if existing.get("max_marks") is not None:
+                    try:
+                        old_max_num = float(existing.get("max_marks"))
+                    except Exception:
+                        old_max_num = None
+
+                if old_num is None or abs(old_num - mark_value) > 1e-9 or old_max_num is None or abs(old_max_num - exam_max_marks) > 1e-9:
                     updates.append({
                         "id": existing["id"],
                         "old_marks": old_num,
