@@ -7113,205 +7113,38 @@ def print_templates():
                         "Could not prepare template download."
                     )
 
-            # -------------------------------------------------
-            # REPORT CARD SCHOOL LOGO
-            # Saved per template so the logo is restored directly
-            # from the Print Templates dashboard.
-            # -------------------------------------------------
-            if template_type_value == "Report Card":
-                # -------------------------------------------------
-                # REPORT CARD CONTENT CONTROLS
-                # -------------------------------------------------
-                st.markdown("#### ⚙️ Report Card Content Controls")
-                st.caption("Single Report Card header control: School Name + Address + Website + Contact Number. This setting is saved separately for this Report Card template.")
+            # Template status remains per uploaded template.
+            new_active = st.checkbox(
+                "Template Active",
+                value=active,
+                key=f"template_active_{template_id}"
+            )
 
-                show_school_name = bool(
-                    config.get("show_school_name", True)
-                )
-                show_school_contact = bool(
-                    config.get("show_school_contact", show_school_name)
-                )
-
-                status_label = (
-                    "🟢 ON — Name + Address + Website + Contact WILL PRINT"
-                    if show_school_name
-                    else "🔴 OFF — Name + Address + Website + Contact HIDDEN"
-                )
-
-                if st.button(
-                    status_label,
-                    use_container_width=True,
-                    key=f"template_toggle_school_name_{template_id}"
-                ):
-                    try:
-                        content_config = get_template_config(template)
-                        new_show = not show_school_name
-                        content_config["show_school_name"] = new_show
-                        content_config["show_school_contact"] = new_show
-
-                        sb.table("print_templates").update({
-                            "config_json": json.dumps(content_config),
+            if new_active != active:
+                try:
+                    (
+                        sb.table("print_templates")
+                        .update({
+                            "active": new_active,
                             "updated_at": datetime.datetime.now(
                                 datetime.timezone.utc
                             ).isoformat()
-                        }).eq(
-                            "id", template_id
-                        ).eq(
-                            "school_id", school_id
-                        ).execute()
-
-                        st.rerun()
-
-                    except Exception as e:
-                        st.error("Could not update Report Card content setting.")
-                        st.code(str(e))
-
-                st.markdown("#### 🏫 School Logo")
-
-                current_logo_path = school_logo_from_template(template)
-                if current_logo_path:
-                    current_logo_bytes = download_storage_file(current_logo_path)
-                    if current_logo_bytes:
-                        st.image(
-                            current_logo_bytes,
-                            width=110,
-                            caption="Current School Logo"
-                        )
-                    else:
-                        st.warning("Logo is saved but could not be loaded from Storage.")
-                else:
-                    st.info("No school logo saved for this Report Card template.")
-
-                logo_upload = st.file_uploader(
-                    "Upload / Replace School Logo",
-                    type=["png", "jpg", "jpeg"],
-                    key=f"template_school_logo_{template_id}"
-                )
-
-                logo_size = school_logo_size_from_template(template)
-                logo_size = st.slider(
-                    "Logo Size",
-                    min_value=30,
-                    max_value=80,
-                    value=logo_size,
-                    step=2,
-                    key=f"template_logo_size_{template_id}",
-                    help="Controls the logo size on generated Report Cards."
-                )
-
-                lc1, lc2 = st.columns(2)
-                with lc1:
-                    if logo_upload and st.button(
-                        "💾 Save Logo",
-                        use_container_width=True,
-                        key=f"save_template_logo_{template_id}"
-                    ):
-                        try:
-                            ext = logo_upload.name.rsplit(".", 1)[-1].lower()
-                            logo_path = f"{school_id}/school-logo/{uuid.uuid4().hex}.{ext}"
-                            sb.storage.from_("school-assets").upload(
-                                logo_path,
-                                logo_upload.getvalue(),
-                                file_options={
-                                    "content-type": logo_upload.type,
-                                    "upsert": "false"
-                                }
-                            )
-                            logo_config = get_template_config(template)
-                            logo_config["school_logo_path"] = logo_path
-                            logo_config["school_logo_size"] = int(logo_size)
-                            sb.table("print_templates").update({
-                                "config_json": json.dumps(logo_config),
-                                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                            }).eq("id", template_id).eq("school_id", school_id).execute()
-                            if current_logo_path and current_logo_path != logo_path:
-                                try:
-                                    sb.storage.from_("school-assets").remove([current_logo_path])
-                                except Exception:
-                                    pass
-                            st.success("✅ School logo saved successfully.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error("Could not save school logo.")
-                            st.code(str(e))
-
-                with lc2:
-                    if current_logo_path and st.button(
-                        "🗑️ Remove Logo",
-                        use_container_width=True,
-                        key=f"remove_template_logo_{template_id}"
-                    ):
-                        try:
-                            try:
-                                sb.storage.from_("school-assets").remove([current_logo_path])
-                            except Exception:
-                                pass
-                            logo_config = get_template_config(template)
-                            for logo_key in ["school_logo_path", "logo_path", "school_logo", "logo"]:
-                                logo_config.pop(logo_key, None)
-                            sb.table("print_templates").update({
-                                "config_json": json.dumps(logo_config),
-                                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                            }).eq("id", template_id).eq("school_id", school_id).execute()
-                            st.success("School logo removed successfully.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error("Could not remove school logo.")
-                            st.code(str(e))
-
-                if current_logo_path and st.button(
-                    "💾 Save Logo Size",
-                    use_container_width=True,
-                    key=f"save_template_logo_size_{template_id}"
-                ):
-                    try:
-                        logo_config = get_template_config(template)
-                        logo_config["school_logo_size"] = int(logo_size)
-                        sb.table("print_templates").update({
-                            "config_json": json.dumps(logo_config),
-                            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                        }).eq("id", template_id).eq("school_id", school_id).execute()
-                        st.success("✅ Logo size saved successfully.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error("Could not save logo size.")
-                        st.code(str(e))
+                        })
+                        .eq("id", template_id)
+                        .execute()
+                    )
+                    st.success("Template status updated.")
+                    st.rerun()
+                except Exception as e:
+                    st.error("Could not update template.")
+                    st.code(str(e))
 
     # -----------------------------------------------------
-    # REPORT CARD CONTENT SETTINGS — NO TEMPLATE FALLBACK
+    # SINGLE REPORT CARD CONTENT / LOGO SETTINGS
     # -----------------------------------------------------
-    # These settings belong to Print Templates. They control the built-in
-    # white A4 Report Card when no uploaded Report Card template exists.
-    try:
-        default_config = {
-            "template_type": "Report Card",
-            "show_school_name": True,
-            "show_school_contact": True,
-            "school_id": str(school_id),
-            "school_logo_size": 52
-        }
-        default_rows = (
-            sb.table("print_templates")
-            .select("id,name,template_name,page_size,orientation,storage_path,file_path,file_type,config_json,active")
-            .eq("school_id", school_id)
-            .eq("name", "__DEFAULT_REPORT_CARD__")
-            .limit(1)
-            .execute()
-            .data or []
-        )
-        default_template_row = default_rows[0] if default_rows else None
-        if default_template_row:
-            default_config.update(get_template_config(default_template_row))
-    except Exception:
-        default_config = {
-            "template_type": "Report Card",
-            "show_school_name": True,
-            "show_school_contact": True,
-            "school_id": str(school_id),
-            "school_logo_size": 52
-        }
-        default_template_row = None
-
+    # Keep exactly ONE Report Card settings function on this dashboard.
+    # It controls the uploaded Report Card template when one exists;
+    # otherwise it controls the built-in white A4 Report Card.
     try:
         uploaded_report_card_templates = [
             x for x in template_data
@@ -7323,30 +7156,96 @@ def print_templates():
     except Exception:
         uploaded_report_card_templates = []
 
-    if not uploaded_report_card_templates:
-        st.divider()
-        st.subheader("⚙️ Report Card Content Settings")
+    report_card_template = (
+        uploaded_report_card_templates[0]
+        if uploaded_report_card_templates
+        else None
+    )
+
+    default_template_row = None
+    if report_card_template is None:
+        try:
+            default_rows = (
+                sb.table("print_templates")
+                .select(
+                    "id,name,template_name,page_size,orientation,"
+                    "storage_path,file_path,file_type,config_json,active"
+                )
+                .eq("school_id", school_id)
+                .eq("name", "__DEFAULT_REPORT_CARD__")
+                .limit(1)
+                .execute()
+                .data or []
+            )
+            default_template_row = default_rows[0] if default_rows else None
+        except Exception:
+            default_template_row = None
+
+    settings_template = report_card_template or default_template_row
+
+    default_config = {
+        "template_type": "Report Card",
+        "show_school_name": True,
+        "show_school_contact": True,
+        "school_id": str(school_id),
+        "school_logo_size": 52
+    }
+    if settings_template:
+        default_config.update(get_template_config(settings_template))
+
+    settings_template_id = (
+        settings_template.get("id")
+        if settings_template
+        else None
+    )
+
+    st.divider()
+    st.subheader("⚙️ Report Card Content & Logo Settings")
+    if report_card_template:
         st.caption(
-            "No Report Card print template is uploaded. These settings "
-            "control the built-in white A4 Report Card."
+            "One Report Card settings panel for this school. "
+            "These controls apply to the uploaded Report Card template."
+        )
+    else:
+        st.caption(
+            "No Report Card print template is uploaded. "
+            "These controls apply to the built-in white A4 Report Card."
         )
 
-        show_school_name = bool(default_config.get("show_school_name", True))
-        status_label = (
-            "🟢 ON — Name + Address + Website + Contact WILL PRINT"
-            if show_school_name
-            else "🔴 OFF — Name + Address + Website + Contact HIDDEN"
-        )
-        if st.button(
-            status_label,
-            use_container_width=True,
-            key=f"print_template_default_header_toggle_{school_id}"
-        ):
-            try:
-                new_show = not show_school_name
-                default_config["show_school_name"] = new_show
-                default_config["show_school_contact"] = new_show
-                payload = {
+    show_school_name = bool(
+        default_config.get("show_school_name", True)
+    )
+    status_label = (
+        "🟢 ON — Name + Address + Website + Contact WILL PRINT"
+        if show_school_name
+        else "🔴 OFF — Name + Address + Website + Contact HIDDEN"
+    )
+
+    if st.button(
+        status_label,
+        use_container_width=True,
+        key=f"print_template_report_card_header_toggle_{school_id}"
+    ):
+        try:
+            new_show = not show_school_name
+            default_config["show_school_name"] = new_show
+            default_config["show_school_contact"] = new_show
+
+            if settings_template_id:
+                (
+                    sb.table("print_templates")
+                    .update({
+                        "config_json": json.dumps(default_config),
+                        "updated_at": datetime.datetime.now(
+                            datetime.timezone.utc
+                        ).isoformat()
+                    })
+                    .eq("id", settings_template_id)
+                    .eq("school_id", school_id)
+                    .execute()
+                )
+            else:
+                sb.table("print_templates").insert({
                     "school_id": school_id,
                     "name": "__DEFAULT_REPORT_CARD__",
                     "template_name": "Default White A4 Report Card",
@@ -7357,160 +7256,228 @@ def print_templates():
                     "file_type": "pdf",
                     "config_json": json.dumps(default_config),
                     "active": True
-                }
-                if default_template_row:
-                    sb.table("print_templates").update({
-                        "config_json": json.dumps(default_config),
-                        "active": True,
-                        "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                    }).eq("id", default_template_row["id"]).eq("school_id", school_id).execute()
-                else:
-                    sb.table("print_templates").insert(payload).execute()
-                st.rerun()
-            except Exception as e:
-                st.error("Could not save Report Card content setting.")
-                st.code(str(e))
+                }).execute()
 
-        st.markdown("#### 🏫 School Logo")
-        current_default_logo = next(
-            (default_config.get(k) for k in ["school_logo_path", "logo_path", "school_logo", "logo"] if default_config.get(k)),
-            None
-        )
-        if current_default_logo:
-            logo_bytes = download_storage_file(current_default_logo)
-            if logo_bytes:
-                st.image(logo_bytes, width=110, caption="Current School Logo")
-            else:
-                st.warning("Logo is saved but could not be loaded.")
+            st.success("✅ Saved successfully.")
+            st.rerun()
+        except Exception as e:
+            st.error("Could not save Report Card content setting.")
+            st.code(str(e))
+
+    st.markdown("#### 🏫 School Logo")
+
+    current_logo_path = next(
+        (
+            default_config.get(k)
+            for k in [
+                "school_logo_path",
+                "logo_path",
+                "school_logo",
+                "logo"
+            ]
+            if default_config.get(k)
+        ),
+        None
+    )
+
+    if current_logo_path:
+        logo_bytes = download_storage_file(current_logo_path)
+        if logo_bytes:
+            st.image(
+                logo_bytes,
+                width=110,
+                caption="Current School Logo"
+            )
         else:
-            st.info("No school logo saved for the built-in Report Card.")
+            st.warning(
+                "Logo is saved but could not be loaded from Storage."
+            )
+    else:
+        st.info("No school logo saved for this Report Card.")
 
-        default_logo_size = max(30, min(80, int(default_config.get("school_logo_size", 52) or 52)))
-        default_logo_size = st.slider(
-            "Logo Size", min_value=30, max_value=80,
-            value=default_logo_size, step=2,
-            key=f"print_template_default_logo_size_{school_id}"
+    logo_size = max(
+        30,
+        min(
+            80,
+            int(default_config.get("school_logo_size", 52) or 52)
         )
-        uploaded_default_logo = st.file_uploader(
-            "Upload / Replace School Logo",
-            type=["png", "jpg", "jpeg"],
-            key=f"print_template_default_logo_{school_id}"
-        )
-        lc1, lc2 = st.columns(2)
-        with lc1:
-            if uploaded_default_logo and st.button(
-                "💾 Save Logo", use_container_width=True,
-                key=f"print_template_save_default_logo_{school_id}"
-            ):
-                try:
-                    ext = uploaded_default_logo.name.rsplit(".", 1)[-1].lower()
-                    logo_path = f"{school_id}/school-logo/{uuid.uuid4().hex}.{ext}"
-                    sb.storage.from_("school-assets").upload(
-                        logo_path, uploaded_default_logo.getvalue(),
-                        file_options={"content-type": uploaded_default_logo.type, "upsert": "false"}
-                    )
-                    old_logo = current_default_logo
-                    default_config["school_logo_path"] = logo_path
-                    default_config["school_logo_size"] = int(default_logo_size)
-                    payload = {
-                        "school_id": school_id,
-                        "name": "__DEFAULT_REPORT_CARD__",
-                        "template_name": "Default White A4 Report Card",
-                        "page_size": "A4", "orientation": "Portrait",
-                        "storage_path": None, "file_path": None,
-                        "file_type": "pdf", "config_json": json.dumps(default_config),
-                        "active": True
-                    }
-                    if default_template_row:
-                        sb.table("print_templates").update({
-                            "config_json": json.dumps(default_config),
-                            "active": True,
-                            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                        }).eq("id", default_template_row["id"]).eq("school_id", school_id).execute()
-                    else:
-                        sb.table("print_templates").insert(payload).execute()
-                    if old_logo and old_logo != logo_path:
-                        try:
-                            sb.storage.from_("school-assets").remove([old_logo])
-                        except Exception:
-                            pass
-                    st.success("✅ School logo saved successfully.")
-                    st.rerun()
-                except Exception as e:
-                    st.error("Could not save school logo.")
-                    st.code(str(e))
-        with lc2:
-            if current_default_logo and st.button(
-                "🗑️ Remove Logo", use_container_width=True,
-                key=f"print_template_remove_default_logo_{school_id}"
-            ):
-                try:
-                    try:
-                        sb.storage.from_("school-assets").remove([current_default_logo])
-                    except Exception:
-                        pass
-                    for logo_key in ["school_logo_path", "logo_path", "school_logo", "logo"]:
-                        default_config.pop(logo_key, None)
-                    if default_template_row:
-                        sb.table("print_templates").update({
-                            "config_json": json.dumps(default_config),
-                            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                        }).eq("id", default_template_row["id"]).eq("school_id", school_id).execute()
-                    st.success("School logo removed successfully.")
-                    st.rerun()
-                except Exception as e:
-                    st.error("Could not remove school logo.")
-                    st.code(str(e))
-        if default_template_row and current_default_logo and st.button(
-            "💾 Save Logo Size", use_container_width=True,
-            key=f"print_template_save_default_logo_size_{school_id}"
+    )
+    logo_size = st.slider(
+        "Logo Size",
+        min_value=30,
+        max_value=80,
+        value=logo_size,
+        step=2,
+        key=f"print_template_report_card_logo_size_{school_id}",
+        help="Controls the logo size on generated Report Cards."
+    )
+
+    logo_upload = st.file_uploader(
+        "Upload / Replace School Logo",
+        type=["png", "jpg", "jpeg"],
+        key=f"print_template_report_card_logo_{school_id}"
+    )
+
+    lc1, lc2 = st.columns(2)
+
+    with lc1:
+        if logo_upload and st.button(
+            "💾 Save Logo",
+            use_container_width=True,
+            key=f"print_template_report_card_save_logo_{school_id}"
         ):
             try:
-                default_config["school_logo_size"] = int(default_logo_size)
-                sb.table("print_templates").update({
-                    "config_json": json.dumps(default_config),
-                    "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                }).eq("id", default_template_row["id"]).eq("school_id", school_id).execute()
-                st.success("Logo size saved successfully.")
-                st.rerun()
-            except Exception as e:
-                st.error("Could not save logo size.")
-                st.code(str(e))
+                if logo_upload.size > 2 * 1024 * 1024:
+                    st.error("School logo must be 2 MB or smaller.")
+                    st.stop()
 
-            # Immediate status update
-            new_active = st.checkbox(
-                "Template Active",
-                value=active,                key=f"template_active_{template_id}"
-            )
+                ext = logo_upload.name.rsplit(".", 1)[-1].lower()
+                logo_path = (
+                    f"{school_id}/school-logo/"
+                    f"{uuid.uuid4().hex}.{ext}"
+                )
 
-            if new_active != active:
+                sb.storage.from_("school-assets").upload(
+                    logo_path,
+                    logo_upload.getvalue(),
+                    file_options={
+                        "content-type": logo_upload.type,
+                        "upsert": "false"
+                    }
+                )
 
-                try:
+                new_config = dict(default_config)
+                new_config["school_logo_path"] = logo_path
+                new_config["school_logo_size"] = int(logo_size)
+
+                if settings_template_id:
                     (
                         sb.table("print_templates")
                         .update({
-                            "active": new_active,                            "updated_at":
-                                datetime.datetime.now(
-                                    datetime.timezone.utc
-                                ).isoformat()
+                            "config_json": json.dumps(new_config),
+                            "updated_at": datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat()
                         })
-                        .eq("id", template_id)
+                        .eq("id", settings_template_id)
+                        .eq("school_id", school_id)
+                        .execute()
+                    )
+                else:
+                    sb.table("print_templates").insert({
+                        "school_id": school_id,
+                        "name": "__DEFAULT_REPORT_CARD__",
+                        "template_name": "Default White A4 Report Card",
+                        "page_size": "A4",
+                        "orientation": "Portrait",
+                        "storage_path": None,
+                        "file_path": None,
+                        "file_type": "pdf",
+                        "config_json": json.dumps(new_config),
+                        "active": True
+                    }).execute()
+
+                if current_logo_path and current_logo_path != logo_path:
+                    try:
+                        sb.storage.from_("school-assets").remove(
+                            [current_logo_path]
+                        )
+                    except Exception:
+                        pass
+
+                st.success("✅ Saved successfully.")
+                st.rerun()
+
+            except Exception as e:
+                st.error("Could not save school logo.")
+                st.code(str(e))
+
+    with lc2:
+        if current_logo_path and st.button(
+            "🗑️ Remove Logo",
+            use_container_width=True,
+            key=f"print_template_report_card_remove_logo_{school_id}"
+        ):
+            try:
+                try:
+                    sb.storage.from_("school-assets").remove(
+                        [current_logo_path]
+                    )
+                except Exception:
+                    pass
+
+                new_config = dict(default_config)
+                for logo_key in [
+                    "school_logo_path",
+                    "logo_path",
+                    "school_logo",
+                    "logo"
+                ]:
+                    new_config.pop(logo_key, None)
+
+                if settings_template_id:
+                    (
+                        sb.table("print_templates")
+                        .update({
+                            "config_json": json.dumps(new_config),
+                            "updated_at": datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat()
+                        })
+                        .eq("id", settings_template_id)
+                        .eq("school_id", school_id)
                         .execute()
                     )
 
-                    st.success(
-                        "Template status updated."
-                    )
+                st.success("✅ Saved successfully.")
+                st.rerun()
 
-                    st.rerun()
+            except Exception as e:
+                st.error("Could not remove school logo.")
+                st.code(str(e))
 
-                except Exception as e:
+    if current_logo_path and st.button(
+        "💾 Save Logo Size",
+        use_container_width=True,
+        key=f"print_template_report_card_save_logo_size_{school_id}"
+    ):
+        try:
+            new_config = dict(default_config)
+            new_config["school_logo_size"] = int(logo_size)
 
-                    st.error(
-                        "Could not update template."
-                    )
+            if settings_template_id:
+                (
+                    sb.table("print_templates")
+                    .update({
+                        "config_json": json.dumps(new_config),
+                        "updated_at": datetime.datetime.now(
+                            datetime.timezone.utc
+                        ).isoformat()
+                    })
+                    .eq("id", settings_template_id)
+                    .eq("school_id", school_id)
+                    .execute()
+                )
+            else:
+                sb.table("print_templates").insert({
+                    "school_id": school_id,
+                    "name": "__DEFAULT_REPORT_CARD__",
+                    "template_name": "Default White A4 Report Card",
+                    "page_size": "A4",
+                    "orientation": "Portrait",
+                    "storage_path": None,
+                    "file_path": None,
+                    "file_type": "pdf",
+                    "config_json": json.dumps(new_config),
+                    "active": True
+                }).execute()
 
-                    st.code(str(e))
+            st.success("✅ Saved successfully.")
+            st.rerun()
+
+        except Exception as e:
+            st.error("Could not save logo size.")
+            st.code(str(e))
 
 
 # =========================================================
