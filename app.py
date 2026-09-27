@@ -8438,6 +8438,16 @@ def create_report_overlay(
 
     table_top = table_y
 
+    def report_display_mark(value):
+        """Show marks/max marks without unnecessary trailing zeros."""
+        try:
+            number = float(value)
+            if number.is_integer():
+                return str(int(number))
+            return f"{number:.2f}".rstrip("0").rstrip(".")
+        except (TypeError, ValueError):
+            return str(value) if value is not None else "-"
+
     selected_exam_names = []
     if isinstance(exam_name, (list, tuple, set)):
         selected_exam_names = [
@@ -8590,7 +8600,7 @@ def create_report_overlay(
                     pass
         exam_max = max(exam_max_values) if exam_max_values else 0.0
         heading = (
-            f"{exam} ({format_mark(exam_max)})"
+            f"{exam} ({report_display_mark(exam_max)})"
             if exam_max else exam
         )
         if len(heading) > 22:
@@ -8716,12 +8726,12 @@ def create_report_overlay(
             pdf.drawCentredString(
                 cursor + per_exam_width * 0.25,
                 baseline,
-                format_mark(max_number) if max_number else "-"
+                report_display_mark(max_number) if max_number else "-"
             )
             pdf.drawCentredString(
                 cursor + per_exam_width * 0.75,
                 baseline,
-                format_mark(mark_number)
+                report_display_mark(mark_number)
                 if mark_number is not None else "-"
             )
             cursor += per_exam_width
