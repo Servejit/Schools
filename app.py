@@ -12519,7 +12519,6 @@ def report_cards():
                     )
 
                 except Exception as e:
-
                     st.error(
                         "Could not generate report card."
                     )
