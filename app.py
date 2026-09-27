@@ -12708,12 +12708,10 @@ def report_cards():
             )
 
 
+def parent_report_card_enabled(school_id):
+    """Return whether Parents/Students may access Report Cards for this school."""
     if not school_id:
-        return False
-    try:
-        result = (
-            sb.rpc(
-                "parent_report_cards_enabled",
+        return False\n    try:\n        result = (\n            sb.rpc(\n                "parent_report_cards_enabled",
                 {"p_school_id": school_id}
             )
             .execute()
@@ -12735,7 +12733,8 @@ def report_cards():
         return False
     return False
 
-nt_report_cards_view(school_id, parent_user_id):
+
+def parent_report_cards_view(school_id, parent_user_id):
     """Show report cards only for students linked to this Parent."""
     st.header("📄 My Child's Report Cards")
 
@@ -12985,7 +12984,7 @@ nt_report_cards_view(school_id, parent_user_id):
                 present_days=present_days,
                 school_logo_path=logo_path,
                 school_logo_size=logo_size,
-                show_school_name=template_show_school_name(selected_template)
+                show_school_name=report_card_show_school_name(template)
             )
 
             st.success("✅ Report card generated successfully.")
