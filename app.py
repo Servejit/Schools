@@ -12708,7 +12708,6 @@ def report_cards():
             )
 
 
- Cards for Parents."""
     if not school_id:
         return False
     try:
