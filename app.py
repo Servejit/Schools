@@ -1746,15 +1746,10 @@ def users():
         # never reach User Management because of the class-teacher check above.
         if get_active_theme_role() == "Teacher":
             teacher_school_id = st.session_state.profile.get("school_id")
-            teacher_class_rows = (
-                sb.table("classes")
-                .select("class_name,section")
-                .eq("school_id", teacher_school_id)
-                .eq("class_teacher_id", st.session_state.user.id)
-                .eq("active", True)
-                .execute()
-                .data or []
-            )
+            teacher_class_rows = [
+                x for x in get_cached_classes(teacher_school_id, active_only=True)
+                if str(x.get("class_teacher_id") or "") == str(st.session_state.user.id)
+            ]
             allowed_classes = {
                 (
                     str(x.get("class_name") or "").strip().lower(),
@@ -1763,14 +1758,7 @@ def users():
                 for x in teacher_class_rows
             }
 
-            teacher_students = (
-                sb.table("students")
-                .select("id,user_id,class_name,section")
-                .eq("school_id", teacher_school_id)
-                .eq("active", True)
-                .execute()
-                .data or []
-            )
+            teacher_students = get_cached_students(teacher_school_id, active_only=True)
             teacher_students = [
                 s for s in teacher_students
                 if (
@@ -1816,13 +1804,10 @@ def users():
 
             allowed_parent_ids = set()
             if allowed_student_ids:
-                parent_links = (
-                    sb.table("parent_student_links")
-                    .select("parent_id,student_id")
-                    .in_("student_id", list(allowed_student_ids))
-                    .execute()
-                    .data or []
-                )
+                parent_links = [
+                    x for x in get_cached_parent_student_links(teacher_school_id)
+                    if str(x.get("student_id") or "") in allowed_student_ids
+                ]
                 allowed_parent_ids = {
                     str(x.get("parent_id"))
                     for x in parent_links
@@ -1854,15 +1839,8 @@ def users():
     # -----------------------------------------------------
     def load_teacher_assignments(teacher_id):
         try:
-            return (
-                sb.table("teacher_subject_assignments")
-                .select(
-                    "id,school_id,teacher_id,class_id,subject_id"
-                )
-                .eq("teacher_id", teacher_id)
-                .eq("school_id", school_map[selected_school])
-                .execute()
-                .data or []
+            return get_cached_teacher_assignments(
+                school_map[selected_school], teacher_id=teacher_id
             )
         except Exception:
             return []
@@ -1946,17 +1924,9 @@ def users():
         })
 
         if search_school_ids:
-            search_students = (
-                sb.table("students")
-                .select(
-                    "id,user_id,name,admission_no,roll_no,"
-                    "class_name,section,school_id,active"
-                )
-                .in_("school_id", search_school_ids)
-                .eq("active", True)
-                .execute()
-                .data or []
-            )
+            search_students = []
+            for sid in search_school_ids:
+                search_students.extend(get_cached_students(sid, active_only=True))
 
             for s in search_students:
                 uid = str(s.get("user_id") or "")
@@ -1983,16 +1953,11 @@ def users():
                 if s.get("id")
             }
 
-            parent_links = (
-                sb.table("parent_student_links")
-                .select("parent_id,student_id")
-                .in_(
-                    "student_id",
-                    list(student_by_id.keys())
-                )
-                .execute()
-                .data or []
-            )
+            parent_links = [
+                x for sid in search_school_ids
+                for x in get_cached_parent_student_links(sid)
+                if str(x.get("student_id") or "") in student_by_id
+            ]
 
             for link in parent_links:
                 parent_id = str(link.get("parent_id") or "")
