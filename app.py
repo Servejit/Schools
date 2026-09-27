@@ -8783,8 +8783,11 @@ def create_report_overlay(
                 )
                 subject_weighted_max += weight
 
-        total_weighted_obtained += subject_weighted_obtained
-        total_weighted_max += subject_weighted_max
+        # Grade-only subjects remain visible and receive a grade,
+        # but contribute zero to the overall percentage.
+        if subject_name not in grade_only_subject_names:
+            total_weighted_obtained += subject_weighted_obtained
+            total_weighted_max += subject_weighted_max
 
         subject_percentage = (
             subject_weighted_obtained / subject_weighted_max * 100
