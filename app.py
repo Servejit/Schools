@@ -7789,6 +7789,30 @@ def get_cached_students(school_id, active_only=True):
     return _cached_rows(key, load, 60)
 
 
+def get_cached_report_students(school_id):
+    """Cached student rows used by report-card generation/export screens."""
+    if not school_id:
+        return []
+    def load():
+        try:
+            return (
+                sb.table("students")
+                .select(
+                    "id,school_id,user_id,name,admission_no,class_name,section,"
+                    "date_of_birth,gender,father_name,parent_name,parent_phone,"
+                    "remarks,photo_path,active"
+                )
+                .eq("school_id", school_id)
+                .eq("active", True)
+                .order("name")
+                .execute()
+                .data or []
+            )
+        except Exception:
+            return []
+    return _cached_rows(f"report_students|{school_id}", load, 60)
+
+
 def get_cached_parent_student_links(school_id):
     if not school_id:
         return []
@@ -11491,13 +11515,10 @@ def report_cards():
         if role == "Teacher":
             try:
                 teacher_export_classes = (
-                    sb.table("classes")
-                    .select("class_name,section")
-                    .eq("school_id", school_id)
-                    .eq("class_teacher_id", st.session_state.user.id)
-                    .eq("active", True)
-                    .execute()
-                    .data or []
+                    [
+                x for x in get_cached_classes(school_id, active_only=True)
+                if str(x.get("class_teacher_id") or "") == str(st.session_state.user.id)
+            ]
                 )
             except Exception as e:
                 st.error("Could not load your Class Teacher classes for Excel download.")
@@ -11664,12 +11685,7 @@ def report_cards():
     try:
 
         school_info = (
-            sb.table("schools")
-            .select("id,name,code,address,website,contact_number")
-            .eq("id", school_id)
-            .maybe_single()
-            .execute()
-            .data
+            get_cached_school(school_id)
         )
 
     except Exception as e:
@@ -12103,21 +12119,7 @@ def report_cards():
 
     try:
 
-        student_data = (
-            sb.table("students")
-            .select(
-                "id,school_id,user_id,name,"
-                "admission_no,class_name,section,"
-                "date_of_birth,gender,father_name,"
-                "parent_name,parent_phone,remarks,"
-                "photo_path,active"
-            )
-            .eq("school_id", school_id)
-            .eq("active", True)
-            .order("name")
-            .execute()
-            .data or []
-        )
+        student_data = get_cached_report_students(school_id)
 
     except Exception as e:
 
@@ -12132,17 +12134,10 @@ def report_cards():
         try:
             # Class Teacher access is determined only by the current
             # class_teacher_id on Classes.
-            teacher_report_classes = (
-                sb.table("classes")
-                .select("id,class_name,section,academic_year,class_teacher_id")
-                .eq("school_id", school_id)
-                .eq("class_teacher_id", st.session_state.user.id)
-                .eq("active", True)
-                .order("class_name")
-                .order("section")
-                .execute()
-                .data or []
-            )
+            teacher_report_classes = [
+                x for x in get_cached_classes(school_id, active_only=True)
+                if str(x.get("class_teacher_id") or "") == str(st.session_state.user.id)
+            ]
         except Exception as e:
             st.error("Could not load your Class Teacher classes.")
             st.code(str(e))
@@ -12267,17 +12262,7 @@ def report_cards():
 
     try:
 
-        subject_data = (            sb.table("subjects")
-            .select(
-                "id,school_id,class_id,name,subject_name,"
-                "code,max_marks,passing_marks,active"
-            )
-            .eq("school_id", school_id)
-            .eq("active", True)
-            .order("subject_name")
-            .execute()
-            .data or []
-        )
+        subject_data = get_cached_subjects(school_id, active_only=True)
 
     except Exception as e:
 
