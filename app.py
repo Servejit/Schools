@@ -13491,7 +13491,8 @@ def premium_feature_management():
                                 .execute()
                             )
 
-                        _clear_session_cache(f"premium_access|{school_id}")\n                        mark_saved("premium_feature_setting")
+                        _clear_session_cache(f"premium_access|{school_id}")
+                        mark_saved("premium_feature_setting")
                         st.success("✅ Saved successfully.")
                         st.rerun()
                     except Exception as e:
@@ -13676,7 +13677,8 @@ def premium_feature_management():
                             .execute()
                         )
 
-                _clear_session_cache(f"premium_access|{school_id}")\n                mark_saved(f"save_all_teachers_academic_status_{school_id}")
+                _clear_session_cache(f"premium_access|{school_id}")
+                mark_saved(f"save_all_teachers_academic_status_{school_id}")
                 st.success(
                     "✅ School Academic Status permission updated for all active Teachers."
                 )
@@ -13770,7 +13772,8 @@ def premium_feature_management():
                         .execute()
                     )
 
-                _clear_session_cache(f"premium_access|{school_id}")\n                mark_saved(f"save_parent_student_premium_{school_id}")
+                _clear_session_cache(f"premium_access|{school_id}")
+                mark_saved(f"save_parent_student_premium_{school_id}")
                 st.success(
                     "✅ Subject-wise Premium Parent & Student permission saved."
                 )
@@ -13830,7 +13833,8 @@ def premium_feature_management():
                         .execute()
                     )
 
-                _clear_session_cache(f"premium_access|{school_id}")\n                mark_saved(f"save_parent_report_card_{school_id}")
+                _clear_session_cache(f"premium_access|{school_id}")
+                mark_saved(f"save_parent_report_card_{school_id}")
                 st.success("✅ Saved successfully.")
                 st.rerun()
             except Exception as e:
@@ -15628,7 +15632,8 @@ def _notice_html(message):
         .replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
-        .replace("\\n", "<br>")
+        .replace("\
+", "<br>")
     )
     return safe
 
@@ -16601,7 +16606,9 @@ def dashboard():
                     st.info(
                         f"**{teacher_class.get('class_name') or '-'}**"
                         f" — Section {teacher_class.get('section') or '-'}"
-                        f"\n\nAcademic Year: "
+                        f"
+
+Academic Year: "
                         f"{teacher_class.get('academic_year') or '-'}"
                     )
             st.caption(
