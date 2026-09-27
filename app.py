@@ -6953,6 +6953,11 @@ def print_templates():
             "No A4 templates uploaded for this school yet. "
             "The default white A4 Report Card can still be used."
         )
+    else:
+        # Only one uploaded A4 template is shown for each school.
+        # Older duplicate rows are kept in the database so no data is
+        # accidentally deleted, but they are not rendered repeatedly.
+        template_data = [template_data[0]]
 
     for template in template_data:
 
