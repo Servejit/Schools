@@ -1716,44 +1716,30 @@ def users():
         # Only show users whose school still exists. This prevents any
         # orphaned profile from a previously deleted school from appearing
         # in SuperAdmin's User Management dashboard.
-        existing_school_rows = (
-            sb.table("schools")
-            .select("id")
-            .execute()
-            .data or []
-        )
         existing_school_ids = [
             str(x.get("id"))
-            for x in existing_school_rows
+            for x in school_data
             if x.get("id")
         ]
 
-        user_query = (
-            sb.table("profiles")
-            .select("id,email,full_name,role,active,school_id")
-            # SuperAdmin accounts are system-level accounts and must never
-            # appear in the User Management list.
-            .neq("role", "SuperAdmin")
-        )
-
-        if existing_school_ids:
-            user_query = user_query.in_("school_id", existing_school_ids)
-        else:
-            user_query = user_query.eq("school_id", "__NO_EXISTING_SCHOOL__")
-
-        # Admin/Admin+Teacher/Teacher must only load users belonging to their own school.
+        # Profiles are stable reference data on this screen, so use the
+        # per-session cache instead of querying again on every Streamlit rerun.
         if get_active_theme_role() in ["Admin", "Admin+Teacher", "Teacher"]:
-            user_query = user_query.eq(
-                "school_id",
-                st.session_state.profile.get("school_id")
-            )
+            managed_school_ids = [str(st.session_state.profile.get("school_id") or "")]
+        else:
+            managed_school_ids = existing_school_ids
 
-        user_data = (
-            user_query
-            .order("full_name")
-            .execute()
-            .data or []
-        )
+        user_data = []
+        for managed_school_id in managed_school_ids:
+            if not managed_school_id:
+                continue
+            user_data.extend(
+                get_cached_school_profiles(
+                    managed_school_id,
+                    roles=["Admin", "Admin+Teacher", "Teacher", "Student", "Parent"],
+                    active_only=False
+                )
+            )
 
         # Class Teachers may manage only Student and Parent accounts that
         # belong to their own Class Teacher class(es). Subject-only Teachers
