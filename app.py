@@ -12680,6 +12680,12 @@ def report_cards():
     try:
 
         subject_data = get_cached_subjects(school_id, active_only=True)
+        # Only subjects selected for report cards are shown. A Grade-Only
+        # subject remains visible but is excluded from percentage calculation.
+        subject_data = [
+            x for x in subject_data
+            if x.get("report_card_visible", True)
+        ]
 
     except Exception as e:
 
@@ -12743,6 +12749,9 @@ def report_cards():
                 subject.get("subject_name")
                 or subject.get("name")
                 or "Subject"
+            )
+            combined["grade_only"] = bool(
+                subject.get("grade_only", False)
             )
             combined["passing_marks"] = (
                 subject.get("passing_marks")
