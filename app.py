@@ -16606,12 +16606,8 @@ def dashboard():
                     st.info(
                         f"**{teacher_class.get('class_name') or '-'}**"
                         f" — Section {teacher_class.get('section') or '-'}"
-                        f"
-
-Academic Year: "
-                        f"{teacher_class.get('academic_year') or '-'}"
-                    )
-            st.caption(
+                        f" — Academic Year: {teacher_class.get('academic_year') or '-'}"
+                    )            st.caption(
                 "As Class Teacher, you can see and manage students and attendance "
                 "only in your assigned class(es)."
             )
