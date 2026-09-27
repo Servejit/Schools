@@ -6123,7 +6123,7 @@ def bulk_marks():
     passing_marks = float(selected_subject.get("passing_marks") or 0)
 
     st.caption(
-        f"Maximum Marks: **{max_marks:.2f}** "
+        f"Subject default maximum: **{subject_max_marks:.2f}** "
         f"| Passing Marks: **{passing_marks:.2f}**"
     )
 
@@ -6298,7 +6298,7 @@ def bulk_marks():
                 )
                 continue
 
-            if mark_value > max_marks:
+            if mark_value > exam_max_marks:
                 errors.append(
                     f"{row['Student Name']}: {format_mark(mark_value)} exceeds "
                     f"exam maximum {format_mark(exam_max_marks)}."
@@ -6331,7 +6331,7 @@ def bulk_marks():
                     "subject_id": subject_id,
                     "exam_name": exam_name,
                     "marks": mark_value,
-                    "max_marks": max_marks,
+                    "max_marks": exam_max_marks,
                     "class_id": class_id
                 })
 
