@@ -3229,20 +3229,9 @@ def get_selected_school(key_prefix):
 
     if role == "SuperAdmin":
 
-        try:
-
-            schools_data = (
-                sb.table("schools")
-                .select("id,name,code,active")
-                .order("name")
-                .execute()
-                .data or []
-            )
-
-        except Exception as e:
-
-            st.error("Could not load schools.")
-            st.code(str(e))
+        schools_data = get_cached_schools(active_only=False)
+        if not schools_data:
+            st.warning("No schools found.")
             return None
 
         active_schools = [
@@ -3274,26 +3263,9 @@ def get_selected_school(key_prefix):
         )
         return None
 
-    try:
-
-        school_info = (
-            sb.table("schools")
-            .select("name,code")
-            .eq("id", school_id)
-            .maybe_single()
-            .execute()
-            .data
-        )
-
-        if school_info:
-
-            st.info(
-                f"🏫 {school_info['name']} "
-                f"({school_info['code']})"
-            )
-
-    except Exception:
-        pass
+    school_info = get_cached_school(school_id)
+    if school_info:
+        st.info(f"🏫 {school_info['name']} ({school_info['code']})")
 
     return school_id
 
@@ -7946,6 +7918,92 @@ def _clear_session_cache(prefix=None):
             if str(key).startswith(str(prefix)):
                 cache.pop(key, None)
     st.session_state["_supabase_read_cache"] = cache
+
+
+def _cached_rows(cache_key, loader, ttl_seconds=60):
+    """Per-user read cache for stable/reference Supabase data.
+
+    This cache is intentionally session-local so one school's data can never
+    leak into another user's Streamlit session. Save/delete operations clear
+    the relevant cache before rerunning the page.
+    """
+    return _session_cached(cache_key, loader, ttl_seconds=ttl_seconds)
+
+
+def get_cached_schools(active_only=False):
+    key = f"schools|{'active' if active_only else 'all'}"
+    def load():
+        try:
+            q = sb.table("schools").select("id,name,code,active,address,website,contact_number").order("name")
+            if active_only:
+                q = q.eq("active", True)
+            return q.execute().data or []
+        except Exception:
+            return []
+    return _cached_rows(key, load, 120)
+
+
+def get_cached_school(school_id):
+    if not school_id:
+        return None
+    def load():
+        try:
+            return (sb.table("schools")
+                .select("id,name,code,address,website,contact_number,active")
+                .eq("id", school_id).maybe_single().execute().data)
+        except Exception:
+            return None
+    return _cached_rows(f"school|{school_id}", load, 300)
+
+
+def get_cached_classes(school_id, active_only=True):
+    if not school_id:
+        return []
+    key = f"classes|{school_id}|{bool(active_only)}"
+    def load():
+        try:
+            q = (sb.table("classes")
+                .select("id,school_id,class_name,section,academic_year,active,class_teacher_id")
+                .eq("school_id", school_id))
+            if active_only:
+                q = q.eq("active", True)
+            return q.order("class_name").order("section").execute().data or []
+        except Exception:
+            return []
+    return _cached_rows(key, load, 60)
+
+
+def get_cached_school_profiles(school_id, roles=None, active_only=False):
+    if not school_id:
+        return []
+    role_key = ",".join(sorted(roles or []))
+    key = f"profiles|{school_id}|{role_key}|{bool(active_only)}"
+    def load():
+        try:
+            q = (sb.table("profiles")
+                .select("id,email,full_name,school_id,role,active")
+                .eq("school_id", school_id))
+            if roles:
+                q = q.in_("role", roles)
+            if active_only:
+                q = q.eq("active", True)
+            return q.order("full_name").execute().data or []
+        except Exception:
+            return []
+    return _cached_rows(key, load, 60)
+
+
+def get_cached_premium_access(school_id):
+    if not school_id:
+        return []
+    def load():
+        try:
+            return (sb.table("premium_feature_access")
+                .select("id,school_id,admin_id,feature_key,active,updated_at")
+                .eq("school_id", school_id).execute().data or [])
+        except Exception:
+            return []
+    return _cached_rows(f"premium_access|{school_id}", load, 60)
 
 
 def get_default_report_card_config(school_id):
@@ -13515,25 +13573,12 @@ def premium_feature_management():
     if role == "SuperAdmin":
         st.header("💎 Premium Feature Management")
 
-        try:
-            schools_data = (
-                sb.table("schools")
-                .select("id,name,code,active")
-                .order("name")
-                .execute()
-                .data or []
-            )
-            admin_data = (
-                sb.table("profiles")
-                .select("id,email,full_name,school_id,role,active")
-                .eq("role", "Admin")
-                .order("full_name")
-                .execute()
-                .data or []
-            )
-        except Exception as e:
-            st.error("Could not load premium feature settings.")
-            st.code(str(e))
+        schools_data = get_cached_schools(active_only=False)
+        admin_data = []
+        for school in schools_data:
+            admin_data.extend(get_cached_school_profiles(school.get("id"), roles=["Admin"], active_only=False))
+        if not schools_data:
+            st.warning("No schools found.")
             return
 
         schools_map = {
@@ -13565,40 +13610,14 @@ def premium_feature_management():
 
         for admin in school_admins:
             admin_id = admin["id"]
-            try:
-                existing = (
-                    sb.table("premium_feature_access")
-                    .select("id,active")
-                    .eq("school_id", school_id)
-                    .eq("admin_id", admin_id)
-                    .eq("feature_key", "school_academic_status")
-                    .maybe_single()
-                    .execute()
-                    .data
-                )
-            except Exception:
-                existing = None
+            premium_rows = get_cached_premium_access(school_id)
+            existing = next((x for x in premium_rows if str(x.get("admin_id")) == str(admin_id) and x.get("feature_key") == "school_academic_status"), None)
 
             active = bool(existing and existing.get("active") is True)
             label = admin.get("full_name") or admin.get("email") or "Admin"
 
-            try:
-                parent_permission = (
-                    sb.table("premium_feature_access")
-                    .select("active")
-                    .eq("school_id", school_id)
-                    .eq("admin_id", admin_id)
-                    .eq("feature_key", "subject_wise_premium_parent_student")
-                    .maybe_single()
-                    .execute()
-                    .data
-                )
-                parent_permission_active = bool(
-                    parent_permission
-                    and parent_permission.get("active") is True
-                )
-            except Exception:
-                parent_permission_active = False
+            parent_permission = next((x for x in premium_rows if str(x.get("admin_id")) == str(admin_id) and x.get("feature_key") == "subject_wise_premium_parent_student"), None)
+            parent_permission_active = bool(parent_permission and parent_permission.get("active") is True)
 
             with st.container(border=True):
                 st.write(f"**{label}**")
@@ -13659,7 +13678,7 @@ def premium_feature_management():
                                 .execute()
                             )
 
-                        mark_saved("premium_feature_setting")
+                        _clear_session_cache(f"premium_access|{school_id}")\n                        mark_saved("premium_feature_setting")
                         st.success("✅ Saved successfully.")
                         st.rerun()
                     except Exception as e:
@@ -13747,23 +13766,8 @@ def premium_feature_management():
         active_teachers = [x for x in teacher_rows if x.get("active", True)]
 
         teacher_feature_key = "school_academic_status_teacher"
-        try:
-            teacher_master_result = (
-                sb.table("premium_feature_access")
-                .select("id,active")
-                .eq("school_id", school_id)
-                .eq("admin_id", st.session_state.user.id)
-                .eq("feature_key", teacher_feature_key)
-                .maybe_single()
-                .execute()
-            )
-            teacher_master_existing = (
-                getattr(teacher_master_result, "data", None)
-                if teacher_master_result is not None
-                else None
-            )
-        except Exception:
-            teacher_master_existing = None
+        premium_rows = get_cached_premium_access(school_id)
+        teacher_master_existing = next((x for x in premium_rows if str(x.get("admin_id")) == str(st.session_state.user.id) and x.get("feature_key") == teacher_feature_key), None)
 
         teacher_master_current = bool(
             teacher_master_existing
@@ -13859,7 +13863,7 @@ def premium_feature_management():
                             .execute()
                         )
 
-                mark_saved(f"save_all_teachers_academic_status_{school_id}")
+                _clear_session_cache(f"premium_access|{school_id}")\n                mark_saved(f"save_all_teachers_academic_status_{school_id}")
                 st.success(
                     "✅ School Academic Status permission updated for all active Teachers."
                 )
@@ -13908,19 +13912,8 @@ def premium_feature_management():
         st.divider()
         st.subheader("👨‍👩‍👧 Subject-wise Premium — Parents & Students")
         feature_key = "subject_wise_premium_parent_student"
-        try:
-            existing = (
-                sb.table("premium_feature_access")
-                .select("id,active")
-                .eq("school_id", school_id)
-                .eq("admin_id", st.session_state.user.id)
-                .eq("feature_key", feature_key)
-                .maybe_single()
-                .execute()
-                .data
-            )
-        except Exception:
-            existing = None
+        premium_rows = get_cached_premium_access(school_id)
+        existing = next((x for x in premium_rows if str(x.get("admin_id")) == str(st.session_state.user.id) and x.get("feature_key") == feature_key), None)
 
         current_active = bool(existing and existing.get("active") is True)
 
@@ -13964,7 +13957,7 @@ def premium_feature_management():
                         .execute()
                     )
 
-                mark_saved(f"save_parent_student_premium_{school_id}")
+                _clear_session_cache(f"premium_access|{school_id}")\n                mark_saved(f"save_parent_student_premium_{school_id}")
                 st.success(
                     "✅ Subject-wise Premium Parent & Student permission saved."
                 )
@@ -13978,19 +13971,8 @@ def premium_feature_management():
         st.divider()
         st.subheader("📄 Report Card — Parents & Students")
         report_card_feature_key = "parent_report_card"
-        try:
-            report_existing = (
-                sb.table("premium_feature_access")
-                .select("id,active")
-                .eq("school_id", school_id)
-                .eq("admin_id", st.session_state.user.id)
-                .eq("feature_key", report_card_feature_key)
-                .maybe_single()
-                .execute()
-                .data
-            )
-        except Exception:
-            report_existing = None
+        premium_rows = get_cached_premium_access(school_id)
+        report_existing = next((x for x in premium_rows if str(x.get("admin_id")) == str(st.session_state.user.id) and x.get("feature_key") == report_card_feature_key), None)
 
         report_card_active = bool(
             report_existing and report_existing.get("active") is True
@@ -14035,7 +14017,7 @@ def premium_feature_management():
                         .execute()
                     )
 
-                mark_saved(f"save_parent_report_card_{school_id}")
+                _clear_session_cache(f"premium_access|{school_id}")\n                mark_saved(f"save_parent_report_card_{school_id}")
                 st.success("✅ Saved successfully.")
                 st.rerun()
             except Exception as e:
