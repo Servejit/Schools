@@ -1063,17 +1063,8 @@ def users():
     show_save_message("parent_student_links")
     show_save_message("user_delete")
 
-    try:
-        school_data = (
-            sb.table("schools")
-            .select("id,name,code,active")
-            .order("name")
-            .execute()
-            .data or []
-        )
-    except Exception as e:
-        st.error(str(e))
-        return
+    school_data = get_cached_schools(active_only=False)
+
 
     active_schools = [x for x in school_data if x.get("active", True)]
 
@@ -1159,20 +1150,12 @@ def users():
     # Class Teacher. Subject-only Teachers must not get user creation.
     teacher_class_options = {}
     if management_role == "Teacher":
-        try:
-            teacher_class_rows_for_users = (
-                sb.table("classes")
-                .select("id,class_name,section,active")
-                .eq("school_id", st.session_state.profile.get("school_id"))
-                .eq("class_teacher_id", st.session_state.user.id)
-                .eq("active", True)
-                .order("class_name")
-                .order("section")
-                .execute()
-                .data or []
+        teacher_class_rows_for_users = [
+            x for x in get_cached_classes(
+                st.session_state.profile.get("school_id"), active_only=True
             )
-        except Exception:
-            teacher_class_rows_for_users = []
+            if str(x.get("class_teacher_id") or "") == str(st.session_state.user.id)
+        ]
 
         teacher_class_options = {
             (
@@ -1200,32 +1183,13 @@ def users():
             if not manager_school_id:
                 st.warning("Your account is not assigned to a school.")
             else:
-                try:
-                    link_parents = (
-                        sb.table("profiles")
-                        .select("id,email,full_name")
-                        .eq("school_id", manager_school_id)
-                        .eq("role", "Parent")
-                        .eq("active", True)
-                        .order("full_name")
-                        .execute()
-                        .data or []
+                link_parents = [
+                    p for p in get_cached_school_profiles(
+                        manager_school_id, roles=["Parent"], active_only=True
                     )
-                except Exception:
-                    link_parents = []
+                ]
 
-                try:
-                    link_students = (
-                        sb.table("students")
-                        .select("id,name,admission_no,class_name,section,active")
-                        .eq("school_id", manager_school_id)
-                        .eq("active", True)
-                        .order("name")
-                        .execute()
-                        .data or []
-                    )
-                except Exception:
-                    link_students = []
+                link_students = get_cached_students(manager_school_id, active_only=True)
 
                 # Teachers can only manage students from their assigned
                 # Class Teacher classes. They may select ANY Parent account in
@@ -1234,18 +1198,10 @@ def users():
                 # different classes: one Parent login/email is shared by all
                 # linked children instead of creating duplicate Parent users.
                 if management_role == "Teacher":
-                    try:
-                        teacher_classes = (
-                            sb.table("classes")
-                            .select("class_name,section")
-                            .eq("school_id", manager_school_id)
-                            .eq("class_teacher_id", st.session_state.user.id)
-                            .eq("active", True)
-                            .execute()
-                            .data or []
-                        )
-                    except Exception:
-                        teacher_classes = []
+                    teacher_classes = [
+                        x for x in get_cached_classes(manager_school_id, active_only=True)
+                        if str(x.get("class_teacher_id") or "") == str(st.session_state.user.id)
+                    ]
 
                     allowed_classes = {
                         (
@@ -1291,16 +1247,11 @@ def users():
                     )
                     selected_parent_id = parent_options[selected_parent_label]
 
-                    try:
-                        existing_links = (
-                            sb.table("parent_student_links")
-                            .select("student_id")
-                            .eq("parent_id", selected_parent_id)
-                            .execute()
-                            .data or []
-                        )
-                    except Exception:
-                        existing_links = []
+                    existing_links = [
+                        {"student_id": x.get("student_id")}
+                        for x in get_cached_parent_student_links(manager_school_id)
+                        if str(x.get("parent_id") or "") == str(selected_parent_id)
+                    ]
 
                     existing_link_ids = {
                         str(x.get("student_id"))
@@ -1418,6 +1369,7 @@ def users():
                             # Persist the confirmation across the rerun so the
                             # saved linkage is visibly confirmed after the database
                             # write completes.
+                            _clear_session_cache(f"parent_student_links|{manager_school_id}")
                             mark_saved("parent_student_links")
                             st.rerun()
                         except Exception as e:
@@ -2503,30 +2455,15 @@ def users():
                     edit_school_id = school_map[edit_school_label]
 
                     try:
-                        parent_student_rows = (
-                            sb.table("students")
-                            .select(
-                                "id,name,admission_no,class_name,section,active"
-                            )
-                            .eq("school_id", edit_school_id)
-                            .eq("active", True)
-                            .order("name")
-                            .execute()
-                            .data or []
-                        )
+                        parent_student_rows = get_cached_students(edit_school_id, active_only=True)
 
                         # A Class Teacher can link/manage a Parent only with
                         # students from the Class Teacher's own class(es).
                         if role == "Teacher":
-                            teacher_edit_classes = (
-                                sb.table("classes")
-                                .select("class_name,section")
-                                .eq("school_id", edit_school_id)
-                                .eq("class_teacher_id", st.session_state.user.id)
-                                .eq("active", True)
-                                .execute()
-                                .data or []
-                            )
+                            teacher_edit_classes = [
+                                x for x in get_cached_classes(edit_school_id, active_only=True)
+                                if str(x.get("class_teacher_id") or "") == str(st.session_state.user.id)
+                            ]
                             teacher_allowed_edit_classes = {
                                 (
                                     str(x.get("class_name") or "").strip().lower(),
@@ -2545,13 +2482,11 @@ def users():
                         parent_student_rows = []
 
                     try:
-                        current_parent_links = (
-                            sb.table("parent_student_links")
-                            .select("student_id")
-                            .eq("parent_id", user_id)
-                            .execute()
-                            .data or []
-                        )
+                        current_parent_links = [
+                            {"student_id": x.get("student_id")}
+                            for x in get_cached_parent_student_links(edit_school_id)
+                            if str(x.get("parent_id") or "") == str(user_id)
+                        ]
                     except Exception:
                         current_parent_links = []
 
@@ -2601,18 +2536,7 @@ def users():
                     edit_school_id = school_map[edit_school_label]
 
                     try:
-                        edit_classes = (
-                            sb.table("classes")
-                            .select(
-                                "id,class_name,section,academic_year,active"
-                            )
-                            .eq("school_id", edit_school_id)
-                            .eq("active", True)
-                            .order("class_name")
-                            .order("section")
-                            .execute()
-                            .data or []
-                        )
+                        edit_classes = get_cached_classes(edit_school_id, active_only=True)
                     except Exception:
                         edit_classes = []
 
@@ -2628,23 +2552,10 @@ def users():
                     # Class Teacher assignments are stored on classes.
                     if class_labels:
                         try:
-                            class_teacher_rows = (
-                                sb.table("classes")
-                                .select(
-                                    "id,class_name,section,academic_year"
-                                )
-                                .eq(
-                                    "school_id",
-                                    edit_school_id
-                                )
-                                .eq(
-                                    "class_teacher_id",
-                                    user_id
-                                )
-                                .eq("active", True)
-                                .execute()
-                                .data or []
-                            )
+                            class_teacher_rows = [
+                                x for x in get_cached_classes(edit_school_id, active_only=True)
+                                if str(x.get("class_teacher_id") or "") == str(user_id)
+                            ]
                         except Exception:
                             class_teacher_rows = []
 
@@ -2671,16 +2582,7 @@ def users():
 
                     # Subject-teacher assignments.
                     try:
-                        assignment_rows = (
-                            sb.table("teacher_subject_assignments")
-                            .select(
-                                "id,class_id,subject_id"
-                            )
-                            .eq("teacher_id", user_id)
-                            .eq("school_id", edit_school_id)
-                            .execute()
-                            .data or []
-                        )
+                        assignment_rows = get_cached_teacher_assignments(edit_school_id, teacher_id=user_id)
                     except Exception:
                         assignment_rows = []
 
@@ -2696,24 +2598,10 @@ def users():
                     if class_labels:
                         for cl_label, cl in class_labels.items():
                             try:
-                                subjects_for_class = (
-                                    sb.table("subjects")
-                                    .select(
-                                        "id,name,subject_name,class_id,active"
-                                    )
-                                    .eq(
-                                        "school_id",
-                                        edit_school_id
-                                    )
-                                    .eq(
-                                        "class_id",
-                                        cl["id"]
-                                    )
-                                    .eq("active", True)
-                                    .order("subject_name")
-                                    .execute()
-                                    .data or []
-                                )
+                                subjects_for_class = [
+                                s for s in get_cached_subjects(edit_school_id, active_only=True)
+                                if str(s.get("class_id") or "") == str(cl["id"])
+                            ]
                             except Exception:
                                 subjects_for_class = []
 
@@ -2834,6 +2722,8 @@ def users():
                             .eq("id", user_id)
                             .execute()
                         )
+                        _clear_session_cache(f"profiles|{school_map[edit_school_label]}||False")
+                        _clear_session_cache(f"profiles|{school_map[edit_school_label]}|Parent|True")
 
                         # Save Parent → Student links.
                         if edit_role == "Parent":
@@ -8004,6 +7894,70 @@ def get_cached_premium_access(school_id):
         except Exception:
             return []
     return _cached_rows(f"premium_access|{school_id}", load, 60)
+
+
+def get_cached_students(school_id, active_only=True):
+    if not school_id:
+        return []
+    key = f"students|{school_id}|{bool(active_only)}"
+    def load():
+        try:
+            q = (sb.table("students")
+                .select("id,school_id,user_id,name,admission_no,roll_no,class_name,section,date_of_birth,gender,parent_name,parent_phone,active")
+                .eq("school_id", school_id))
+            if active_only:
+                q = q.eq("active", True)
+            return q.order("name").execute().data or []
+        except Exception:
+            return []
+    return _cached_rows(key, load, 60)
+
+
+def get_cached_parent_student_links(school_id):
+    if not school_id:
+        return []
+    def load():
+        try:
+            return (sb.table("parent_student_links")
+                .select("parent_id,student_id")
+                .execute().data or [])
+        except Exception:
+            return []
+    return _cached_rows(f"parent_student_links|{school_id}", load, 60)
+
+
+def get_cached_teacher_assignments(school_id, teacher_id=None):
+    if not school_id:
+        return []
+    key = f"teacher_assignments|{school_id}|{teacher_id or 'all'}"
+    def load():
+        try:
+            q = (sb.table("teacher_subject_assignments")
+                .select("id,school_id,teacher_id,class_id,subject_id")
+                .eq("school_id", school_id))
+            if teacher_id:
+                q = q.eq("teacher_id", teacher_id)
+            return q.execute().data or []
+        except Exception:
+            return []
+    return _cached_rows(key, load, 60)
+
+
+def get_cached_subjects(school_id, active_only=True):
+    if not school_id:
+        return []
+    key = f"subjects|{school_id}|{bool(active_only)}"
+    def load():
+        try:
+            q = (sb.table("subjects")
+                .select("id,school_id,name,subject_name,code,class_id,active,max_marks,passing_marks")
+                .eq("school_id", school_id))
+            if active_only:
+                q = q.eq("active", True)
+            return q.order("subject_name").execute().data or []
+        except Exception:
+            return []
+    return _cached_rows(key, load, 60)
 
 
 def get_default_report_card_config(school_id):
