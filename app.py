@@ -7903,6 +7903,20 @@ def attendance_summary(student_id, school_id, exam_name=None):
     return cache.get(cache_key, {}).get(str(student_id), (0, 0))
 
 
+def report_card_attendance_summary(student_id, school_id, exam_names):
+    """Return combined exam-wise attendance for the selected report-card exams."""
+    if not student_id or not school_id or not exam_names:
+        return 0, 0
+    names = [str(x).strip() for x in exam_names if str(x).strip()]
+    total_days = 0
+    present_days = 0
+    for name in dict.fromkeys(names):
+        days, present = attendance_summary(student_id, school_id, name)
+        total_days += int(days or 0)
+        present_days += int(present or 0)
+    return total_days, present_days
+
+
 def school_logo_from_template(template):
     config = get_template_config(template)
 
@@ -8424,168 +8438,245 @@ def create_report_overlay(
 
     table_top = table_y
 
-    # Keep every marks-related column comfortably visible.
-    subject_col = table_width * 0.28
-    max_col = table_width * 0.18
-    marks_col = table_width * 0.22
-    result_col = table_width * 0.16
-    grade_col = table_width * 0.16
+    selected_exam_names = []
+    if isinstance(exam_name, (list, tuple, set)):
+        selected_exam_names = [
+            str(x).strip() for x in exam_name if str(x).strip()
+        ]
+    elif exam_name:
+        selected_exam_names = [str(exam_name).strip()]
+    selected_exam_names = list(dict.fromkeys(selected_exam_names))
 
-    headers = [
-        "Subject",
-        "Max Marks",
-        "Marks Obtained",
-        "Result",
-        "Grade"
-    ]
+    school_id_for_weights = str((school_info or {}).get("id") or "").strip()
+    exam_weight_by_name = {}
+    if school_id_for_weights:
+        try:
+            academic_year_for_weights = get_school_academic_year(
+                school_id_for_weights
+            )
+            weight_by_id = get_exam_result_weights(
+                school_id_for_weights,
+                academic_year_for_weights
+            )
+            for exam in get_exam_assessments(
+                school_id_for_weights,
+                active_only=False
+            ):
+                name = str(exam.get("name") or "").strip()
+                if name:
+                    exam_weight_by_name[name] = float(
+                        weight_by_id.get(str(exam.get("id")), 0) or 0
+                    )
+        except Exception:
+            exam_weight_by_name = {}
 
-    x_positions = [
-        table_x,
-        table_x + subject_col,
-        table_x + subject_col + max_col,
-        table_x + subject_col + max_col + marks_col,
-        table_x + subject_col + max_col + marks_col + result_col
-    ]
-
-    subject_count = max(1, len(marks_rows))
-
-    # A4-safe dynamic row height. Do not make rows so small that
-    # marks/result/grade become unreadable.
-    available_height = max(
-        300,
-        table_top - (remarks_y + 95)
+    selected_weight_total = sum(
+        max(0.0, exam_weight_by_name.get(name, 0.0))
+        for name in selected_exam_names
+    )
+    use_weightage = selected_weight_total > 0
+    weight_scale = (
+        100.0 / selected_weight_total
+        if use_weightage else 1.0
     )
 
-    # Fit the complete marks table, totals, attendance, remarks and
-    # signatures inside the single A4 page.  The row height and fonts
-    # reduce automatically when a report has many subjects.
+    # Each selected exam gets two columns: Max Marks and Marks Obtained.
+    subject_col = table_width * 0.24
+    exam_count = max(1, len(selected_exam_names))
+    exam_area = table_width * 0.54
+    per_exam_width = exam_area / exam_count
+    total_col = table_width * 0.12
+    grade_col = table_width - subject_col - exam_area - total_col
+
+    total_x0 = table_x + subject_col + exam_area
+    grade_x0 = total_x0 + total_col
+
+    subject_names = []
+    for subject in subjects or []:
+        name = str(
+            subject.get("subject_name") or subject.get("name") or "Subject"
+        ).strip() or "Subject"
+        if name not in subject_names:
+            subject_names.append(name)
+    for row in marks_rows or []:
+        name = str(
+            row.get("subject_name") or row.get("name") or "Subject"
+        ).strip() or "Subject"
+        if name not in subject_names:
+            subject_names.append(name)
+
+    row_lookup = {}
+    for row in marks_rows or []:
+        key = (
+            str(row.get("subject_name") or row.get("name") or "Subject").strip(),
+            str(row.get("exam_name") or "").strip()
+        )
+        row_lookup[key] = row
+
+    header_h1 = 18
+    header_h2 = 17
+    subject_count = max(1, len(subject_names))
+    available_height = max(220, table_top - (remarks_y + 95))
     row_height = min(
         20,
-        max(
-            9,
-            available_height / (subject_count + 1)
-        )
+        max(9, available_height / (subject_count + 2))
     )
 
     if row_height < 11:
-        header_font = 6.5
-        body_font = 6.2
+        header_font = 5.8
+        body_font = 6.0
     elif row_height < 13:
-        header_font = 7
-        body_font = 6.8
+        header_font = 6.4
+        body_font = 6.6
     elif row_height < 16:
-        header_font = 8
-        body_font = 7.5
+        header_font = 7.2
+        body_font = 7.4
     else:
-        header_font = 8.5
-        body_font = 8.5
+        header_font = 8
+        body_font = 8.2
 
-    pdf.setFont(
-        "Helvetica-Bold",
-        header_font
-    )
+    table_height = header_h1 + header_h2
+    bottom_header_y = table_top - header_h1
 
+    pdf.setStrokeColorRGB(0, 0, 0)
     pdf.rect(
         table_x,
-        table_top - row_height,
+        table_top - table_height,
         table_width,
-        row_height
+        table_height
     )
 
-    for i in range(1, 5):
-        pdf.line(
-            x_positions[i],
-            table_top,
-            x_positions[i],
-            table_top - row_height
-        )
+    # Main vertical boundaries.
+    pdf.line(
+        table_x + subject_col, table_top,
+        table_x + subject_col, table_top - table_height
+    )
+    pdf.line(
+        total_x0, table_top,
+        total_x0, table_top - table_height
+    )
+    pdf.line(
+        grade_x0, table_top,
+        grade_x0, table_top - table_height
+    )
 
-    # Header alignment: Subject stays left-aligned as in the original layout.
-    header_centers = [
+    pdf.setFont("Helvetica-Bold", header_font)
+    pdf.drawCentredString(
         table_x + subject_col / 2,
-        x_positions[1] + max_col / 2,
-        x_positions[2] + marks_col / 2,
-        x_positions[3] + result_col / 2,
-        x_positions[4] + grade_col / 2
-    ]
-
-    pdf.drawString(
-        table_x + 5,
-        table_top - row_height + max(3, row_height / 2 - 3),
-        headers[0]
+        table_top - table_height / 2 - 3,
+        "Subject"
+    )
+    pdf.drawCentredString(
+        total_x0 + total_col / 2,
+        table_top - table_height / 2 - 3,
+        "Total Marks"
+    )
+    pdf.drawCentredString(
+        grade_x0 + grade_col / 2,
+        table_top - table_height / 2 - 3,
+        "Grade"
     )
 
-    for i in range(1, len(headers)):
+    # Exam heading format: Exam 1 (20), Exam 2 (80). Weightage is hidden.
+    cursor = table_x + subject_col
+    for exam in selected_exam_names:
+        center = cursor + per_exam_width / 2
+        exam_max_values = []
+        for row in marks_rows or []:
+            if str(row.get("exam_name") or "").strip() == exam:
+                try:
+                    exam_max_values.append(float(row.get("max_marks")))
+                except Exception:
+                    pass
+        exam_max = max(exam_max_values) if exam_max_values else 0.0
+        heading = (
+            f"{exam} ({format_mark(exam_max)})"
+            if exam_max else exam
+        )
+        if len(heading) > 22:
+            heading = heading[:21] + "…"
         pdf.drawCentredString(
-            header_centers[i],
-            table_top - row_height + max(3, row_height / 2 - 3),
-            headers[i]
+            center,
+            table_top - header_h1 / 2 - 3,
+            heading
         )
 
-    y = table_top - row_height
+        pdf.line(
+            cursor + per_exam_width / 2,
+            bottom_header_y,
+            cursor + per_exam_width / 2,
+            table_top - table_height
+        )
+        cursor += per_exam_width
 
-    total_marks = 0
-    total_max = 0
-
-    pdf.setFont(
-        "Helvetica",
-        body_font
+    pdf.line(
+        table_x + subject_col,
+        bottom_header_y,
+        total_x0,
+        bottom_header_y
     )
 
-    for row in marks_rows:
+    cursor = table_x + subject_col
+    for _ in selected_exam_names:
+        pdf.setFont("Helvetica-Bold", header_font)
+        pdf.drawCentredString(
+            cursor + per_exam_width * 0.25,
+            bottom_header_y - header_h2 / 2 - 3,
+            "Max"
+        )
+        pdf.drawCentredString(
+            cursor + per_exam_width * 0.75,
+            bottom_header_y - header_h2 / 2 - 3,
+            "Obt."
+        )
+        cursor += per_exam_width
 
+    y = table_top - table_height
+    total_weighted_obtained = 0.0
+    total_weighted_max = 0.0
+
+    for subject_name in subject_names:
         y -= row_height
 
-        subject_name = (
-            row.get("subject_name")
-            or row.get("name")
-            or "Subject"
+        subject_weighted_obtained = 0.0
+        subject_weighted_max = 0.0
+        row_values = []
+
+        for exam in selected_exam_names:
+            row = row_lookup.get((subject_name, exam))
+            mark_number = None
+            max_number = 0.0
+
+            if row:
+                try:
+                    mark_number = float(row.get("marks"))
+                except Exception:
+                    mark_number = None
+                try:
+                    max_number = float(row.get("max_marks"))
+                except Exception:
+                    max_number = 0.0
+
+            row_values.append((mark_number, max_number))
+
+            if mark_number is not None and max_number > 0:
+                weight = (
+                    exam_weight_by_name.get(exam, 0.0) * weight_scale
+                    if use_weightage else 1.0
+                )
+                subject_weighted_obtained += (
+                    mark_number / max_number * weight
+                )
+                subject_weighted_max += weight
+
+        total_weighted_obtained += subject_weighted_obtained
+        total_weighted_max += subject_weighted_max
+
+        subject_percentage = (
+            subject_weighted_obtained / subject_weighted_max * 100
+            if subject_weighted_max else 0
         )
-
-        mark_value = row.get("marks")
-        max_value = row.get("max_marks")
-
-        try:
-            mark_number = float(mark_value)
-            mark_display = format_mark(mark_number)
-        except Exception:
-            mark_number = 0
-            mark_display = "-"
-
-        try:
-            max_number = float(max_value)
-        except Exception:
-            max_number = 100
-
-        total_marks += mark_number
-        total_max += max_number
-
-        passing = row.get("passing_marks")
-
-        try:
-            passing_number = float(passing)
-        except Exception:
-            passing_number = 0
-
-        if mark_value is None:
-            result = "-"
-            grade = "-"
-        else:
-            result = (
-                "PASS"
-                if mark_number >= passing_number
-                else "FAIL"
-            )
-
-            row_percentage = (
-                (mark_number / max_number) * 100
-                if max_number
-                else 0
-            )
-
-            grade = grade_from_percentage(
-                row_percentage
-            )
+        grade = grade_from_percentage(subject_percentage)
 
         pdf.rect(
             table_x,
@@ -8594,111 +8685,93 @@ def create_report_overlay(
             row_height
         )
 
-        for i in range(1, 5):
+        cursor = table_x + subject_col
+        pdf.line(cursor, y, cursor, y + row_height)
+        for _ in selected_exam_names:
             pdf.line(
-                x_positions[i],
-                y,
-                x_positions[i],
-                y + row_height
+                cursor + per_exam_width / 2, y,
+                cursor + per_exam_width / 2, y + row_height
             )
+            cursor += per_exam_width
+            pdf.line(cursor, y, cursor, y + row_height)
+        pdf.line(total_x0, y, total_x0, y + row_height)
+        pdf.line(grade_x0, y, grade_x0, y + row_height)
 
         baseline = y + max(
-            3,
-            (row_height - body_font) / 2
+            3, (row_height - body_font) / 2
         )
+        pdf.setFont("Helvetica", body_font)
 
-        subject_text = str(subject_name)
-        if len(subject_text) > 31:
-            subject_text = subject_text[:30] + "…"
-
-        # Subject name left-aligned in the Subject column.
+        subject_display = subject_name
+        if len(subject_display) > 27:
+            subject_display = subject_display[:26] + "…"
         pdf.drawString(
-            table_x + 5,
+            table_x + 4,
             baseline,
-            subject_text
+            subject_display
         )
 
-        # All numeric/result/grade values are centered in their columns.
-        pdf.drawCentredString(
-            header_centers[1],
-            baseline,
-            format_mark(max_number)
-        )
+        cursor = table_x + subject_col
+        for mark_number, max_number in row_values:
+            pdf.drawCentredString(
+                cursor + per_exam_width * 0.25,
+                baseline,
+                format_mark(max_number) if max_number else "-"
+            )
+            pdf.drawCentredString(
+                cursor + per_exam_width * 0.75,
+                baseline,
+                format_mark(mark_number)
+                if mark_number is not None else "-"
+            )
+            cursor += per_exam_width
 
         pdf.drawCentredString(
-            header_centers[2],
+            total_x0 + total_col / 2,
             baseline,
-            mark_display
+            format_mark(subject_weighted_obtained)
         )
-
         pdf.drawCentredString(
-            header_centers[3],
-            baseline,
-            result
-        )
-
-        pdf.drawCentredString(
-            header_centers[4],
+            grade_x0 + grade_col / 2,
             baseline,
             grade
         )
 
-    # -----------------------------------------------------
-    # Total / percentage / attendance
-    # -----------------------------------------------------
-
     percentage = (
-        (total_marks / total_max) * 100
-        if total_max
-        else 0
+        total_weighted_obtained / total_weighted_max * 100
+        if total_weighted_max else 0
     )
 
     summary_y = y - 22
-
-    pdf.setFont(
-        "Helvetica-Bold",
-        9.5
-    )
+    pdf.setFont("Helvetica-Bold", 9.5)
 
     total_x = table_x
     percentage_x = table_x + table_width * 0.43
     grade_x = table_x + table_width * 0.76
 
-    pdf.drawString(        total_x,
+    pdf.drawString(
+        total_x,
         summary_y,
-        f"Total Marks: {format_mark(total_marks)} / {format_mark(total_max)}"
+        f"Total Marks: {format_mark(total_weighted_obtained)} / {format_mark(total_weighted_max)}"
     )
-
     pdf.drawString(
         percentage_x,
         summary_y,
         f"Percentage: {percentage:.2f}%"
     )
-
-    overall_grade = grade_from_percentage(
-        percentage
-    )
-
     pdf.drawString(
         grade_x,
         summary_y,
-        f"Grade: {overall_grade}"
+        f"Grade: {grade_from_percentage(percentage)}"
     )
 
     attendance_y = summary_y - 19
-
-    pdf.setFont(
-        "Helvetica-Bold",
-        9
-    )
-
-    # Present Days is directly below the Percentage column.
+    pdf.setFont("Helvetica-Bold", 9)
     pdf.drawString(
         total_x,
         attendance_y,
         f"Total Attendance: {int(total_attendance)}"
     )
-
     pdf.drawString(
         percentage_x,
         attendance_y,
@@ -12180,11 +12253,17 @@ def report_cards():
         str(x.get("name") or "").strip()
         for x in exam_options if x.get("name")
     ]
-    exam_name = st.selectbox(
+    exam_name = st.multiselect(
         "📝 Exam / Assessment",
         exam_names,
-        key="report_exam"
+        default=exam_names[:1],
+        key="report_exam",
+        help="Select one or more exams. Weightage is used only for final calculation and is not printed."
     )
+
+    if not exam_name:
+        st.info("Select at least one Exam / Assessment.")
+        return
 
     # -----------------------------------------------------
     # STUDENT SELECTION
@@ -12260,7 +12339,7 @@ def report_cards():
                     "student_id",
                     student["id"]
                 )
-                .eq(
+                .in_(
                     "exam_name",
                     exam_name
                 )
@@ -12310,7 +12389,7 @@ def report_cards():
                     "id": None,
                     "student_id": student["id"],
                     "subject_id": subject.get("id"),
-                    "exam_name": exam_name,
+                    "exam_name": row.get("exam_name") or (exam_name[0] if exam_name else ""),
                     "marks": None,
                     "max_marks": subject.get("max_marks"),
                     "class_id": subject.get("class_id")
@@ -12405,14 +12484,14 @@ def report_cards():
                             file_type,
 
                         total_attendance=
-                            attendance_summary(
+                            report_card_attendance_summary(
                                 selected_student["id"],
                                 school_id,
                                 exam_name
                             )[0],
 
                         present_days=
-                            attendance_summary(
+                            report_card_attendance_summary(
                                 selected_student["id"],
                                 school_id,
                                 exam_name
@@ -12449,11 +12528,12 @@ def report_cards():
                         .replace(" ", "_")
                     )
 
-                    safe_exam = (
-                        str(exam_name)
+                    safe_exam = "_".join(
+                        str(x)
                         .replace("/", "_")
                         .replace("\\", "_")
                         .replace(" ", "_")
+                        for x in exam_name
                     )
 
                     file_name = (
@@ -12563,14 +12643,14 @@ def report_cards():
                                 file_type,
 
                             total_attendance=
-                                attendance_summary(
+                                report_card_attendance_summary(
                                     student["id"],
                                     school_id,
                                     exam_name
                                 )[0],
 
                             present_days=
-                                attendance_summary(
+                                report_card_attendance_summary(
                                     student["id"],
                                     school_id,
                                     exam_name
@@ -12602,11 +12682,12 @@ def report_cards():
                             .replace(" ", "_")
                         )
 
-                        safe_exam = (
-                            str(exam_name)
+                        safe_exam = "_".join(
+                            str(x)
                             .replace("/", "_")
                             .replace("\\", "_")
                             .replace(" ", "_")
+                            for x in exam_name
                         )
 
                         pdf_name = (
@@ -12657,9 +12738,7 @@ def report_cards():
             )
 
 
-
-def parent_report_cards_enabled(school_id):
-    """Check whether Admin has enabled Report Cards for Parents."""
+ Cards for Parents."""
     if not school_id:
         return False
     try:
