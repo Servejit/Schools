@@ -5433,6 +5433,9 @@ def classes_subjects():
     
                 st.markdown("#### 📖 Subjects")
 
+            # Create the standard editable catalogue before displaying subjects.
+            ensure_default_subjects_for_class(school_id, class_item)
+
             try:
 
                 subject_data = (
@@ -5440,7 +5443,7 @@ def classes_subjects():
                     .select(
                         "id,school_id,name,code,active,"
                         "class_id,subject_name,max_marks,"
-                        "passing_marks"
+                        "passing_marks,report_card_visible,grade_only"
                     )
                     .eq("school_id", school_id)
                     .eq("class_id", class_id)
@@ -5594,11 +5597,18 @@ def classes_subjects():
 
                         edit_active = st.checkbox(
                             "Subject Active",
-                            value=subject.get(
-                                "active",
-                                True
-                            ),
+                            value=subject.get("active", True),
                             key=f"subject_active_{subject_id}"
+                        )
+                        edit_report_visible = st.checkbox(
+                            "Show in Report Card",
+                            value=subject.get("report_card_visible", True),
+                            key=f"subject_report_visible_{subject_id}"
+                        )
+                        edit_grade_only = st.checkbox(
+                            "Grade Only — Do not count in percentage",
+                            value=subject.get("grade_only", False),
+                            key=f"subject_grade_only_{subject_id}"
                         )
 
                         # Assign one or more Subject Teachers for this exact
@@ -5691,7 +5701,11 @@ def classes_subjects():
                                                 "passing_marks":
                                                     edit_pass,
                                                 "active":
-                                                    edit_active
+                                                    edit_active,
+                                                "report_card_visible":
+                                                    edit_report_visible,
+                                                "grade_only":
+                                                    edit_grade_only
                                             })
                                             .eq(
                                                 "id",
@@ -5935,7 +5949,11 @@ def classes_subjects():
                                         "passing_marks":
                                             new_passing_marks,
                                         "active":
-                                            True
+                                            True,
+                                        "report_card_visible":
+                                            True,
+                                        "grade_only":
+                                            False
                                     })
                                     .execute()
                                 )
@@ -10725,6 +10743,119 @@ def get_school_academic_year(school_id):
     except Exception:
         pass
     return ""
+
+
+DEFAULT_JUNIOR_SUBJECTS = [
+    ("English", "ENG"), ("Hindi", "HIN"), ("Mathematics", "MATH"),
+    ("Science", "SCI"), ("Social Science", "SST"), ("GK", "GK"),
+    ("Computer", "COMP"), ("Value Education", "VE"), ("French", "FRE"),
+    ("Sanskrit", "SAN"), ("Arts", "ARTS")
+]
+
+CBSE_SENIOR_SUBJECT_CATALOG = {
+    "Common": [
+        ("English Core", "301"), ("English Elective", "001"),
+        ("Hindi Core", "302"), ("Hindi Elective", "002"),
+        ("Mathematics", "041"), ("Applied Mathematics", "241"),
+        ("Physical Education", "048"), ("Computer Science", "083"),
+        ("Informatics Practices", "065"), ("Information Technology", "802"),
+        ("Economics", "030"), ("Psychology", "037"), ("Sociology", "039"),
+        ("Home Science", "064"), ("Fine Arts", "049"),
+        ("Legal Studies", "074"), ("Entrepreneurship", "066"),
+        ("Engineering Graphics", "046"), ("Agriculture", "068"),
+        ("Political Science", "028"), ("History", "027"),
+        ("Geography", "029"), ("Biology", "044"), ("Chemistry", "043"),
+        ("Physics", "042"), ("Biotechnology", "045"),
+        ("Business Studies", "054"), ("Accountancy", "055"),
+        ("NCC", "076"), ("Knowledge Traditions and Practices of India", "073"),
+        ("General Studies", "GS"), ("Health & Physical Education", "HPE"),
+        ("Work Experience", "WE"), ("Art Education", "AE")
+    ],
+    "Arts / Humanities": [
+        ("History", "027"), ("Political Science", "028"), ("Geography", "029"),
+        ("Economics", "030"), ("Sociology", "039"), ("Psychology", "037"),
+        ("Fine Arts", "049"), ("Home Science", "064"),
+        ("Physical Education", "048"), ("Legal Studies", "074"),
+        ("Entrepreneurship", "066")
+    ],
+    "Medical": [
+        ("Physics", "042"), ("Chemistry", "043"), ("Biology", "044"),
+        ("Biotechnology", "045"), ("Physical Education", "048"),
+        ("Psychology", "037"), ("Home Science", "064")
+    ],
+    "Non-Medical": [
+        ("Physics", "042"), ("Chemistry", "043"), ("Mathematics", "041"),
+        ("Applied Mathematics", "241"), ("Computer Science", "083"),
+        ("Informatics Practices", "065"), ("Physical Education", "048"),
+        ("Engineering Graphics", "046")
+    ],
+    "Commerce": [
+        ("Accountancy", "055"), ("Business Studies", "054"),
+        ("Economics", "030"), ("Mathematics", "041"),
+        ("Applied Mathematics", "241"), ("Entrepreneurship", "066"),
+        ("Informatics Practices", "065"), ("Computer Science", "083"),
+        ("Physical Education", "048"), ("Legal Studies", "074")
+    ]
+}
+
+
+def ensure_default_subjects_for_class(school_id, class_item):
+    """Create the school's editable subject catalogue for this class once."""
+    class_id = str(class_item.get("id") or "")
+    class_name = str(class_item.get("class_name") or "").strip()
+    if not school_id or not class_id:
+        return
+
+    try:
+        existing = (
+            sb.table("subjects")
+            .select("id,subject_name")
+            .eq("school_id", school_id)
+            .eq("class_id", class_id)
+            .execute()
+            .data or []
+        )
+        existing_names = {
+            str(x.get("subject_name") or x.get("name") or "").strip().lower()
+            for x in existing
+        }
+
+        match = re.search(r"(\\d+)", class_name)
+        grade = int(match.group(1)) if match else 8
+
+        if grade <= 8:
+            seed_rows = [
+                {
+                    "school_id": school_id, "class_id": class_id,
+                    "name": name, "subject_name": name, "code": code,
+                    "max_marks": 100, "passing_marks": 33, "active": True,
+                    "report_card_visible": True, "grade_only": False
+                }
+                for name, code in DEFAULT_JUNIOR_SUBJECTS
+            ]
+        else:
+            seed_rows = []
+            for stream_name, items in CBSE_SENIOR_SUBJECT_CATALOG.items():
+                for name, code in items:
+                    if name.lower() in existing_names:
+                        continue
+                    seed_rows.append({
+                        "school_id": school_id, "class_id": class_id,
+                        "name": name, "subject_name": name, "code": code,
+                        "max_marks": 100, "passing_marks": 33, "active": True,
+                        "report_card_visible": False, "grade_only": False
+                    })
+
+        seed_rows = [
+            row for row in seed_rows
+            if str(row["subject_name"]).strip().lower() not in existing_names
+        ]
+        if seed_rows:
+            sb.table("subjects").insert(seed_rows).execute()
+    except Exception:
+        # Existing installations may not yet have the new report-card columns.
+        # The main subject-management screen remains usable until SQL is applied.
+        pass
 
 
 def get_report_card_class_group(class_name):
