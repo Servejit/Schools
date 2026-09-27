@@ -2919,7 +2919,7 @@ def users():
 def get_exam_assessments(school_id, active_only=True):
     try:
         query = sb.table("exam_assessments").select(
-            "id,school_id,name,active,created_at"
+            "id,school_id,name,max_marks,active,created_at"
         ).eq("school_id", school_id).order("name")
         if active_only:
             query = query.eq("active", True)
@@ -2948,6 +2948,15 @@ def exam_assessment_settings():
             key="new_exam_assessment_name"
         ).strip()
 
+        new_exam_max_marks = st.number_input(
+            "Maximum Marks for this Exam",
+            min_value=1.0,
+            max_value=1000.0,
+            value=100.0,
+            step=1.0,
+            key="new_exam_assessment_max_marks"
+        )
+
         save_key = "save_exam_assessment"
         show_save_message(save_key)
         if st.button("💾 Save Exam / Assessment", type="primary",
@@ -2964,7 +2973,10 @@ def exam_assessment_settings():
                 return
             try:
                 sb.table("exam_assessments").insert({
-                    "school_id": school_id, "name": new_name, "active": True
+                    "school_id": school_id,
+                    "name": new_name,
+                    "max_marks": float(new_exam_max_marks),
+                    "active": True
                 }).execute()
                 mark_saved(save_key)
                 st.success("Exam / Assessment saved successfully.")
@@ -2991,6 +3003,15 @@ def exam_assessment_settings():
                     key=f"edit_exam_name_{exam_id}"
                 ).strip()
 
+                edit_exam_max_marks = st.number_input(
+                    "Maximum Marks",
+                    min_value=1.0,
+                    max_value=1000.0,
+                    value=float(exam.get("max_marks") or 100),
+                    step=1.0,
+                    key=f"edit_exam_max_marks_{exam_id}"
+                )
+
                 if st.button(
                     "💾 Modify",
                     key=f"modify_exam_{exam_id}",
@@ -3008,7 +3029,10 @@ def exam_assessment_settings():
                         try:
                             (
                                 sb.table("exam_assessments")
-                                .update({"name": edit_exam_name})
+                                .update({
+                                    "name": edit_exam_name,
+                                    "max_marks": float(edit_exam_max_marks)
+                                })
                                 .eq("id", exam_id)
                                 .eq("school_id", school_id)
                                 .execute()
@@ -6095,7 +6119,7 @@ def bulk_marks():
         or "Subject"
     )
 
-    max_marks = float(selected_subject.get("max_marks") or 100)
+    subject_max_marks = float(selected_subject.get("max_marks") or 100)
     passing_marks = float(selected_subject.get("passing_marks") or 0)
 
     st.caption(
@@ -6117,6 +6141,15 @@ def bulk_marks():
         exam_names,
         key="marks_exam_name"
     ).strip()
+
+    selected_exam = next(
+        (x for x in exam_options if str(x.get("name") or "").strip() == exam_name),
+        {}
+    )
+    exam_max_marks = float(selected_exam.get("max_marks") or subject_max_marks or 100)
+    st.info(
+        f"📝 **{exam_name} Maximum Marks: {format_mark(exam_max_marks)}**"
+    )
 
     try:
         student_data = [
@@ -6187,7 +6220,7 @@ def bulk_marks():
 
     st.markdown(f"### 📝 {subject_name} — {exam_name}")
     st.caption(
-        f"{len(students_for_class)} students | Maximum {max_marks:.2f} marks"
+        f"{len(students_for_class)} students | Exam Maximum {format_mark(exam_max_marks)} marks"
     )
 
     edited_df = st.data_editor(
@@ -6203,7 +6236,7 @@ def bulk_marks():
             "Marks": st.column_config.NumberColumn(
                 "Marks",
                 min_value=0.0,
-                max_value=max_marks,
+                max_value=exam_max_marks,
                 step=0.5,
                 format="%.2f"
             )
@@ -6268,7 +6301,7 @@ def bulk_marks():
             if mark_value > max_marks:
                 errors.append(
                     f"{row['Student Name']}: {format_mark(mark_value)} exceeds "
-                    f"maximum {format_mark(max_marks)}."
+                    f"exam maximum {format_mark(exam_max_marks)}."
                 )
                 continue
 
@@ -6288,7 +6321,7 @@ def bulk_marks():
                         "id": existing["id"],
                         "old_marks": old_num,
                         "marks": mark_value,
-                        "max_marks": max_marks,
+                        "max_marks": exam_max_marks,
                         "class_id": class_id
                     })
             else:
@@ -8485,10 +8518,7 @@ def create_report_overlay(
         for name in selected_exam_names
     )
     use_weightage = selected_weight_total > 0
-    weight_scale = (
-        100.0 / selected_weight_total
-        if use_weightage else 1.0
-    )
+    weight_scale = 1.0
 
     # Each selected exam gets two columns: Max Marks and Marks Obtained.
     subject_col = table_width * 0.24
@@ -8591,14 +8621,28 @@ def create_report_overlay(
     cursor = table_x + subject_col
     for exam in selected_exam_names:
         center = cursor + per_exam_width / 2
-        exam_max_values = []
-        for row in marks_rows or []:
-            if str(row.get("exam_name") or "").strip() == exam:
-                try:
-                    exam_max_values.append(float(row.get("max_marks")))
-                except Exception:
-                    pass
-        exam_max = max(exam_max_values) if exam_max_values else 0.0
+        exam_max = float(
+            next(
+                (
+                    x.get("max_marks")
+                    for x in get_exam_assessments(
+                        school_id_for_weights,
+                        active_only=False
+                    )
+                    if str(x.get("name") or "").strip() == exam
+                ),
+                0
+            ) or 0
+        )
+        if not exam_max:
+            exam_max_values = []
+            for row in marks_rows or []:
+                if str(row.get("exam_name") or "").strip() == exam:
+                    try:
+                        exam_max_values.append(float(row.get("max_marks")))
+                    except Exception:
+                        pass
+            exam_max = max(exam_max_values) if exam_max_values else 0.0
         heading = (
             f"{exam} ({report_display_mark(exam_max)})"
             if exam_max else exam
@@ -8762,7 +8806,7 @@ def create_report_overlay(
     pdf.drawString(
         total_x,
         summary_y,
-        f"Total Marks: {format_mark(total_weighted_obtained)} / {format_mark(total_weighted_max)}"
+        f"Final Weighted Result: {percentage:.2f} / 100"
     )
     pdf.drawString(
         percentage_x,
@@ -11484,6 +11528,11 @@ def marks_backup_and_result_tools(school_id):
                 key=f"save_exam_weights_{school_id}"
             ):
                 try:
+                    if abs(total_weight - 100.0) > 0.01:
+                        raise ValueError(
+                            f"Exam weightage must total exactly 100%. Current total is {total_weight:g}%."
+                        )
+
                     for _, row in edited_weights.iterrows():
                         exam_id = str(row["Exam ID"])
                         weight = float(row["Weight %"] or 0)
@@ -11508,8 +11557,10 @@ def marks_backup_and_result_tools(school_id):
                     st.code(str(e))
 
             st.caption(
-                "Example: PT-1 10%, PT-2 10%, Half Yearly 30%, Annual 50%. "
-                "Raw exam marks are never changed; weightage is used only for the final result."
+                "Set each exam's own Maximum Marks in Exam / Assessment Settings. "
+                "Then set the final-result weightage here. Example: PT-1 20 marks = 20%, "
+                "Half Yearly 80 marks = 30%, PT-3 20 marks = 20%, Annual 100 marks = 30%. "
+                "The four weights must total 100%."
             )
 
 
@@ -12266,9 +12317,9 @@ def report_cards():
     exam_name = st.multiselect(
         "📝 Exam / Assessment",
         exam_names,
-        default=exam_names[:1],
+        default=exam_names,
         key="report_exam",
-        help="Select one or more exams. Weightage is used only for final calculation and is not printed."
+        help="Each exam keeps its own maximum marks. Final result is calculated from the saved exam weightage."
     )
 
     if not exam_name:
@@ -12355,6 +12406,12 @@ def report_cards():
 
         # Return every selected exam mark. The PDF generator groups them
         # by Subject + Exam so no exam's marks overwrite another exam.
+        exam_max_by_name = {
+            str(x.get("name") or "").strip(): float(x.get("max_marks") or 100)
+            for x in exam_options
+            if x.get("name")
+        }
+
         result = []
         for row in rows:
             subject = subject_by_id.get(str(row.get("subject_id")))
@@ -12375,12 +12432,18 @@ def report_cards():
                 if subject.get("passing_marks") is not None
                 else 33
             )
-            if combined.get("max_marks") is None:
-                combined["max_marks"] = (
-                    subject.get("max_marks")
-                    if subject.get("max_marks") is not None
-                    else 100
+            combined["max_marks"] = exam_max_by_name.get(
+                str(row.get("exam_name") or "").strip(),
+                float(
+                    row.get("max_marks")
+                    if row.get("max_marks") is not None
+                    else (
+                        subject.get("max_marks")
+                        if subject.get("max_marks") is not None
+                        else 100
+                    )
                 )
+            )
             result.append(combined)
 
         result.sort(
