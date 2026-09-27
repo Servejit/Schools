@@ -612,6 +612,7 @@ def delete_school_all_data(school_id):
         "exam_result_weights",
         "exam_assessments",
         "marks",
+        "exam_attendance",
         "attendance",
         "subjects",
         "classes",
@@ -6630,10 +6631,9 @@ def bulk_marks():
 
 
 def attendance():
-    st.header("📅 Attendance")
+    st.header("📅 Exam-wise Attendance")
 
     role = get_active_theme_role()
-
     if role not in ["SuperAdmin", "Admin", "Admin+Teacher", "Teacher"]:
         st.error("You do not have permission to manage attendance.")
         return
@@ -6642,10 +6642,20 @@ def attendance():
     if not school_id:
         return
 
-    selected_date = st.date_input(
-        "Attendance Date",
-        value=datetime.date.today(),
-        key="attendance_date"
+    exam_options = get_exam_assessments(school_id)
+    exam_names = [
+        str(x.get("name") or "").strip()
+        for x in exam_options
+        if str(x.get("name") or "").strip()
+    ]
+    if not exam_names:
+        st.warning("No Exam / Assessment has been created by Admin yet.")
+        return
+
+    exam_name = st.selectbox(
+        "📝 Exam / Assessment",
+        exam_names,
+        key="attendance_exam_name"
     )
 
     try:
@@ -6654,6 +6664,8 @@ def attendance():
             .select("id,name,class_name,section,admission_no,active")
             .eq("school_id", school_id)
             .eq("active", True)
+            .order("class_name")
+            .order("section")
             .order("name")
             .execute()
             .data or []
@@ -6667,8 +6679,6 @@ def attendance():
         st.info("No active students found.")
         return
 
-    # Class Teacher can see/fill attendance only for classes assigned
-    # to them as Class Teacher. Admin/SuperAdmin retain full access.
     assigned_class_rows = []
     if role == "Teacher":
         try:
@@ -6689,9 +6699,7 @@ def attendance():
             return
 
         if not assigned_class_rows:
-            st.warning(
-                "No class has been assigned to you as Class Teacher yet."
-            )
+            st.warning("No class has been assigned to you as Class Teacher yet.")
             return
 
         assigned_pairs = {
@@ -6701,7 +6709,6 @@ def attendance():
             )
             for x in assigned_class_rows
         }
-
         students_data = [
             x for x in students_data
             if (
@@ -6709,7 +6716,6 @@ def attendance():
                 str(x.get("section") or "").strip().lower()
             ) in assigned_pairs
         ]
-
         class_options = [
             f"{x.get('class_name') or '-'} | Section: {x.get('section') or '-'}"
             for x in assigned_class_rows
@@ -6727,77 +6733,123 @@ def attendance():
         class_lookup = {}
 
     selected_class = st.selectbox(
-        "Class",
+        "🏫 Class / Section",
         class_options,
         key="attendance_class"
     )
-
     selected_class_row = class_lookup.get(selected_class)
 
     if selected_class != "All Classes":
         if role == "Teacher" and selected_class_row:
             target_name = str(selected_class_row.get("class_name") or "").strip().lower()
             target_section = str(selected_class_row.get("section") or "").strip().lower()
-            students_data = [
-                x for x in students_data
-                if str(x.get("class_name") or "").strip().lower() == target_name
-                and str(x.get("section") or "").strip().lower() == target_section
-            ]
         else:
-            # Admin/SuperAdmin
             parts = selected_class.split(" | Section: ", 1)
             target_name = parts[0].strip().lower()
             target_section = parts[1].strip().lower() if len(parts) > 1 else ""
-            students_data = [
-                x for x in students_data
-                if str(x.get("class_name") or "").strip().lower() == target_name
-                and str(x.get("section") or "").strip().lower() == target_section
-            ]
 
+        students_data = [
+            x for x in students_data
+            if str(x.get("class_name") or "").strip().lower() == target_name
+            and str(x.get("section") or "").strip().lower() == target_section
+        ]
+
+    if not students_data:
+        st.info("No active students are available for the selected class.")
+        return
+
+    # One read for the selected exam instead of one daily attendance read.
     try:
         existing = (
-            sb.table("attendance")
-            .select("id,student_id,attendance_date,present")
+            sb.table("exam_attendance")
+            .select("id,student_id,class_id,total_days,present_days")
             .eq("school_id", school_id)
-            .eq("attendance_date", str(selected_date))
+            .eq("exam_name", exam_name)
             .execute()
             .data or []
         )
     except Exception as e:
         st.error(
-            "Attendance table could not be loaded. "
-            "Create the attendance table in Supabase first."
+            "Exam-wise attendance is not ready yet. "
+            "Run database/exam_attendance.sql in Supabase SQL Editor first."
         )
         st.code(str(e))
         return
 
     existing_by_student = {
-        str(x["student_id"]): x for x in existing
+        str(x.get("student_id")): x for x in existing if x.get("student_id")
     }
 
-    entries = []
+    # Build class-id lookup once.
+    class_id_by_pair = {}
+    if role == "Teacher":
+        for row in assigned_class_rows:
+            pair = (
+                str(row.get("class_name") or "").strip().lower(),
+                str(row.get("section") or "").strip().lower()
+            )
+            class_id_by_pair[pair] = row.get("id")
 
+    st.caption(
+        "Enter Total Days and Present Days for this exam. "
+        "Attendance % is calculated automatically."
+    )
+
+    entries = []
     for student in students_data:
         sid = str(student["id"])
         old = existing_by_student.get(sid, {})
-        old_present = old.get("present", True)
+        old_total = int(old.get("total_days") or 0)
+        old_present = int(old.get("present_days") or 0)
 
-        status = st.selectbox(
-            student.get("name") or "Student",
-            ["Present", "Absent"],
-            index=0 if bool(old_present) else 1,
-            key=f"attendance_{sid}_{selected_date}"
+        c1, c2, c3 = st.columns([2.2, 1, 1])
+        with c1:
+            st.write(
+                f"**{student.get('name') or 'Student'}**"
+                f" | Adm: {student.get('admission_no') or '-'}"
+            )
+        with c2:
+            total_days = st.number_input(
+                "Total Days",
+                min_value=0,
+                max_value=366,
+                value=old_total,
+                step=1,
+                key=f"attendance_total_{exam_name}_{sid}"
+            )
+        with c3:
+            present_days = st.number_input(
+                "Present Days",
+                min_value=0,
+                max_value=366,
+                value=min(old_present, int(total_days)),
+                step=1,
+                key=f"attendance_present_{exam_name}_{sid}"
+            )
+
+        percentage = (
+            round(float(present_days) / float(total_days) * 100, 2)
+            if int(total_days) > 0 else 0.0
         )
+        st.caption(f"Attendance: **{percentage:.2f}%**")
 
-        entries.append((
-            sid,
-            status == "Present",
-            old.get("id"),
-            old.get("present")
-        ))
+        pair = (
+            str(student.get("class_name") or "").strip().lower(),
+            str(student.get("section") or "").strip().lower()
+        )
+        entries.append({
+            "student_id": sid,
+            "class_id": class_id_by_pair.get(pair),
+            "total_days": int(total_days),
+            "present_days": int(present_days),
+            "old_id": old.get("id"),
+            "old_total": old_total,
+            "old_present": old_present
+        })
 
-    save_key = "save_attendance_button"
+    save_key = "save_exam_attendance_button"
     show_save_message(save_key)
+
     if st.button(
         "💾 Save Attendance",
         type="primary",
@@ -6806,40 +6858,68 @@ def attendance():
     ):
         try:
             conflicts = []
+            changed = 0
 
-            for sid, status, old_id, old_present in entries:
+            for entry in entries:
+                total_days = entry["total_days"]
+                present_days = entry["present_days"]
+
+                if present_days > total_days:
+                    st.error("Present Days cannot be greater than Total Days.")
+                    return
+
+                old_id = entry["old_id"]
                 if old_id:
-                    # Skip unchanged attendance rows.
-                    if old_present is not None and bool(old_present) == bool(status):
+                    if (
+                        entry["old_total"] == total_days
+                        and entry["old_present"] == present_days
+                    ):
                         continue
 
-                    query = (
-                        sb.table("attendance")
-                        .update({"present": status})
-                        .eq("id", old_id)
-                    )
-
-                    if old_present is None:
-                        query = query.is_("present", "null")
-                    else:
-                        query = query.eq("present", bool(old_present))
-
-                    result = query.select("id").execute()
-                    if not result.data:
-                        conflicts.append(
-                            f"Student ID {sid}: attendance was changed by another user."
-                        )
-                else:
-                    (
-                        sb.table("attendance")
-                        .insert({
-                            "school_id": school_id,
-                            "student_id": sid,
-                            "attendance_date": str(selected_date),
-                            "present": status
+                    result = (
+                        sb.table("exam_attendance")
+                        .update({
+                            "total_days": total_days,
+                            "present_days": present_days,
+                            "class_id": entry["class_id"]
                         })
+                        .eq("id", old_id)
+                        .eq("school_id", school_id)
+                        .eq("student_id", entry["student_id"])
+                        .eq("exam_name", exam_name)
+                        .eq("total_days", entry["old_total"])
+                        .eq("present_days", entry["old_present"])
+                        .select("id")
                         .execute()
                     )
+                    if not result.data:
+                        conflicts.append(
+                            f"Student ID {entry['student_id']}: "
+                            "attendance was changed by another user."
+                        )
+                    else:
+                        changed += 1
+                else:
+                    (
+                        sb.table("exam_attendance")
+                        .upsert(
+                            {
+                                "school_id": school_id,
+                                "student_id": entry["student_id"],
+                                "class_id": entry["class_id"],
+                                "exam_name": exam_name,
+                                "total_days": total_days,
+                                "present_days": present_days
+                            },
+                            on_conflict="school_id,student_id,exam_name"
+                        )
+                        .execute()
+                    )
+                    changed += 1
+
+            cache = st.session_state.get("_exam_attendance_cache", {})
+            cache.pop(f"{school_id}|{exam_name}", None)
+            st.session_state["_exam_attendance_cache"] = cache
 
             if conflicts:
                 st.warning(
@@ -6851,10 +6931,13 @@ def attendance():
                 return
 
             mark_saved(save_key)
-            st.success("✅ Attendance saved successfully.")
+            st.success(
+                f"✅ Attendance saved successfully. {changed} changed record(s)."
+            )
+            st.rerun()
 
         except Exception as e:
-            st.error("Could not save attendance.")
+            st.error("Could not save exam-wise attendance.")
             st.code(str(e))
 
 
@@ -8069,25 +8152,36 @@ def download_storage_file(path):
 
 
 
-def attendance_summary(student_id, school_id):
-    try:
-        rows = (
-            sb.table("attendance")
-            .select("id,attendance_date,present")
-            .eq("school_id", school_id)
-            .eq("student_id", student_id)
-            .execute()
-            .data or []
-        )
-    except Exception:
+def attendance_summary(student_id, school_id, exam_name=None):
+    """Return exam-specific attendance with one cached bulk Supabase read."""
+    if not student_id or not school_id or not exam_name:
         return 0, 0
 
-    total_days = len(rows)
-    present_days = sum(
-        1 for row in rows
-        if bool(row.get("present"))
-    )
-    return total_days, present_days
+    cache_key = f"{school_id}|{exam_name}"
+    cache = st.session_state.setdefault("_exam_attendance_cache", {})
+
+    if cache_key not in cache:
+        try:
+            rows = (
+                sb.table("exam_attendance")
+                .select("student_id,total_days,present_days")
+                .eq("school_id", school_id)
+                .eq("exam_name", exam_name)
+                .execute()
+                .data or []
+            )
+            cache[cache_key] = {
+                str(row.get("student_id")): (
+                    int(row.get("total_days") or 0),
+                    int(row.get("present_days") or 0)
+                )
+                for row in rows
+                if row.get("student_id")
+            }
+        except Exception:
+            cache[cache_key] = {}
+
+    return cache.get(cache_key, {}).get(str(student_id), (0, 0))
 
 
 def school_logo_from_template(template):
@@ -12656,13 +12750,15 @@ def report_cards():
                         total_attendance=
                             attendance_summary(
                                 selected_student["id"],
-                                school_id
+                                school_id,
+                                exam_name
                             )[0],
 
                         present_days=
                             attendance_summary(
                                 selected_student["id"],
-                                school_id
+                                school_id,
+                                exam_name
                             )[1],
 
                         school_logo_path=
@@ -12812,13 +12908,15 @@ def report_cards():
                             total_attendance=
                                 attendance_summary(
                                     student["id"],
-                                    school_id
+                                    school_id,
+                                    exam_name
                                 )[0],
 
                             present_days=
                                 attendance_summary(
                                     student["id"],
-                                    school_id
+                                    school_id,
+                                    exam_name
                                 )[1],
 
                             school_logo_path=
@@ -13155,7 +13253,7 @@ def parent_report_cards_view(school_id, parent_user_id):
         return
 
     total_attendance, present_days = attendance_summary(
-        selected_student["id"], school_id
+        selected_student["id"], school_id, exam_name
     )
     orientation = template.get("orientation") or "Portrait"
     file_type = (template.get("file_type") or "pdf").lower()
@@ -13430,7 +13528,7 @@ def student_report_card_view(school_id, student_id):
     ):
         try:
             total_attendance, present_days = attendance_summary(
-                own_student["id"], school_id
+                own_student["id"], school_id, exam_name
             )
             pdf_bytes = make_report_card_pdf(
                 template_bytes=template_bytes,
@@ -17402,10 +17500,10 @@ def dashboard():
                                         exam_name=exam_name,
                                         file_type=file_type,
                                         total_attendance=attendance_summary(
-                                            selected_child["id"], school_id
+                                            selected_child["id"], school_id, exam_name
                                         )[0],
                                         present_days=attendance_summary(
-                                            selected_child["id"], school_id
+                                            selected_child["id"], school_id, exam_name
                                         )[1],
                                         school_logo_path=school_logo_from_template(
                                             selected_template
