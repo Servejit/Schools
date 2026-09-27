@@ -7882,7 +7882,7 @@ def get_cached_subjects(school_id, active_only=True):
     def load():
         try:
             q = (sb.table("subjects")
-                .select("id,school_id,name,subject_name,code,class_id,active,max_marks,passing_marks")
+                .select("id,school_id,name,subject_name,code,class_id,active,max_marks,passing_marks,report_card_visible,grade_only")
                 .eq("school_id", school_id))
             if active_only:
                 q = q.eq("active", True)
@@ -8527,6 +8527,14 @@ def create_report_overlay(
         selected_exam_names = [str(exam_name).strip()]
     selected_exam_names = list(dict.fromkeys(selected_exam_names))
     selected_exam_names.sort(key=report_card_exam_sort_key)
+
+    # Grade-only subjects are printed on the report card but are excluded
+    # from all weighted percentage calculations.
+    grade_only_subject_names = {
+        str(x.get("subject_name") or x.get("name") or "").strip()
+        for x in (subjects or [])
+        if x.get("grade_only")
+    }
 
     school_id_for_weights = str((school_info or {}).get("id") or "").strip()
     exam_weight_by_name = {}
