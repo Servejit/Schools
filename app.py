@@ -5956,19 +5956,7 @@ def bulk_marks():
         return
 
     try:
-        class_data = (
-            sb.table("classes")
-            .select(
-                "id,school_id,class_name,section,"
-                "academic_year,active"
-            )
-            .eq("school_id", school_id)
-            .eq("active", True)
-            .order("class_name")
-            .order("section")
-            .execute()
-            .data or []
-        )
+        class_data = get_cached_classes(school_id, active_only=True)
     except Exception as e:
         st.error("Could not load classes.")
         st.code(str(e))
@@ -5981,13 +5969,8 @@ def bulk_marks():
     # Teachers see only classes for which they have a subject assignment.
     if role == "Teacher":
         try:
-            teacher_assignments = (
-                sb.table("teacher_subject_assignments")
-                .select("class_id,subject_id")
-                .eq("school_id", school_id)
-                .eq("teacher_id", st.session_state.user.id)
-                .execute()
-                .data or []
+            teacher_assignments = get_cached_teacher_assignments(
+                school_id, teacher_id=st.session_state.user.id
             )
         except Exception as e:
             st.error(
@@ -6040,19 +6023,10 @@ def bulk_marks():
     section = selected_class.get("section") or ""
 
     try:
-        subject_data = (
-            sb.table("subjects")
-            .select(
-                "id,school_id,name,code,active,class_id,"
-                "subject_name,max_marks,passing_marks"
-            )
-            .eq("school_id", school_id)
-            .eq("class_id", class_id)
-            .eq("active", True)
-            .order("subject_name")
-            .execute()
-            .data or []
-        )
+        subject_data = [
+            x for x in get_cached_subjects(school_id, active_only=True)
+            if str(x.get("class_id") or "") == str(class_id)
+        ]
     except Exception as e:
         st.error("Could not load subjects.")
         st.code(str(e))
@@ -6145,20 +6119,11 @@ def bulk_marks():
     ).strip()
 
     try:
-        student_data = (
-            sb.table("students")
-            .select(
-                "id,name,admission_no,"
-                "class_name,section,active"
-            )
-            .eq("school_id", school_id)
-            .eq("class_name", class_name)
-            .eq("section", section)
-            .eq("active", True)
-            .order("name")
-            .execute()
-            .data or []
-        )
+        student_data = [
+            x for x in get_cached_students(school_id, active_only=True)
+            if str(x.get("class_name") or "").strip().lower() == str(class_name).strip().lower()
+            and str(x.get("section") or "").strip().lower() == str(section).strip().lower()
+        ]
     except Exception as e:
         st.error("Could not load students.")
         st.code(str(e))
@@ -6450,17 +6415,7 @@ def attendance():
     )
 
     try:
-        students_data = (
-            sb.table("students")
-            .select("id,name,class_name,section,admission_no,active")
-            .eq("school_id", school_id)
-            .eq("active", True)
-            .order("class_name")
-            .order("section")
-            .order("name")
-            .execute()
-            .data or []
-        )
+        students_data = get_cached_students(school_id, active_only=True)
     except Exception as e:
         st.error("Could not load students.")
         st.code(str(e))
@@ -6473,17 +6428,10 @@ def attendance():
     assigned_class_rows = []
     if role == "Teacher":
         try:
-            assigned_class_rows = (
-                sb.table("classes")
-                .select("id,class_name,section,academic_year")
-                .eq("school_id", school_id)
-                .eq("class_teacher_id", st.session_state.user.id)
-                .eq("active", True)
-                .order("class_name")
-                .order("section")
-                .execute()
-                .data or []
-            )
+            assigned_class_rows = [
+                x for x in get_cached_classes(school_id, active_only=True)
+                if str(x.get("class_teacher_id") or "") == str(st.session_state.user.id)
+            ]
         except Exception as e:
             st.error("Could not load your Class Teacher assignments.")
             st.code(str(e))
