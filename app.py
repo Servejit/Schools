@@ -6914,8 +6914,6 @@ def print_templates():
 
     st.divider()
 
-    st.divider()
-
     st.subheader("📋 Existing A4 Templates")
 
     try:
@@ -7168,23 +7166,6 @@ def print_templates():
                         st.error("Could not update Report Card content setting.")
                         st.code(str(e))
 
-                st.markdown(
-                    f"""
-                    <div style="
-                        display:inline-block;
-                        padding:10px 18px;
-                        border-radius:10px;
-                        font-weight:700;
-                        margin-top:4px;
-                        background:{'#198754' if show_school_name else '#DC3545'};
-                        color:white;
-                    ">
-                        {'NAME + ADDRESS + WEBSITE + CONTACT WILL PRINT' if show_school_name else 'NAME + ADDRESS + WEBSITE + CONTACT HIDDEN'}
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
                 st.markdown("#### 🏫 School Logo")
 
                 current_logo_path = school_logo_from_template(template)
@@ -7389,16 +7370,6 @@ def print_templates():
             except Exception as e:
                 st.error("Could not save Report Card content setting.")
                 st.code(str(e))
-
-        st.markdown(
-            f"""
-            <div style="display:inline-block;padding:10px 18px;border-radius:10px;font-weight:700;
-                        background:{'#198754' if show_school_name else '#DC3545'};color:white;">
-                {'NAME + ADDRESS + WEBSITE + CONTACT WILL PRINT' if show_school_name else 'NAME + ADDRESS + WEBSITE + CONTACT HIDDEN'}
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
 
         st.markdown("#### 🏫 School Logo")
         current_default_logo = next(
