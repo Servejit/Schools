@@ -11514,12 +11514,10 @@ def report_cards():
 
         if role == "Teacher":
             try:
-                teacher_export_classes = (
-                    [
-                x for x in get_cached_classes(school_id, active_only=True)
-                if str(x.get("class_teacher_id") or "") == str(st.session_state.user.id)
-            ]
-                )
+                teacher_export_classes = [
+                    x for x in get_cached_classes(school_id, active_only=True)
+                    if str(x.get("class_teacher_id") or "") == str(st.session_state.user.id)
+                ]
             except Exception as e:
                 st.error("Could not load your Class Teacher classes for Excel download.")
                 st.code(str(e))
