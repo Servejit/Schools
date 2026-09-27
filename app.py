@@ -12512,18 +12512,13 @@ def report_cards():
                         f"ReportCard.pdf"
                     )
 
+                    st.session_state["report_card_download_pdf"] = pdf_bytes
+                    st.session_state["report_card_download_name"] = file_name
                     st.success(
                         "✅ Report card generated successfully."
                     )
 
-                    st.download_button(
-                        "⬇️ Download Report Card PDF",
-                        data=pdf_bytes,
-                        file_name=file_name,
-                        mime="application/pdf",
-                        type="primary",
-                        use_container_width=True
-                    )
+                except Exception as e:
 
                 except Exception as e:
 
@@ -12532,6 +12527,17 @@ def report_cards():
                     )
 
                     st.code(str(e))
+
+    if st.session_state.get("report_card_download_pdf"):
+        st.download_button(
+            "⬇️ Download Report Card PDF",
+            data=st.session_state["report_card_download_pdf"],
+            file_name=st.session_state.get("report_card_download_name", "ReportCard.pdf"),
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True,
+            key="report_card_download_persistent"
+        )
 
     # -----------------------------------------------------
     # GENERATE ALL
@@ -12991,18 +12997,13 @@ def parent_report_cards_view(school_id, parent_user_id):
                 show_school_name=report_card_show_school_name(template)
             )
 
+            parent_file_name = (
+                f"{selected_student.get('name') or 'Student'}_"
+                f"{exam_name}_ReportCard.pdf"
+            ).replace("/", "_").replace("\\", "_")
+            st.session_state["parent_report_card_download_pdf"] = pdf_bytes
+            st.session_state["parent_report_card_download_name"] = parent_file_name
             st.success("✅ Report card generated successfully.")
-            st.download_button(
-                "⬇️ Download Report Card PDF",
-                data=pdf_bytes,
-                file_name=(
-                    f"{selected_student.get('name') or 'Student'}_"
-                    f"{exam_name}_ReportCard.pdf"
-                ).replace("/", "_").replace("\\", "_"),
-                mime="application/pdf",
-                use_container_width=True,
-                key="parent_download_report_card"
-            )
         except Exception as e:
             st.error("Could not generate the Report Card.")
             st.code(str(e))
@@ -13267,19 +13268,24 @@ def student_report_card_view(school_id, student_id):
                 .replace(" ", "_")
             )
 
+            student_file_name = f"{safe_name}_{safe_exam}_ReportCard.pdf"
+            st.session_state["student_report_card_download_pdf"] = pdf_bytes
+            st.session_state["student_report_card_download_name"] = student_file_name
             st.success("✅ Report card generated successfully.")
-            st.download_button(
-                "⬇️ Download My Report Card PDF",
-                data=pdf_bytes,
-                file_name=f"{safe_name}_{safe_exam}_ReportCard.pdf",
-                mime="application/pdf",
-                type="primary",
-                use_container_width=True,
-                key="student_download_own_report_card"
-            )
         except Exception as e:
             st.error("Could not generate your Report Card.")
             st.code(str(e))
+
+    if st.session_state.get("student_report_card_download_pdf"):
+        st.download_button(
+            "⬇️ Download My Report Card PDF",
+            data=st.session_state["student_report_card_download_pdf"],
+            file_name=st.session_state.get("student_report_card_download_name", "ReportCard.pdf"),
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True,
+            key="student_download_own_report_card_persistent"
+        )
 
 # =========================================================
 # REPORTS
