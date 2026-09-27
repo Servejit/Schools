@@ -4518,19 +4518,7 @@ def classes_subjects():
 
     try:
 
-        class_data = (
-            sb.table("classes")
-            .select(
-                "id,school_id,class_name,section,"
-                "academic_year,active,class_teacher_id,"
-                "created_at,updated_at"
-            )
-            .eq("school_id", school_id)
-            .order("class_name")
-            .order("section")
-            .execute()
-            .data or []
-        )
+        class_data = get_cached_classes(school_id, active_only=False)
 
     except Exception as e:
 
@@ -4552,15 +4540,10 @@ def classes_subjects():
     # CLASS TEACHER ASSIGNMENT
     # -----------------------------------------------------
     try:
-        teacher_data = (
-            sb.table("profiles")
-            .select("id,full_name,email,role")
-            .eq("school_id", school_id)
-            .in_("role", ["Teacher", "Admin+Teacher"])
-            .eq("active", True)
-            .order("full_name")
-            .execute()
-            .data or []
+        teacher_data = get_cached_school_profiles(
+            school_id,
+            roles=["Teacher", "Admin+Teacher"],
+            active_only=True
         )
     except Exception as e:
         teacher_data = []
@@ -4748,13 +4731,7 @@ def classes_subjects():
                     # Class + Subject shows the teacher who currently owns it.
                     all_assignment_rows = []
                     try:
-                        all_assignment_rows = (
-                            sb.table("teacher_subject_assignments")
-                            .select("teacher_id,class_id,subject_id")
-                            .eq("school_id", school_id)
-                            .execute()
-                            .data or []
-                        )
+                        all_assignment_rows = get_cached_teacher_assignments(school_id)
                     except Exception:
                         all_assignment_rows = []
 
