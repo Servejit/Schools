@@ -12326,6 +12326,43 @@ def report_cards():
         st.info("Select at least one Exam / Assessment.")
         return
 
+    # Show the real maximum and final-result weight for every selected exam.
+    academic_year = get_school_academic_year(school_id)
+    saved_weight_by_id = (
+        get_exam_result_weights(school_id, academic_year)
+        if academic_year else {}
+    )
+    selected_exam_rows = []
+    for exam in exam_options:
+        exam_label = str(exam.get("name") or "").strip()
+        if exam_label in exam_name:
+            selected_exam_rows.append({
+                "Exam": exam_label,
+                "Maximum Marks": float(exam.get("max_marks") or 100),
+                "Weight %": float(
+                    saved_weight_by_id.get(str(exam.get("id")), 0) or 0
+                )
+            })
+
+    if selected_exam_rows:
+        st.dataframe(
+            pd.DataFrame(selected_exam_rows),
+            hide_index=True,
+            use_container_width=True
+        )
+
+    selected_weight_total = sum(
+        float(x.get("Weight %") or 0)
+        for x in selected_exam_rows
+    )
+    if abs(selected_weight_total - 100.0) > 0.01:
+        st.warning(
+            f"Selected exams currently total {selected_weight_total:g}% weight. "
+            "Save weights totaling exactly 100% before generating the final weighted result."
+        )
+    else:
+        st.success("✅ Selected exams total 100% weight. Final percentage and grade will use all these weights.")
+
     # -----------------------------------------------------
     # STUDENT SELECTION
     # -----------------------------------------------------
