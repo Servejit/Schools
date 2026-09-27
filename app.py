@@ -12533,7 +12533,8 @@ def report_cards():
             mime="application/pdf",
             type="primary",
             use_container_width=True,
-            key="report_card_download_persistent"
+            key="report_card_download_persistent",
+            on_click="ignore"
         )
 
     # -----------------------------------------------------
@@ -12696,6 +12697,14 @@ def report_cards():
                     f"(usually because marks were not entered)."
                 )
 
+            st.session_state["all_report_cards_zip"] = zip_buffer.getvalue()
+            st.session_state["all_report_cards_zip_name"] = (
+                f"{school_info.get('name', 'School')}_"
+                f"{exam_name}_ReportCards.zip"
+                .replace("/", "_")
+                .replace("\\", "_")
+            )
+
             st.download_button(
                 "⬇️ Download ALL Report Cards ZIP",
                 data=zip_buffer.getvalue(),
@@ -12707,7 +12716,9 @@ def report_cards():
                 ),
                 mime="application/zip",
                 type="primary",
-                use_container_width=True
+                use_container_width=True,
+                on_click="ignore",
+                key="all_report_cards_zip_download"
             )
 
 
