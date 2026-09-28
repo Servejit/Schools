@@ -8091,387 +8091,210 @@ def create_report_overlay(
     school_logo_size=52,
     show_school_name=True
 ):
+    """
+    Build the clean CBSE-style A4 report-card overlay.
 
-    width, height = pdf_page_size(
-        orientation
-    )
+    Report-card presentation rules:
+    - Each exam column shows ONLY the marks entered.
+    - Exam maximum is shown once in the column heading, e.g. PT-1 (20).
+    - No repeated Max/Obtained sub-columns.
+    - Each academic subject has one Final /100 score after exam weightage.
+    - TOTAL is shown only once at the bottom.
+    - For 5 academic subjects, TOTAL is therefore /500.
+    - Exam marks are normalized to /100 before applying weightage.
+    - Blank marks remain blank and are not treated as zero.
+    """
 
+    width, height = pdf_page_size(orientation)
     buffer = io.BytesIO()
-
-    pdf = canvas.Canvas(
-        buffer,
-        pagesize=(width, height)
-    )
-
-    # -----------------------------------------------------
-    # Standard A4 positions
-    # -----------------------------------------------------
+    pdf = canvas.Canvas(buffer, pagesize=(width, height))
 
     portrait = orientation != "Landscape"
 
     if portrait:
-
-        # Keep the marks table away from both page borders.
-        left = 90
-        right = width - 90
-
-        # Student photo: passport-size, slightly larger than before.
-        # Keep it on the LEFT, aligned with the Student Name details.
-        photo_x = left
-        photo_y = height - 185
-        photo_w = 50
-        photo_h = 65
-
-        info_y = height - 155
-
+        left = 72
+        right = width - 72
         table_x = left
-        table_y = height - 330
         table_width = right - left
-
-        # Move lower report content upward by about 2 spaces.
-        remarks_y = 130
-
-        teacher_x = 100
-        principal_x = width - 180
-
+        table_top = height - 315
+        remarks_y = 105
+        teacher_signature_x = table_x
+        principal_signature_x = table_x + table_width * 0.82
+        photo_w = 52
+        photo_h = 68
     else:
-
-        # Keep the marks table away from both page borders.
-        left = 90
-        right = width - 90
-
-        # Student photo: passport-size, slightly larger than before.
-        # Keep it on the LEFT, aligned with the Student Name details.
-        photo_x = left
-        photo_y = height - 145
-        photo_w = 50
-        photo_h = 65
-
-        info_y = height - 145
-
+        left = 60
+        right = width - 60
         table_x = left
-        table_y = height - 270
         table_width = right - left
+        table_top = height - 255
+        remarks_y = 70
+        teacher_signature_x = table_x
+        principal_signature_x = table_x + table_width * 0.82
+        photo_w = 52
+        photo_h = 68
 
-        # Move lower report content upward by about 2 spaces.
-        remarks_y = 85
-
-        teacher_x = width * 0.25
-        principal_x = width * 0.70
-
-    # -----------------------------------------------------
-    # School information
-    # -----------------------------------------------------
-
-    school_name = (
-        school_info.get("name")
-        or "School"
-    )
-
-    school_address = (
-        school_info.get("address")
-        or ""
-    )
-    school_website = (
-        school_info.get("website")
-        or ""
-    )
+    school_name = school_info.get("name") or "School"
+    school_address = school_info.get("address") or ""
+    school_website = school_info.get("website") or ""
     school_contact = (
         school_info.get("contact_number")
         or school_info.get("contact")
         or ""
     )
 
-    # SINGLE Report Card header control from Print Template Dashboard.
-    # ON = School Name + Address + Website + Contact Number.
-    # OFF = all four hidden.
+    # -----------------------------------------------------
+    # School header
+    # -----------------------------------------------------
     if show_school_name:
-        # Letterhead-style school header.
-        name_font = 28
-        name_max_width = table_width
-        try:
-            while (
-                name_font > 15
-                and pdf.stringWidth(
-                    str(school_name),
-                    "Helvetica-Bold",
-                    name_font
-                ) > name_max_width
-            ):
-                name_font -= 0.5
-        except Exception:
-            pass
+        name_font = 26
+        while name_font > 15:
+            try:
+                if pdf.stringWidth(
+                    str(school_name), "Helvetica-Bold", name_font
+                ) <= table_width:
+                    break
+            except Exception:
+                break
+            name_font -= 0.5
 
         pdf.setFont("Helvetica-Bold", name_font)
-        pdf.drawCentredString(
-            width / 2,
-            height - 54,
-            str(school_name)
-        )
+        pdf.drawCentredString(width / 2, height - 48, str(school_name))
 
         if school_address:
-            pdf.setFont("Helvetica", 16)
+            pdf.setFont("Helvetica", 11)
+            pdf.drawCentredString(width / 2, height - 66, str(school_address))
+
+        contact_parts = []
+        if str(school_website).strip():
+            contact_parts.append(f"Website: {str(school_website).strip()}")
+        if str(school_contact).strip():
+            contact_parts.append(f"Contact: {str(school_contact).strip()}")
+        if contact_parts:
+            pdf.setFont("Helvetica", 9)
             pdf.drawCentredString(
                 width / 2,
-                height - 72,
-                str(school_address)
+                height - 82,
+                "    |    ".join(contact_parts)
             )
 
-        website_text = str(school_website).strip()
-        contact_text = str(school_contact).strip()
-
-        if website_text or contact_text:
-            pdf.setFont("Helvetica", 12)
-            if website_text and contact_text:
-                pdf.drawString(width / 2 - 175, height - 93, f"Website: {website_text}")
-                pdf.drawString(width / 2 + 35, height - 93, f"Contact: {contact_text}")
-            elif website_text:
-                pdf.drawCentredString(width / 2, height - 91, f"Website: {website_text}")
-            else:
-                pdf.drawCentredString(width / 2, height - 91, f"Contact: {contact_text}")
-
-    # School logo on the LEFT side
+    # -----------------------------------------------------
+    # School logo
+    # -----------------------------------------------------
     if school_logo_path:
         try:
-            logo_bytes = download_storage_file(
-                school_logo_path
-            )
-
+            logo_bytes = download_storage_file(school_logo_path)
             if logo_bytes:
                 logo_image = Image.open(
                     io.BytesIO(logo_bytes)
                 ).convert("RGBA")
-
-                from PIL import ImageOps
-
-                # Keep 52 pt as the normal/original logo size.
-                # The saved slider value can make it smaller or larger.
                 logo_size = max(
-                    30,
-                    min(80, int(school_logo_size or 52) + 2)
+                    30, min(80, int(school_logo_size or 52) + 2)
                 )
-
                 logo_image.thumbnail(
                     (logo_size - 4, logo_size - 4),
                     Image.Resampling.LANCZOS
                 )
-
                 logo_buffer = io.BytesIO()
-                logo_image.save(
-                    logo_buffer,
-                    format="PNG"
-                )
+                logo_image.save(logo_buffer, format="PNG")
                 logo_buffer.seek(0)
 
-                # Place the logo OUTSIDE the left edge of the
-                # marks table so it never overlaps the centered School Name.
-                # Keep a small gap between the logo and the table.
-                # Keep the logo clearly outside the table and very close
-                # to its left edge. This makes the position visibly
-                # different while keeping a small non-overlapping gap.
-                # Move the logo 3 spaces inward toward the table.
-                logo_box_x = max(8, left - logo_size - 2 + 12)
-                logo_box_w = logo_size
-                logo_box_h = logo_size
+                logo_x = max(8, left - logo_size - 8)
+                logo_y = height - 62 - logo_size
 
-                # Move the logo 2 spaces down.
-                logo_top_y = height - 36
-                logo_box_y = logo_top_y - logo_box_h
-
-                pdf.setStrokeColorRGB(
-                    0.75, 0.75, 0.75
-                )
+                pdf.setStrokeColorRGB(0.75, 0.75, 0.75)
                 pdf.rect(
-                    logo_box_x,
-                    logo_box_y,
-                    logo_box_w,
-                    logo_box_h,
-                    stroke=1,
-                    fill=0
+                    logo_x, logo_y, logo_size, logo_size,
+                    stroke=1, fill=0
                 )
-
                 pdf.drawImage(
                     ImageReader(logo_buffer),
-                    logo_box_x + 2,
-                    logo_box_y + 2,
-                    width=logo_box_w - 4,
-                    height=logo_box_h - 4,
+                    logo_x + 2,
+                    logo_y + 2,
+                    width=logo_size - 4,
+                    height=logo_size - 4,
                     preserveAspectRatio=True,
                     anchor="c",
                     mask="auto"
                 )
-
         except Exception:
-            # Never let a missing logo prevent report generation.
             pass
 
-    pdf.setFont(
-        "Helvetica-Bold",
-        18
-    )
+    # -----------------------------------------------------
+    # Report-card title
+    # -----------------------------------------------------
+    report_card_y = height - 112
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawCentredString(width / 2, report_card_y, "REPORT CARD")
 
-    # Keep REPORT CARD just a few spaces above the first student-detail line.
-    report_card_y = height - 123
-
+    pdf.setFont("Helvetica", 10)
     pdf.drawCentredString(
         width / 2,
-        report_card_y,
-        "REPORT CARD"
-    )
-
-    pdf.setFont(
-        "Helvetica",
-        12
-    )
-
-    pdf.drawCentredString(
-        width / 2,
-        report_card_y - 14,
+        report_card_y - 15,
         str(exam_name)
     )
 
     # -----------------------------------------------------
     # Student details
     # -----------------------------------------------------
-
-    detail_y = info_y - 55
-
-    # Keep the passport-size photo higher, aligned with the REPORT CARD section.
-    # Its LEFT edge matches the Student Name/table LEFT edge.
-    photo_y = report_card_y + 22 - photo_h
+    detail_top = report_card_y - 35
+    photo_x = table_x
+    photo_y = detail_top - photo_h + 8
 
     details = [
-
-        (
-            "Student Name",
-            student.get("name") or "-"        ),
-
+        ("Student Name", student.get("name") or "-"),
         (
             "Father Name",
             student.get("father_name")
             or student.get("parent_name")
             or "-"
         ),
-
-        (
-            "Class",
-            student.get("class_name") or "-"
-        ),
-
-        (
-            "Section",
-            student.get("section") or "-"
-        ),
-
-        (
-            "Admission No.",
-            student.get("admission_no") or "-"
-        ),
-
-        (
-            "Date of Birth",
-            student.get("date_of_birth") or "-"
-        )
+        ("Class", student.get("class_name") or "-"),
+        ("Section", student.get("section") or "-"),
+        ("Admission No.", student.get("admission_no") or "-"),
+        ("Date of Birth", student.get("date_of_birth") or "-"),
     ]
 
-    pdf.setFont(
-        "Helvetica",
-        9
-    )
+    detail_left_x = table_x + photo_w + 12
+    detail_right_x = table_x + table_width * 0.62
+    detail_row_gap = 18
 
-    # Align student details exactly with the marks table edges/columns.
-    col1_x = table_x
-    # Align the right-side student-detail column with the marks table.
-    # Start the right-side details exactly at the left edge of
-    # the Grade column in the marks table.
-    # Align the right-side details with the Result column.
-    # Result-column alignment: Subject (28%) + Max (18%) + Marks (22%).
-    col2_x = table_x + table_width * 0.68
-
-    for index, item in enumerate(details):
-
+    for index, (label, value) in enumerate(details):
         col = index % 2
         row = index // 2
+        x = detail_left_x if col == 0 else detail_right_x
+        y = detail_top - row * detail_row_gap
 
-        x = (
-            col1_x
-            if col == 0
-            else col2_x
-        )
+        pdf.setFont("Helvetica-Bold", 8.5)
+        pdf.drawString(x, y, f"{label}:")
+        pdf.setFont("Helvetica", 8.5)
+        pdf.drawString(x + 70, y, str(value))
 
-        y = detail_y - (row * 20)
-
-        label, value = item
-
-        pdf.setFont(
-            "Helvetica-Bold",
-            9
-        )
-
-        pdf.drawString(
-            x,
-            y,
-            f"{label}:"
-        )
-
-        pdf.setFont(
-            "Helvetica",
-            9
-        )
-
-        pdf.drawString(
-            x + 78,
-            y,
-            str(value)
-        )
-
-    # -----------------------------------------------------
     # Student photo
-    # -----------------------------------------------------
-
     photo_path = student.get("photo_path")
-
     if photo_path:
         try:
             photo_bytes = download_storage_file(photo_path)
-
             if photo_bytes:
-                from PIL import ImageOps
-
                 image = Image.open(
                     io.BytesIO(photo_bytes)
                 ).convert("RGB")
-
-                # Contain the complete original photo inside the
-                # smaller box. ImageOps.fit would crop the photo.
                 image.thumbnail(
-                    (
-                        max(1, int(photo_w * 3)),
-                        max(1, int(photo_h * 3))
-                    ),
+                    (int(photo_w * 3), int(photo_h * 3)),
                     Image.Resampling.LANCZOS
                 )
-
                 img_buffer = io.BytesIO()
-                image.save(
-                    img_buffer,
-                    format="PNG"
-                )
+                image.save(img_buffer, format="PNG")
                 img_buffer.seek(0)
 
-                # Draw the photo without adding any white padding.
-                # Keep its natural aspect ratio and center it in the small box.
-                display_w = photo_w
-                display_h = photo_h
-                try:
-                    aspect = image.width / image.height
-                    box_aspect = photo_w / photo_h
-                    if aspect > box_aspect:
-                        display_h = photo_w / aspect
-                    else:
-                        display_w = photo_h * aspect
-                except Exception:
-                    pass
+                aspect = image.width / image.height
+                box_aspect = photo_w / photo_h
+                if aspect > box_aspect:
+                    display_w = photo_w
+                    display_h = photo_w / aspect
+                else:
+                    display_h = photo_h
+                    display_w = photo_h * aspect
 
                 display_x = photo_x + (photo_w - display_w) / 2
                 display_y = photo_y + (photo_h - display_h) / 2
@@ -8486,37 +8309,27 @@ def create_report_overlay(
                     anchor="c",
                     mask="auto"
                 )
-
-                # Only a black border around the actual visible photo.
                 pdf.setStrokeColorRGB(0, 0, 0)
                 pdf.setLineWidth(1)
                 pdf.rect(
-                    display_x,
-                    display_y,
-                    display_w,
-                    display_h,
-                    stroke=1,
-                    fill=0
+                    display_x, display_y,
+                    display_w, display_h,
+                    stroke=1, fill=0
                 )
-
         except Exception:
             pass
 
     # -----------------------------------------------------
-    # Marks table
+    # Marks / result table
     # -----------------------------------------------------
-
-    table_top = table_y
-
     def report_display_mark(value):
-        """Show marks/max marks without unnecessary trailing zeros."""
         try:
             number = float(value)
             if number.is_integer():
                 return str(int(number))
             return f"{number:.2f}".rstrip("0").rstrip(".")
         except (TypeError, ValueError):
-            return str(value) if value is not None else "-"
+            return str(value) if value is not None else ""
 
     selected_exam_names = []
     if isinstance(exam_name, (list, tuple, set)):
@@ -8528,17 +8341,13 @@ def create_report_overlay(
     selected_exam_names = list(dict.fromkeys(selected_exam_names))
     selected_exam_names.sort(key=report_card_exam_sort_key)
 
-    # Grade-only subjects are printed on the report card but are excluded
-    # from all weighted percentage calculations.
-    grade_only_subject_names = {
-        str(x.get("subject_name") or x.get("name") or "").strip()
-        for x in (subjects or [])
-        if x.get("grade_only")
-    }
-
-    school_id_for_weights = str((school_info or {}).get("id") or "").strip()
+    # Get exam maximum marks and configured weightage once.
+    school_id_for_weights = str(
+        (school_info or {}).get("id") or ""
+    ).strip()
     exam_weight_by_name = {}
-    exam_term_by_name = {}
+    exam_max_by_name = {}
+
     if school_id_for_weights:
         try:
             academic_year_for_weights = get_school_academic_year(
@@ -8561,45 +8370,74 @@ def create_report_overlay(
                     all_exam_rows,
                     class_group_for_weights
                 )
+
             for exam in all_exam_rows:
                 name = str(exam.get("name") or "").strip()
-                if name:
+                if not name:
+                    continue
+                try:
+                    exam_max_by_name[name] = float(
+                        exam.get("max_marks") or 0
+                    )
+                except Exception:
+                    exam_max_by_name[name] = 0.0
+                try:
                     exam_weight_by_name[name] = float(
                         weight_by_id.get(str(exam.get("id")), 0) or 0
                     )
-                    exam_term_by_name[name] = report_card_exam_term(name)
+                except Exception:
+                    exam_weight_by_name[name] = 0.0
         except Exception:
             exam_weight_by_name = {}
-            exam_term_by_name = {}
+            exam_max_by_name = {}
 
-    selected_weight_total = sum(
-        max(0.0, exam_weight_by_name.get(name, 0.0))
-        for name in selected_exam_names
-    )
+    # Fall back to max marks stored on marks rows.
+    for exam in selected_exam_names:
+        if exam_max_by_name.get(exam, 0) <= 0:
+            values = []
+            for row in marks_rows or []:
+                if str(row.get("exam_name") or "").strip() == exam:
+                    try:
+                        values.append(float(row.get("max_marks")))
+                    except Exception:
+                        pass
+            if values:
+                exam_max_by_name[exam] = max(values)
+
+    # If configured weights are unavailable, calculate a simple average of
+    # the selected normalized exams. If weights exist, normalize by their
+    # selected weight total so Final is ALWAYS /100.
+    selected_weights = {
+        exam: max(0.0, float(exam_weight_by_name.get(exam, 0) or 0))
+        for exam in selected_exam_names
+    }
+    selected_weight_total = sum(selected_weights.values())
     use_weightage = selected_weight_total > 0
-    weight_scale = 1.0
 
-    # Each selected exam gets two columns: Max Marks and Marks Obtained.
-    subject_col = table_width * 0.24
-    exam_count = max(1, len(selected_exam_names))
-    exam_area = table_width * 0.54
-    per_exam_width = exam_area / exam_count
-    total_col = table_width * 0.12
-    grade_col = table_width - subject_col - exam_area - total_col
-
-    total_x0 = table_x + subject_col + exam_area
-    grade_x0 = total_x0 + total_col
+    grade_only_subject_names = {
+        str(x.get("subject_name") or x.get("name") or "").strip()
+        for x in (subjects or [])
+        if x.get("grade_only")
+    }
 
     subject_names = []
+    subject_by_name = {}
+
     for subject in subjects or []:
         name = str(
-            subject.get("subject_name") or subject.get("name") or "Subject"
+            subject.get("subject_name")
+            or subject.get("name")
+            or "Subject"
         ).strip() or "Subject"
         if name not in subject_names:
             subject_names.append(name)
+            subject_by_name[name] = subject
+
     for row in marks_rows or []:
         name = str(
-            row.get("subject_name") or row.get("name") or "Subject"
+            row.get("subject_name")
+            or row.get("name")
+            or "Subject"
         ).strip() or "Subject"
         if name not in subject_names:
             subject_names.append(name)
@@ -8607,26 +8445,37 @@ def create_report_overlay(
     row_lookup = {}
     for row in marks_rows or []:
         key = (
-            str(row.get("subject_name") or row.get("name") or "Subject").strip(),
+            str(
+                row.get("subject_name")
+                or row.get("name")
+                or "Subject"
+            ).strip(),
             str(row.get("exam_name") or "").strip()
         )
         row_lookup[key] = row
 
-    header_h1 = 18
-    header_h2 = 17
+    # Table columns: Subject | PT-1 (20) | Half Yearly (80) | Annual (100) | Final /100
+    subject_col = table_width * 0.28
+    final_col = table_width * 0.14
+    exam_count = max(1, len(selected_exam_names))
+    exam_area = max(100, table_width - subject_col - final_col)
+    per_exam_width = exam_area / exam_count
+    final_x0 = table_x + subject_col + exam_area
+
+    header_h = 30
     subject_count = max(1, len(subject_names))
-    available_height = max(220, table_top - (remarks_y + 95))
+    available_height = max(
+        145,
+        table_top - (remarks_y + 78)
+    )
     row_height = min(
-        20,
-        max(9, available_height / (subject_count + 2))
+        21,
+        max(11, available_height / (subject_count + 1))
     )
 
-    if row_height < 11:
-        header_font = 5.8
-        body_font = 6.0
-    elif row_height < 13:
-        header_font = 6.4
-        body_font = 6.6
+    if row_height < 13:
+        header_font = 6.3
+        body_font = 6.3
     elif row_height < 16:
         header_font = 7.2
         body_font = 7.4
@@ -8634,194 +8483,210 @@ def create_report_overlay(
         header_font = 8
         body_font = 8.2
 
-    table_height = header_h1 + header_h2
-    bottom_header_y = table_top - header_h1
+    table_bottom = table_top - header_h - row_height * (subject_count + 1)
 
     pdf.setStrokeColorRGB(0, 0, 0)
+    pdf.setLineWidth(0.7)
     pdf.rect(
         table_x,
-        table_top - table_height,
+        table_bottom,
         table_width,
-        table_height
+        table_top - table_bottom,
+        stroke=1,
+        fill=0
     )
 
     # Main vertical boundaries.
     pdf.line(
-        table_x + subject_col, table_top,
-        table_x + subject_col, table_top - table_height
+        table_x + subject_col,
+        table_top,
+        table_x + subject_col,
+        table_bottom
     )
-    pdf.line(
-        total_x0, table_top,
-        total_x0, table_top - table_height
-    )
-    pdf.line(
-        grade_x0, table_top,
-        grade_x0, table_top - table_height
-    )
+    cursor = table_x + subject_col
+    for _ in selected_exam_names:
+        cursor += per_exam_width
+        pdf.line(cursor, table_top, cursor, table_bottom)
+    pdf.line(final_x0, table_top, final_x0, table_bottom)
 
-    pdf.setFont("Helvetica-Bold", header_font)
+    # Header labels.
+    pdf.setFont("Helvetica-Bold", 8)
     pdf.drawCentredString(
         table_x + subject_col / 2,
-        table_top - table_height / 2 - 3,
-        "Subject"
-    )
-    pdf.drawCentredString(
-        total_x0 + total_col / 2,
-        table_top - table_height / 2 - 3,
-        "Total Marks"
-    )
-    pdf.drawCentredString(
-        grade_x0 + grade_col / 2,
-        table_top - table_height / 2 - 3,
-        "Grade"
+        table_top - 19,
+        "SUBJECT"
     )
 
-    # Exam heading format: Exam 1 (20), Exam 2 (80). Weightage is hidden.
     cursor = table_x + subject_col
     for exam in selected_exam_names:
         center = cursor + per_exam_width / 2
-        exam_max = float(
-            next(
-                (
-                    x.get("max_marks")
-                    for x in get_exam_assessments(
-                        school_id_for_weights,
-                        active_only=False
-                    )
-                    if str(x.get("name") or "").strip() == exam
-                ),
-                0
-            ) or 0
-        )
-        if not exam_max:
-            exam_max_values = []
-            for row in marks_rows or []:
-                if str(row.get("exam_name") or "").strip() == exam:
-                    try:
-                        exam_max_values.append(float(row.get("max_marks")))
-                    except Exception:
-                        pass
-            exam_max = max(exam_max_values) if exam_max_values else 0.0
-        term_label = exam_term_by_name.get(exam, "")
+        exam_max = exam_max_by_name.get(exam, 0)
+        term_label = report_card_exam_term(exam)
+
+        if term_label:
+            pdf.setFont(
+                "Helvetica-Bold",
+                max(5.5, header_font - 0.7)
+            )
+            pdf.drawCentredString(
+                center,
+                table_top - 9,
+                term_label
+            )
+
         exam_text = (
             f"{exam} ({report_display_mark(exam_max)})"
-            if exam_max else exam
+            if exam_max
+            else exam
         )
-        if len(exam_text) > 20:
-            exam_text = exam_text[:19] + "…"
-        pdf.setFont("Helvetica-Bold", max(5.4, header_font - 1.0))
-        if term_label:
-            pdf.drawCentredString(center, table_top - 7, term_label)
-        pdf.setFont("Helvetica-Bold", header_font)
-        pdf.drawCentredString(center, table_top - 15, exam_text)
+        if len(exam_text) > 24:
+            exam_text = exam_text[:23] + "…"
 
-        pdf.line(
-            cursor + per_exam_width / 2,
-            bottom_header_y,
-            cursor + per_exam_width / 2,
-            table_top - table_height
+        pdf.setFont(
+            "Helvetica-Bold",
+            max(5.5, header_font)
+        )
+        pdf.drawCentredString(
+            center,
+            table_top - 22,
+            exam_text
         )
         cursor += per_exam_width
 
-    pdf.line(
-        table_x + subject_col,
-        bottom_header_y,
-        total_x0,
-        bottom_header_y
+    pdf.setFont("Helvetica-Bold", 7.5)
+    pdf.drawCentredString(
+        final_x0 + final_col / 2,
+        table_top - 19,
+        "FINAL /100"
     )
 
-    cursor = table_x + subject_col
-    for _ in selected_exam_names:
-        pdf.setFont("Helvetica-Bold", header_font)
-        pdf.drawCentredString(
-            cursor + per_exam_width * 0.25,
-            bottom_header_y - header_h2 / 2 - 3,
-            "Max"
-        )
-        pdf.drawCentredString(
-            cursor + per_exam_width * 0.75,
-            bottom_header_y - header_h2 / 2 - 3,
-            "Obt."
-        )
-        cursor += per_exam_width
+    # Header separator.
+    header_bottom = table_top - header_h
+    pdf.line(
+        table_x,
+        header_bottom,
+        table_x + table_width,
+        header_bottom
+    )
 
-    y = table_top - table_height
-    total_weighted_obtained = 0.0
-    total_weighted_max = 0.0
+    # -----------------------------------------------------
+    # Subject rows
+    # -----------------------------------------------------
+    y = header_bottom
+    total_final = 0.0
+    academic_subject_count = 0
+    subject_final_values = []
 
     for subject_name in subject_names:
         y -= row_height
 
-        subject_weighted_obtained = 0.0
-        subject_weighted_max = 0.0
-        row_values = []
+        row = {
+            exam: row_lookup.get((subject_name, exam))
+            for exam in selected_exam_names
+        }
+
+        final_values = []
+        exam_display_values = []
 
         for exam in selected_exam_names:
-            row = row_lookup.get((subject_name, exam))
             mark_number = None
-            max_number = 0.0
+            max_number = exam_max_by_name.get(exam, 0.0)
 
-            if row:
+            source_row = row.get(exam)
+            if source_row:
                 try:
-                    mark_number = float(row.get("marks"))
+                    raw_mark = source_row.get("marks")
+                    if raw_mark is not None and str(raw_mark).strip() != "":
+                        mark_number = float(raw_mark)
                 except Exception:
                     mark_number = None
-                try:
-                    max_number = float(row.get("max_marks"))
-                except Exception:
-                    max_number = 0.0
 
-            row_values.append((mark_number, max_number))
+                if max_number <= 0:
+                    try:
+                        max_number = float(
+                            source_row.get("max_marks") or 0
+                        )
+                    except Exception:
+                        max_number = 0.0
 
-            if mark_number is not None and max_number > 0:
-                weight = (
-                    exam_weight_by_name.get(exam, 0.0) * weight_scale
-                    if use_weightage else 1.0
-                )
-                subject_weighted_obtained += (
-                    mark_number / max_number * weight
-                )
-                subject_weighted_max += weight
+            exam_display_values.append(mark_number)
 
-        # Grade-only subjects remain visible and receive a grade,
-        # but contribute zero to the overall percentage.
-        if subject_name not in grade_only_subject_names:
-            total_weighted_obtained += subject_weighted_obtained
-            total_weighted_max += subject_weighted_max
+            if (
+                mark_number is not None
+                and max_number > 0
+            ):
+                normalized = (
+                    mark_number / max_number
+                ) * 100.0
 
-        subject_percentage = (
-            subject_weighted_obtained / subject_weighted_max * 100
-            if subject_weighted_max else 0
-        )
-        grade = grade_from_percentage(subject_percentage)
+                if use_weightage:
+                    weight = selected_weights.get(exam, 0.0)
+                    final_values.append((normalized, weight))
+                else:
+                    final_values.append((normalized, 1.0))
 
+        if final_values:
+            weighted_sum = sum(
+                value * weight
+                for value, weight in final_values
+            )
+            weight_sum = sum(
+                weight
+                for _, weight in final_values
+            )
+            subject_final = (
+                weighted_sum / weight_sum
+                if weight_sum > 0
+                else 0.0
+            )
+        else:
+            subject_final = 0.0
+
+        is_grade_only = subject_name in grade_only_subject_names
+
+        if not is_grade_only and final_values:
+            total_final += subject_final
+            academic_subject_count += 1
+            subject_final_values.append(subject_final)
+
+        subject_grade = grade_from_percentage(subject_final)
+
+        # Row border.
         pdf.rect(
             table_x,
             y,
             table_width,
-            row_height
+            row_height,
+            stroke=1,
+            fill=0
         )
 
+        # Internal vertical lines.
         cursor = table_x + subject_col
-        pdf.line(cursor, y, cursor, y + row_height)
         for _ in selected_exam_names:
             pdf.line(
-                cursor + per_exam_width / 2, y,
-                cursor + per_exam_width / 2, y + row_height
+                cursor,
+                y,
+                cursor,
+                y + row_height
             )
             cursor += per_exam_width
-            pdf.line(cursor, y, cursor, y + row_height)
-        pdf.line(total_x0, y, total_x0, y + row_height)
-        pdf.line(grade_x0, y, grade_x0, y + row_height)
+        pdf.line(
+            final_x0,
+            y,
+            final_x0,
+            y + row_height
+        )
 
         baseline = y + max(
-            3, (row_height - body_font) / 2
+            3,
+            (row_height - body_font) / 2
         )
-        pdf.setFont("Helvetica", body_font)
 
+        pdf.setFont("Helvetica", body_font)
         subject_display = subject_name
-        if len(subject_display) > 27:
-            subject_display = subject_display[:26] + "…"
+        if len(subject_display) > 30:
+            subject_display = subject_display[:29] + "…"
         pdf.drawString(
             table_x + 4,
             baseline,
@@ -8829,153 +8694,200 @@ def create_report_overlay(
         )
 
         cursor = table_x + subject_col
-        for mark_number, max_number in row_values:
-            pdf.drawCentredString(
-                cursor + per_exam_width * 0.25,
-                baseline,
-                report_display_mark(max_number) if max_number else "-"
+        for mark_number in exam_display_values:
+            # IMPORTANT: show exactly what was entered; blanks stay blank.
+            display_value = (
+                report_display_mark(mark_number)
+                if mark_number is not None
+                else ""
             )
             pdf.drawCentredString(
-                cursor + per_exam_width * 0.75,
+                cursor + per_exam_width / 2,
                 baseline,
-                report_display_mark(mark_number)
-                if mark_number is not None else "-"
+                display_value
             )
             cursor += per_exam_width
 
+        # Final score is always a /100 value for an academic subject.
+        # Grade-only subjects display their grade and do not enter TOTAL.
+        if is_grade_only:
+            final_text = subject_grade
+        else:
+            final_text = f"{subject_final:.2f}".rstrip("0").rstrip(".")
+            if not final_text:
+                final_text = "0"
+
+        pdf.setFont("Helvetica-Bold", body_font)
         pdf.drawCentredString(
-            total_x0 + total_col / 2,
+            final_x0 + final_col / 2,
             baseline,
-            format_mark(subject_weighted_obtained)
-        )
-        pdf.drawCentredString(
-            grade_x0 + grade_col / 2,
-            baseline,
-            grade
+            final_text
         )
 
-    percentage = (
-        total_weighted_obtained / total_weighted_max * 100
-        if total_weighted_max else 0
+    # -----------------------------------------------------
+    # TOTAL — shown ONLY ONCE
+    # -----------------------------------------------------
+    total_y = y - row_height
+    pdf.rect(
+        table_x,
+        total_y,
+        table_width,
+        row_height,
+        stroke=1,
+        fill=0
     )
 
-    summary_y = y - 22
-    pdf.setFont("Helvetica-Bold", 9.5)
+    pdf.line(
+        table_x + subject_col,
+        total_y,
+        table_x + subject_col,
+        total_y + row_height
+    )
+    pdf.line(
+        final_x0,
+        total_y,
+        final_x0,
+        total_y + row_height
+    )
 
-    total_x = table_x
-    percentage_x = table_x + table_width * 0.43
-    grade_x = table_x + table_width * 0.76
+    cursor = table_x + subject_col
+    for _ in selected_exam_names:
+        pdf.line(
+            cursor,
+            total_y,
+            cursor,
+            total_y + row_height
+        )
+        cursor += per_exam_width
+
+    total_max = academic_subject_count * 100
+    total_obtained = total_final
+    overall_percentage = (
+        total_obtained / total_max * 100
+        if total_max > 0
+        else 0.0
+    )
+
+    pdf.setFont("Helvetica-Bold", body_font + 0.4)
+    pdf.drawString(
+        table_x + 4,
+        total_y + max(3, (row_height - body_font) / 2),
+        "TOTAL"
+    )
+
+    # Do not repeat totals under every exam. The TOTAL appears once only,
+    # in the final column as obtained / maximum (e.g. 435.20 / 500).
+    total_text = (
+        f"{total_obtained:.2f}".rstrip("0").rstrip(".")
+        if total_obtained is not None
+        else "0"
+    )
+    if not total_text:
+        total_text = "0"
+
+    pdf.drawCentredString(
+        final_x0 + final_col / 2,
+        total_y + max(3, (row_height - body_font) / 2),
+        f"{total_text} / {int(total_max)}"
+    )
+
+    # -----------------------------------------------------
+    # Final result summary
+    # -----------------------------------------------------
+    summary_y = total_y - 22
+    pdf.setFont("Helvetica-Bold", 8.5)
+
+    grade = grade_from_percentage(overall_percentage)
 
     pdf.drawString(
-        total_x,
+        table_x,
         summary_y,
-        f"Final Weighted Result: {percentage:.2f} / 100"
+        f"Percentage: {overall_percentage:.2f}%"
     )
     pdf.drawString(
-        percentage_x,
+        table_x + table_width * 0.30,
         summary_y,
-        f"Percentage: {percentage:.2f}%"
+        f"Grade: {grade}"
     )
     pdf.drawString(
-        grade_x,
+        table_x + table_width * 0.52,
         summary_y,
-        f"Grade: {grade_from_percentage(percentage)}"
+        f"Total Marks: {int(total_max)}"
     )
 
-    attendance_y = summary_y - 19
-    pdf.setFont("Helvetica-Bold", 9)
+    attendance_y = summary_y - 17
+    attendance_percentage = (
+        present_days / total_attendance * 100
+        if total_attendance
+        else 0.0
+    )
+
+    pdf.setFont("Helvetica-Bold", 8)
     pdf.drawString(
-        total_x,
+        table_x,
         attendance_y,
         f"Total Attendance: {int(total_attendance)}"
     )
     pdf.drawString(
-        percentage_x,
+        table_x + table_width * 0.30,
         attendance_y,
         f"Present Days: {int(present_days)}"
+    )
+    pdf.drawString(
+        table_x + table_width * 0.52,
+        attendance_y,
+        f"Attendance: {attendance_percentage:.2f}%"
     )
 
     # -----------------------------------------------------
     # Remarks
     # -----------------------------------------------------
-
-    # Keep the complete Remarks block inside and aligned to the
-    # left edge of the Subject column of the marks table.
-    teacher_signature_x = table_x + subject_col / 2
     remarks_x = table_x
-    remarks_width = subject_col
+    remarks_width = table_width * 0.55
 
-    pdf.setFont("Helvetica-Bold", 10)
+    pdf.setFont("Helvetica-Bold", 9)
     pdf.drawString(
-        remarks_x + 5,
-        remarks_y + 35,
+        remarks_x,
+        remarks_y + 30,
         "Remarks:"
     )
 
-    # Every wrapped Remarks line starts at the same left alignment
-    # as the Subject column in the marks table.
     remarks_text = str(student.get("remarks") or "").strip()
     if remarks_text:
-        pdf.setFont("Helvetica", 9)
-        words = remarks_text.split()
-        lines = []
-        current = ""
-        max_remarks_width = max(20, remarks_width - 10)
-        for word in words:
-            test = f"{current} {word}".strip()
-            if pdf.stringWidth(test, "Helvetica", 9) <= max_remarks_width:
-                current = test
-            else:
-                if current:
-                    lines.append(current)
-                current = word
-        if current:
-            lines.append(current)
-
-        remarks_line_y = remarks_y + 20
-        for line in lines:
+        pdf.setFont("Helvetica", 8.5)
+        lines = simpleSplit(
+            remarks_text,
+            "Helvetica",
+            8.5,
+            max(80, remarks_width)
+        )
+        remarks_line_y = remarks_y + 15
+        for line in lines[:3]:
             pdf.drawString(
-                remarks_x + 5,
+                remarks_x,
                 remarks_line_y,
                 line
             )
-            remarks_line_y -= 12
+            remarks_line_y -= 11
 
     # -----------------------------------------------------
-    # Signature labels ONLY
+    # Signatures
     # -----------------------------------------------------
-
-    pdf.setFont(
-        "Helvetica-Bold",
-        10
-    )
-
-    # Teacher Signature aligned with the starting border of the marks table.
-
-    teacher_signature_x = table_x
-
+    pdf.setFont("Helvetica-Bold", 9)
     pdf.drawString(
         teacher_signature_x,
-        105,
+        62 if portrait else 42,
         "Teacher Signature"
     )
-
-    # Principal Signature centered in the Grade column of the marks table.
-    principal_signature_x = table_x + table_width * 0.92
-
     pdf.drawCentredString(
         principal_signature_x,
-        105,
+        62 if portrait else 42,
         "Principal Signature"
     )
 
     pdf.save()
-
     buffer.seek(0)
-
     return buffer.getvalue()
-
-
 def make_report_card_pdf(
     template_bytes,
     template_type,
