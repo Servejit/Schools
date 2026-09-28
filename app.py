@@ -2929,15 +2929,70 @@ def users():
 # =========================================================
 
 def get_exam_assessments(school_id, active_only=True):
+    """Load exams using only columns that exist in the current schema.
+    
+    exam_assessments stores the exam identity/weightage, while maximum marks
+    are stored on marks rows (and subject defaults). Do not request
+    exam_assessments.max_marks because that column is not present.
+    """
     try:
         query = sb.table("exam_assessments").select(
-            "id,school_id,name,max_marks,active,created_at"
+            "id,school_id,name,active,created_at"
         ).eq("school_id", school_id).order("name")
         if active_only:
             query = query.eq("active", True)
         return query.execute().data or []
     except Exception:
         return []
+
+
+def get_exam_max_marks(school_id, exam_name, subject_max_marks=100):
+    """Resolve an exam's maximum marks without using exam_assessments.max_marks.
+    
+    Existing marks are authoritative. For a new exam with no marks yet, use
+    common school-exam defaults, then fall back to the subject maximum.
+    """
+    if not school_id or not str(exam_name or "").strip():
+        return float(subject_max_marks or 100)
+
+    name = str(exam_name).strip()
+    try:
+        rows = (
+            sb.table("marks")
+            .select("max_marks")
+            .eq("school_id", school_id)
+            .eq("exam_name", name)
+            .limit(200)
+            .execute()
+            .data or []
+        )
+        values = []
+        for row in rows:
+            try:
+                value = float(row.get("max_marks"))
+                if value > 0:
+                    values.append(value)
+            except Exception:
+                pass
+        if values:
+            return max(values)
+    except Exception:
+        pass
+
+    lower = name.lower()
+    if any(x in lower for x in ("pt", "periodic", "unit test", "class test", "test")):
+        return 20.0
+    if any(x in lower for x in ("half", "mid term", "midterm", "mid-year", "mid year")):
+        return 80.0
+    if any(x in lower for x in ("annual", "year end", "year-end", "final")):
+        return 100.0
+    if "internal" in lower:
+        return 10.0
+    try:
+        value = float(subject_max_marks or 100)
+        return value if value > 0 else 100.0
+    except Exception:
+        return 100.0
 
 
 def exam_assessment_settings():
@@ -2960,13 +3015,10 @@ def exam_assessment_settings():
             key="new_exam_assessment_name"
         ).strip()
 
-        new_exam_max_marks = st.number_input(
-            "Maximum Marks for this Exam",
-            min_value=1.0,
-            max_value=1000.0,
-            value=100.0,
-            step=1.0,
-            key="new_exam_assessment_max_marks"
+        st.caption(
+            "Maximum marks are taken from saved marks for this exam. "
+            "For a new exam, the app uses common defaults (PT/Test 20, "
+            "Half Yearly 80, Annual/Final 100) until marks are entered."
         )
 
         save_key = "save_exam_assessment"
@@ -2987,7 +3039,6 @@ def exam_assessment_settings():
                 sb.table("exam_assessments").insert({
                     "school_id": school_id,
                     "name": new_name,
-                    "max_marks": float(new_exam_max_marks),
                     "active": True
                 }).execute()
                 mark_saved(save_key)
@@ -3015,13 +3066,8 @@ def exam_assessment_settings():
                     key=f"edit_exam_name_{exam_id}"
                 ).strip()
 
-                edit_exam_max_marks = st.number_input(
-                    "Maximum Marks",
-                    min_value=1.0,
-                    max_value=1000.0,
-                    value=float(exam.get("max_marks") or 100),
-                    step=1.0,
-                    key=f"edit_exam_max_marks_{exam_id}"
+                st.caption(
+                    "Maximum marks are resolved from saved marks for this exam."
                 )
 
                 if st.button(
@@ -3042,8 +3088,7 @@ def exam_assessment_settings():
                             (
                                 sb.table("exam_assessments")
                                 .update({
-                                    "name": edit_exam_name,
-                                    "max_marks": float(edit_exam_max_marks)
+                                    "name": edit_exam_name
                                 })
                                 .eq("id", exam_id)
                                 .eq("school_id", school_id)
@@ -6176,7 +6221,11 @@ def bulk_marks():
         (x for x in exam_options if str(x.get("name") or "").strip() == exam_name),
         {}
     )
-    exam_max_marks = float(selected_exam.get("max_marks") or subject_max_marks or 100)
+    exam_max_marks = get_exam_max_marks(
+        school_id,
+        exam_name,
+        subject_max_marks
+    )
     st.info(
         f"📝 **{exam_name} Maximum Marks: {format_mark(exam_max_marks)}**"
     )
