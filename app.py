@@ -8375,12 +8375,8 @@ def create_report_overlay(
                 name = str(exam.get("name") or "").strip()
                 if not name:
                     continue
-                try:
-                    exam_max_by_name[name] = float(
-                        exam.get("max_marks") or 0
-                    )
-                except Exception:
-                    exam_max_by_name[name] = 0.0
+                # exam_assessments does NOT contain max_marks in this schema.
+                # Maximum marks are resolved from marks_rows below.
                 try:
                     exam_weight_by_name[name] = float(
                         weight_by_id.get(str(exam.get("id")), 0) or 0
