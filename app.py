@@ -601,9 +601,19 @@ def login():
                     None
                 )
                 if superadmin_match:
+                    # Configure APP_URL in Streamlit secrets with the public
+                    # URL of this app, and allow that URL in Supabase Auth.
+                    app_url = str(st.secrets.get("APP_URL", "") or "").strip().rstrip("/")
+                    if not app_url.startswith(("https://", "http://")):
+                        st.error(
+                            "Recovery is not configured yet. Add APP_URL to Streamlit secrets "
+                            "using the public URL of this School Management app, then add the same "
+                            "URL to Supabase Authentication → URL Configuration → Redirect URLs."
+                        )
+                        return
                     check_client.auth.reset_password_for_email(
                         recovery_email,
-                        options={"redirect_to": URL}
+                        options={"redirect_to": app_url}
                     )
                 st.success(
                     "If this is the active registered SuperAdmin email, a password-reset link will be sent. "
