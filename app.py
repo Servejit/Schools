@@ -450,31 +450,176 @@ def logout():
 
 
 # =========================================================
-# LOGIN
+# LOGIN / SUPERADMIN PASSWORD RECOVERY
 # =========================================================
 
 def login():
-
     st.title("🏫 School Management System")
 
-    email = st.text_input("Email")
+    # Supabase recovery links commonly return auth tokens in the URL fragment.
+    # The fragment is browser-only, so transfer the recovery tokens to query
+    # parameters for Streamlit to process. Tokens are removed after completion.
+    components.html("""
+    <script>
+    (() => {
+      try {
+        const hash = new URLSearchParams(window.parent.location.hash.replace(/^#/, ""));
+        const type = hash.get("type");
+        const access = hash.get("access_token");
+        const refresh = hash.get("refresh_token");
+        if (type === "recovery" && access && refresh) {
+          const url = new URL(window.parent.location.href);
+          url.searchParams.set("recovery", "1");
+          url.searchParams.set("access_token", access);
+          url.searchParams.set("refresh_token", refresh);
+          window.parent.location.replace(url.toString());
+        }
+      } catch (e) {}
+    })();
+    </script>
+    """, height=0)
 
-    password = st.text_input(
-        "Password",
-        type="password"
-    )
+    params = st.query_params
+    recovery_mode = str(params.get("recovery", "")) == "1"
+    recovery_access = params.get("access_token")
+    recovery_refresh = params.get("refresh_token")
 
-    if st.button(
-        "🔐 Login",
-        use_container_width=True
-    ):
+    if recovery_mode and recovery_access and recovery_refresh:
+        st.subheader("🔐 Reset SuperAdmin Password")
+        st.caption("This recovery screen is restricted to the SuperAdmin account.")
 
+        try:
+            recovery_client = create_client(URL, KEY)
+            recovery_client.auth.set_session(
+                str(recovery_access),
+                str(recovery_refresh)
+            )
+            recovery_user = recovery_client.auth.get_user().user
+            if not recovery_user:
+                raise ValueError("The recovery link is invalid or has expired.")
+
+            # Verify the authenticated identity's app role before permitting
+            # any password change. Other roles cannot use this recovery screen.
+            recovery_profile = (
+                recovery_client.table("profiles")
+                .select("id,role,active,email")
+                .eq("id", recovery_user.id)
+                .maybe_single()
+                .execute()
+                .data
+            )
+            if not recovery_profile or recovery_profile.get("role") != "SuperAdmin":
+                st.error("Password recovery through this screen is available only to the SuperAdmin account.")
+                if st.button("Back to Login", use_container_width=True):
+                    st.query_params.clear()
+                    st.rerun()
+                return
+
+            if recovery_profile.get("active") is False:
+                st.error("This SuperAdmin account is inactive. Contact your system administrator.")
+                return
+
+            st.write(f"Account: **{recovery_profile.get('email') or recovery_user.email or 'SuperAdmin'}**")
+            with st.form("superadmin_password_recovery_form"):
+                new_password = st.text_input(
+                    "New password",
+                    type="password",
+                    help="Use at least 8 characters."
+                )
+                confirm_password = st.text_input(
+                    "Confirm new password",
+                    type="password"
+                )
+                submit_reset = st.form_submit_button(
+                    "🔑 Update SuperAdmin Password",
+                    use_container_width=True
+                )
+
+            if submit_reset:
+                if len(new_password) < 8:
+                    st.warning("Choose a password with at least 8 characters.")
+                elif new_password != confirm_password:
+                    st.warning("The passwords do not match.")
+                else:
+                    try:
+                        recovery_client.auth.update_user({"password": new_password})
+                        st.success("SuperAdmin password updated. Please sign in with your new password.")
+                        st.query_params.clear()
+                        st.session_state.logged_in = False
+                        st.session_state.user = None
+                        st.session_state.profile = None
+                        st.session_state.access_token = None
+                        st.session_state.refresh_token = None
+                        st.rerun()
+                    except Exception:
+                        st.error("Could not update the password. The recovery link may have expired; request a new one.")
+            if st.button("Cancel and return to login", use_container_width=True):
+                st.query_params.clear()
+                st.rerun()
+        except Exception:
+            st.error("This recovery link is invalid or has expired. Request a new password-reset email.")
+            if st.button("Return to Login", use_container_width=True):
+                st.query_params.clear()
+                st.rerun()
+        return
+
+    st.caption("SuperAdmin account access")
+    email = st.text_input("Email", key="login_email")
+    password = st.text_input("Password", type="password", key="login_password")
+
+    left, right = st.columns(2)
+    with left:
+        login_clicked = st.button("🔐 Login", use_container_width=True, type="primary")
+    with right:
+        forgot_clicked = st.button("Forgot Password?", use_container_width=True)
+
+    if forgot_clicked:
+        recovery_email = (email or "").strip().lower()
+        if not recovery_email:
+            st.warning("Enter the registered SuperAdmin email address first.")
+        else:
+            try:
+                # Only send a recovery email if this email belongs to a
+                # SuperAdmin profile. The generic success message avoids
+                # revealing account details in the UI.
+                check_client = create_client(URL, KEY)
+                check_response = (
+                    check_client.table("profiles")
+                    .select("id,role,active,email")
+                    .ilike("email", recovery_email)
+                    .limit(2)
+                    .execute()
+                )
+                matches = getattr(check_response, "data", None) or []
+                superadmin_match = next(
+                    (
+                        row for row in matches
+                        if str(row.get("email") or "").strip().lower() == recovery_email
+                        and row.get("role") == "SuperAdmin"
+                        and row.get("active") is not False
+                    ),
+                    None
+                )
+                if superadmin_match:
+                    check_client.auth.reset_password_for_email(
+                        recovery_email,
+                        options={"redirect_to": URL}
+                    )
+                st.success(
+                    "If this is the active registered SuperAdmin email, a password-reset link will be sent. "
+                    "Check your inbox and spam folder."
+                )
+            except Exception:
+                st.error(
+                    "Could not start password recovery. Check the Supabase Auth redirect settings and profiles-table permissions."
+                )
+
+    if login_clicked:
         if not email or not password:
             st.warning("Enter email and password.")
             return
 
         try:
-
             result = sb.auth.sign_in_with_password({
                 "email": email.strip(),
                 "password": password
@@ -485,18 +630,10 @@ def login():
                 return
 
             st.session_state.user = result.user
+            st.session_state.access_token = result.session.access_token
+            st.session_state.refresh_token = result.session.refresh_token
 
-            st.session_state.access_token = (
-                result.session.access_token
-            )
-
-            st.session_state.refresh_token = (
-                result.session.refresh_token
-            )
-
-            sb.postgrest.auth(
-                result.session.access_token
-            )
+            sb.postgrest.auth(result.session.access_token)
 
             profile = (
                 sb.table("profiles")
@@ -512,25 +649,19 @@ def login():
                 return
 
             if profile.get("active") is False:
-
                 st.error("Your account is inactive.")
-
                 try:
                     sb.auth.sign_out()
                 except Exception:
                     pass
-
                 return
 
             st.session_state.profile = profile
             st.session_state.logged_in = True
-
             st.rerun()
 
-        except Exception as e:
-
-            st.error("Login failed.")
-            st.code(str(e))
+        except Exception:
+            st.error("Login failed. Check your email and password, then try again.")
 
 
 # =========================================================
@@ -17793,4 +17924,3 @@ if st.session_state.logged_in:
     dashboard()
 else:
     login()
-
